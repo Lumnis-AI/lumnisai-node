@@ -4,9 +4,11 @@ export default defineBuildConfig({
   entries: [
     'src/index',
   ],
-  declaration: 'node16',
+  declaration: true,
   clean: true,
+  failOnWarn: false,
   rollup: {
+    emitCJS: true,
     inlineDependencies: [
       '@antfu/utils',
     ],
