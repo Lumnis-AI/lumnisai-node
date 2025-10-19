@@ -148,15 +148,48 @@ export class LumnisClient {
     console.log(`Response ID: ${response.responseId}`)
 
     let lastMessageCount = 0
+    const toolCallCounts = new Map<number, number>() // Track tool calls per message index
+
     while (true) {
       const current = await this.responses.get(response.responseId, { wait: LONG_POLL_TIMEOUT_S })
       const currentMessageCount = current.progress?.length || 0
 
+      // Yield only new progress entries
       if (currentMessageCount > lastMessageCount && current.progress) {
-        for (let i = lastMessageCount; i < currentMessageCount; i++)
-          yield current.progress[i]
-
+        // Yield each new progress entry individually
+        for (let i = lastMessageCount; i < currentMessageCount; i++) {
+          const entry = current.progress[i]
+          // Track initial tool call count for new entries
+          toolCallCounts.set(i, entry.toolCalls?.length || 0)
+          yield entry
+        }
         lastMessageCount = currentMessageCount
+      }
+
+      // Check for new tool calls in existing messages
+      if (current.progress) {
+        for (let i = 0; i < Math.min(lastMessageCount, currentMessageCount); i++) {
+          const entry = current.progress[i]
+          const currentToolCallCount = entry.toolCalls?.length || 0
+          const previousToolCallCount = toolCallCounts.get(i) || 0
+
+          if (currentToolCallCount > previousToolCallCount) {
+            // Create an update entry with just the new tool calls
+            const newToolCalls = entry.toolCalls?.slice(previousToolCallCount) || []
+            const truncatedMessage = entry.message.length > 50
+              ? `${entry.message.substring(0, 50)}...`
+              : entry.message
+
+            const toolUpdateEntry: ProgressEntry = {
+              ts: new Date().toISOString(),
+              state: 'tool_update',
+              message: `[Tool calls for: ${truncatedMessage}]`,
+              toolCalls: newToolCalls,
+            }
+            yield toolUpdateEntry
+            toolCallCounts.set(i, currentToolCallCount)
+          }
+        }
       }
 
       if (current.status === 'succeeded' || current.status === 'failed' || current.status === 'cancelled') {
@@ -171,6 +204,9 @@ export class LumnisClient {
         }
         break
       }
+
+      // Wait before next poll (only in regular polling mode)
+      await new Promise(resolve => setTimeout(resolve, DEFAULT_POLL_INTERVAL_MS))
     }
   }
 
@@ -371,21 +407,54 @@ export class LumnisClient {
 function createSimpleProgressCallback(): (response: ResponseObject) => void {
   let lastStatus: string | undefined
   const seenMessages = new Set<string>()
+  const messageToolCalls = new Map<string, Set<string>>() // Track tool calls per message
 
   return (response: ResponseObject) => {
     if (response.status !== lastStatus) {
-      // eslint-disable-next-line no-console
-      console.log(`Status: ${response.status}`)
+      // Don't print status anymore to match Python behavior
       lastStatus = response.status
     }
 
     if (response.progress) {
       for (const entry of response.progress) {
+        // Create a unique key for this message
         const messageKey = `${entry.state}:${entry.message}`
+
+        // Print message if new
         if (!seenMessages.has(messageKey)) {
           // eslint-disable-next-line no-console
           console.log(`${entry.state.toUpperCase()}: ${entry.message}`)
           seenMessages.add(messageKey)
+          messageToolCalls.set(messageKey, new Set())
+        }
+
+        // Print any new tool calls for this message
+        if (entry.toolCalls && messageToolCalls.has(messageKey)) {
+          const seenToolCalls = messageToolCalls.get(messageKey)!
+          for (const toolCall of entry.toolCalls) {
+            const toolName = toolCall.name || 'unknown'
+            const toolArgs = toolCall.args || {}
+            // Create unique key for this tool call
+            const toolKey = `${toolName}:${JSON.stringify(toolArgs)}`
+
+            if (!seenToolCalls.has(toolKey)) {
+              // eslint-disable-next-line node/prefer-global/process
+              process.stdout.write(`\t→ ${toolName}`)
+              if (Object.keys(toolArgs).length > 0) {
+                // Format args compactly
+                const argsStr = Object.entries(toolArgs)
+                  .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                  .join(', ')
+                // eslint-disable-next-line no-console
+                console.log(`(${argsStr})`)
+              }
+              else {
+                // eslint-disable-next-line no-console
+                console.log()
+              }
+              seenToolCalls.add(toolKey)
+            }
+          }
         }
       }
     }

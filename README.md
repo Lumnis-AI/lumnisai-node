@@ -10,7 +10,6 @@ Official Node.js/TypeScript SDK for the Lumnis AI API. Build AI-powered applicat
 
 ## Features
 
-- 🚀 **Full API Coverage** - All 60+ endpoints across 9 resources
 - 📦 **TypeScript First** - Complete type safety and autocompletion
 - ⚡ **Modern Architecture** - Built with ES modules and async/await
 - 📁 **File Management** - Upload, search, and manage files with semantic search
@@ -61,7 +60,6 @@ console.log(response.outputText)
 const completedResponse = await client.createResponseAndWait(
   'Explain quantum computing',
   {
-    agentEffort: 'high',
     responseFormat: {
       type: 'object',
       properties: {
@@ -80,6 +78,9 @@ console.log(completedResponse.structuredResponse)
 
 ```typescript
 // Simple message
+// Streaming responses with progress updates
+import { displayProgress } from 'lumnisai'
+
 const response = await client.responses.create({
   messages: [{ role: 'user', content: 'Hello!' }]
 })
@@ -90,9 +91,7 @@ const response = await client.responses.create({
   messages: [
     { role: 'system', content: 'You are a helpful assistant' },
     { role: 'user', content: 'What can you help me with?' }
-  ],
-  agentEffort: 'medium',
-  costCapUsd: 0.50
+  ]
 })
 
 // With structured output
@@ -109,11 +108,50 @@ const response = await client.responses.create({
   }
 })
 
+// Using the invoke method (simpler API)
+const response = await client.invoke(
+  'Explain quantum computing',
+  {
+    showProgress: true, // Show progress updates in console
+    pollIntervalMs: 1000,
+    maxWaitMs: 60000
+  }
+)
+
+const updates: any[] = []
+for await (const update of await client.invoke(
+  'Analyze this data',
+  {
+    stream: true,
+    userId: 'user@example.com',
+    agentConfig: {
+      plannerModelType: 'SMART_MODEL',
+      coordinatorModelType: 'REASONING_MODEL'
+    }
+  }
+)) {
+  displayProgress(update) // Display progress with tool calls
+  updates.push(update)
+}
+
+// Access final output
+const finalUpdate = updates[updates.length - 1]
+if (finalUpdate.outputText) {
+  console.log(finalUpdate.outputText)
+}
+
+// With agent mode option
+const response = await client.responses.create({
+  messages: [{ role: 'user', content: 'Analyze complex data patterns' }],
+  options: {
+    agent_mode: 'multi_agent'
+  }
+})
+
 // With advanced agent configuration
 const response = await client.responses.create({
   messages: [{ role: 'user', content: 'Analyze this data' }],
   agentConfig: {
-    planStrategy: 'llm_io',
     plannerModelType: 'SMART_MODEL',
     coordinatorModelType: 'REASONING_MODEL',
     orchestratorModelType: 'SMART_MODEL',
@@ -157,6 +195,67 @@ const completedResponse = await client.createResponseAndWait(
 // Long polling
 const response = await client.responses.get(responseId, { wait: 30 })
 ```
+
+### Progress Display Utilities
+
+The SDK provides utilities for displaying progress updates with tool calls:
+
+```typescript
+import { displayProgress, formatProgressEntry, ProgressTracker } from 'lumnisai'
+
+// Simple display with automatic tool call formatting
+for await (const update of await client.invoke(task, { stream: true })) {
+  displayProgress(update) // Automatically formats message and tool calls
+}
+
+// Custom formatting
+for await (const update of await client.invoke(task, { stream: true })) {
+  if (update.state === 'tool_update') {
+    // Only tool calls are shown for tool_update entries
+    displayProgress(update)
+  }
+  else {
+    // Full message with tool calls
+    displayProgress(update, '  ') // Custom indentation
+  }
+}
+
+// Manual formatting
+const formatted = formatProgressEntry(
+  'processing',
+  'Analyzing data',
+  [
+    { name: 'read_file', args: { path: '/data.csv' } },
+    { name: 'calculate_stats', args: { method: 'mean' } }
+  ]
+)
+console.log(formatted)
+// Output:
+// PROCESSING: Analyzing data
+//   → read_file(path="/data.csv")
+//   → calculate_stats(method="mean")
+
+// Advanced: Track duplicates
+const tracker = new ProgressTracker()
+
+for await (const update of await client.invoke(task, { stream: true })) {
+  const newContent = tracker.formatNewEntries(
+    update.state,
+    update.message,
+    update.toolCalls
+  )
+
+  if (newContent) {
+    console.log(newContent) // Only new content is displayed
+  }
+}
+```
+
+The `displayProgress` function automatically handles:
+- **Regular updates**: Displays message + tool calls with proper formatting
+- **Tool updates**: Shows only new tool calls (when `state === 'tool_update'`)
+- **Completed state**: Shows final message with output text
+- **Compact formatting**: Tool arguments are formatted concisely
 
 ### Managing Threads
 
@@ -439,7 +538,6 @@ The SDK is written in TypeScript and provides comprehensive type definitions:
 ```typescript
 import type {
   AgentConfig,
-  AgentEffort,
   FileMetadata,
   FileScope,
   Message,
@@ -449,17 +547,6 @@ import type {
   UserResponse
 } from 'lumnisai'
 ```
-
-## Best Practices
-
-1. **Use Idempotency Keys** - The SDK automatically adds idempotency keys to non-GET requests
-2. **Handle Rate Limits** - Implement exponential backoff when receiving 429 errors
-3. **Poll Efficiently** - Use long polling with the `wait` parameter for real-time updates
-4. **Scope to Users** - Use user-specific operations for multi-tenant applications
-5. **Manage Costs** - Set `costCapUsd` to control spending on expensive operations
-6. **Tag Your Files** - Use tags for better file organization and filtering
-7. **Monitor Processing** - Check file processing status with `files.getStatus()`
-8. **Use Semantic Search** - Leverage `files.search()` for powerful content discovery
 
 ## License
 

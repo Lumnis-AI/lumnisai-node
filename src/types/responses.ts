@@ -2,7 +2,6 @@
 import type { Message, UUID } from './common'
 
 export type ResponseStatus = 'queued' | 'in_progress' | 'succeeded' | 'failed' | 'cancelled'
-export type AgentEffort = 'low' | 'medium' | 'high'
 
 export interface FileAttachment {
   name: string
@@ -12,7 +11,6 @@ export interface FileAttachment {
 }
 
 export interface AgentConfig {
-  planStrategy?: 'llm_io' | string
   plannerModelType?: 'SMART_MODEL' | 'REASONING_MODEL' | string
   coordinatorModelType?: 'SMART_MODEL' | 'REASONING_MODEL' | string
   orchestratorModelType?: 'SMART_MODEL' | 'REASONING_MODEL' | string | null
@@ -37,11 +35,8 @@ export interface ModelOverrides {
 export interface CreateResponseRequest {
   threadId?: UUID
   messages: Message[]
-  agentEffort?: AgentEffort
-  costCapUsd?: number
   files?: FileAttachment[]
   options?: Record<string, any>
-  priority?: number
   userId?: string
   agentConfig?: AgentConfig
   responseFormat?: Record<string, any>
