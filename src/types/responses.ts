@@ -69,6 +69,7 @@ export interface ResponseObject {
   inputMessages: Message[]
   outputText?: string | null
   content?: string | null // Alias for outputText
+  responseTitle?: string | null // Human-readable title for the response (generated after plan creation)
   structuredResponse?: Record<string, any> | null
   artifacts?: ResponseArtifact[] | null
   createdAt: string
