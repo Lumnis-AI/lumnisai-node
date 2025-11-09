@@ -4,8 +4,11 @@ import type { PaginationParams } from '../types/common'
 import type {
   ArtifactsListResponse,
   CancelResponseResponse,
+  CreateFeedbackRequest,
+  CreateFeedbackResponse,
   CreateResponseRequest,
   CreateResponseResponse,
+  FeedbackListResponse,
   ResponseListResponse,
   ResponseObject,
 } from '../types/responses'
@@ -132,5 +135,34 @@ export class ResponsesResource {
     params?: PaginationParams,
   ): Promise<ArtifactsListResponse> {
     return this.http.get<ArtifactsListResponse>(`/responses/${responseId}/artifacts`, { params })
+  }
+
+  /**
+   * Submit feedback for an active response
+   * @param responseId - The response ID
+   * @param request - Feedback request details
+   */
+  async createFeedback(
+    responseId: string,
+    request: CreateFeedbackRequest,
+  ): Promise<CreateFeedbackResponse> {
+    return this.http.post<CreateFeedbackResponse>(`/responses/${responseId}/feedback`, request)
+  }
+
+  /**
+   * List all feedback for a response (consumed and unconsumed)
+   * @param responseId - The response ID
+   * @param options - Optional parameters
+   * @param options.progressId - Optional progress ID to filter feedback
+   */
+  async listFeedback(
+    responseId: string,
+    options?: { progressId?: string },
+  ): Promise<FeedbackListResponse> {
+    const queryParams: Record<string, any> = {}
+    if (options?.progressId)
+      queryParams.progress_id = options.progressId
+
+    return this.http.get<FeedbackListResponse>(`/responses/${responseId}/feedback`, { params: queryParams })
   }
 }

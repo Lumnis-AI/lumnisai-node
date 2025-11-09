@@ -114,3 +114,45 @@ export interface ResponseListResponse {
   limit: number
   offset: number
 }
+
+// Feedback types
+export type FeedbackType = 'suggestion' | 'correction' | 'guidance'
+
+export interface CreateFeedbackRequest {
+  feedbackText: string
+  feedbackType?: FeedbackType
+  userId?: string
+  progressId?: string
+  toolCallId?: string
+  toolArgsUpdate?: Record<string, any>
+}
+
+export interface CreateFeedbackResponse {
+  feedbackId: UUID
+  createdAt: string
+}
+
+export interface FeedbackObject {
+  feedbackId: UUID
+  responseId: UUID
+  tenantId: UUID
+  userId?: UUID | null
+  feedbackText: string
+  feedbackType: FeedbackType
+  progressId?: UUID | null
+  toolCallId?: string | null
+  toolArgsUpdate?: Record<string, any> | null
+  isConsumed: boolean
+  consumedAt?: string | null
+  createdAt: string
+}
+
+export interface FeedbackListResponse {
+  responseId: UUID
+  progressIdFilter?: UUID | null
+  totalFeedback: number
+  consumedCount: number
+  unconsumedCount: number
+  feedback: FeedbackObject[]
+  note: string
+}

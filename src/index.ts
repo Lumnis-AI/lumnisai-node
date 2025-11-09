@@ -1,6 +1,5 @@
 // Main export file for Lumnis AI SDK
 export { LumnisClient } from './core/client'
-export { LumnisClient as default } from './core/client'
 export type { LumnisClientOptions } from './core/client'
 
 // Export errors
