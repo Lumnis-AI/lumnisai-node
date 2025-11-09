@@ -2,6 +2,9 @@
 export { LumnisClient } from './core/client'
 export type { LumnisClientOptions } from './core/client'
 
+// Default export
+export { LumnisClient as default } from './core/client'
+
 // Export errors
 export * from './errors'
 
