@@ -1,7 +1,7 @@
 {
   "name": "lumnisai",
   "type": "module",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "packageManager": "pnpm@10.6.2",
   "description": "Official Node.js SDK for the Lumnis AI API",
   "author": "Lumnis AI",
@@ -38,7 +38,8 @@
     "start": "tsx src/index.ts",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "example:skills": "tsx examples/skills-example.ts"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:cli",
