@@ -26,6 +26,9 @@ export interface AgentConfig {
   useCognitiveTools?: boolean
   enableTaskValidation?: boolean
   generateComprehensiveOutput?: boolean
+
+  // Optional: Skill filtering
+  skillIds?: string[]
 }
 
 export interface ModelOverrides {

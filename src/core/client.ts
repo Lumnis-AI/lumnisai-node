@@ -4,6 +4,7 @@ import type { AppEnabledResponse, AppsListResponse, ConnectionStatusResponse, Ge
 import type { MCPServerListResponse, MCPServerResponse, MCPToolListResponse, TestConnectionResponse } from '../types/mcp-servers'
 import type { TenantModelPreferencesResponse } from '../types/model-preferences'
 import type { CreateResponseRequest, CreateResponseResponse, ProgressEntry, ResponseObject } from '../types/responses'
+import type { SkillGuidelineCreate, SkillGuidelineListResponse, SkillGuidelineResponse, SkillGuidelineUpdate } from '../types/skills'
 import type { ThreadListResponse, ThreadObject } from '../types/threads'
 import type { UserDeleteResponse, UserListResponse, UserResponse } from '../types/users'
 import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, LONG_POLL_TIMEOUT_S } from '../constants'
@@ -13,6 +14,7 @@ import { IntegrationsResource } from '../resources/integrations'
 import { MCPServersResource } from '../resources/mcp-servers'
 import { ModelPreferencesResource } from '../resources/model-preferences'
 import { ResponsesResource } from '../resources/responses'
+import { SkillsResource } from '../resources/skills'
 import { TenantInfoResource } from '../resources/tenant-info'
 import { ThreadsResource } from '../resources/threads'
 import { UsersResource } from '../resources/users'
@@ -56,6 +58,7 @@ export class LumnisClient {
   public readonly integrations: IntegrationsResource
   public readonly modelPreferences: ModelPreferencesResource
   public readonly mcpServers: MCPServersResource
+  public readonly skills: SkillsResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -96,6 +99,7 @@ export class LumnisClient {
     this.integrations = new IntegrationsResource(this.http)
     this.modelPreferences = new ModelPreferencesResource(this.http)
     this.mcpServers = new MCPServersResource(this.http)
+    this.skills = new SkillsResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {
@@ -401,6 +405,27 @@ export class LumnisClient {
 
   async testMcpServer(serverId: string): Promise<TestConnectionResponse> {
     return this.mcpServers.testConnection(serverId)
+  }
+
+  // Skills methods
+  async createSkill(skillData: SkillGuidelineCreate, options?: { userId?: string }): Promise<SkillGuidelineResponse> {
+    return this.skills.create(skillData, options)
+  }
+
+  async getSkill(skillId: string): Promise<SkillGuidelineResponse> {
+    return this.skills.get(skillId)
+  }
+
+  async listSkills(params?: Parameters<SkillsResource['list']>[0]): Promise<SkillGuidelineListResponse> {
+    return this.skills.list(params)
+  }
+
+  async updateSkill(skillId: string, updates: SkillGuidelineUpdate): Promise<SkillGuidelineResponse> {
+    return this.skills.update(skillId, updates)
+  }
+
+  async deleteSkill(skillId: string): Promise<void> {
+    return this.skills.delete(skillId)
   }
 }
 
