@@ -358,7 +358,7 @@ export class LumnisClient {
   }
 
   async getConnectionStatus(userId: string, appName: string): Promise<ConnectionStatusResponse> {
-    return this.integrations.getConnectionStatus(userId, appName)
+    return this.integrations.getConnectionStatus({ userId, appName })
   }
 
   async listConnections(userId: string, params?: Parameters<IntegrationsResource['listConnections']>[1]): Promise<UserConnectionsResponse> {

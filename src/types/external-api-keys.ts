@@ -6,6 +6,7 @@ export type ApiProvider =
   | 'ANTHROPIC_API_KEY'
   | 'EXA_API_KEY'
   | 'COHERE_API_KEY'
+  | 'CORESIGNAL_API_KEY'
   | 'GOOGLE_API_KEY'
   | 'SERPAPI_API_KEY'
   | 'GROQ_API_KEY'

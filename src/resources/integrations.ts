@@ -3,15 +3,20 @@ import type { Http } from '../core/http'
 import type {
   AppEnabledResponse,
   AppsListResponse,
+  CheckAppEnabledParams,
   ConnectionCallbackRequest,
   ConnectionCallbackResponse,
   ConnectionStatusResponse,
   DisconnectRequest,
   DisconnectResponse,
+  GetConnectionStatusParams,
   GetToolsRequest,
   GetToolsResponse,
+  GetUserConnectionsParams,
   InitiateConnectionRequest,
   InitiateConnectionResponse,
+  ListProvidersResponse,
+  UpdateAppStatusParams,
   UpdateAppStatusResponse,
   UserConnectionsResponse,
 } from '../types/integrations'
@@ -34,21 +39,30 @@ export class IntegrationsResource {
   /**
    * Check the status of a specific connection
    */
-  async getConnectionStatus(userId: string, appName: string): Promise<ConnectionStatusResponse> {
+  async getConnectionStatus(params: GetConnectionStatusParams): Promise<ConnectionStatusResponse> {
+    const { userId, appName, provider } = params
+    const queryParams = new URLSearchParams()
+    if (provider)
+      queryParams.append('provider', provider)
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
     return this.http.get<ConnectionStatusResponse>(
-      `/integrations/connections/${encodeURIComponent(userId)}/${appName.toUpperCase()}`,
+      `/integrations/connections/${encodeURIComponent(userId)}/${appName.toUpperCase()}${query}`,
     )
   }
 
   /**
    * Get all connections for a user
    */
-  async getUserConnections(userId: string, appFilter?: string): Promise<UserConnectionsResponse> {
-    const params = new URLSearchParams()
+  async getUserConnections(params: GetUserConnectionsParams): Promise<UserConnectionsResponse> {
+    const { userId, provider, appFilter } = params
+    const queryParams = new URLSearchParams()
+    if (provider)
+      queryParams.append('provider', provider)
     if (appFilter)
-      params.append('app_filter', appFilter)
+      queryParams.append('app_filter', appFilter)
 
-    const query = params.toString() ? `?${params.toString()}` : ''
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
     return this.http.get<UserConnectionsResponse>(
       `/integrations/connections/${encodeURIComponent(userId)}${query}`,
     )
@@ -87,30 +101,51 @@ export class IntegrationsResource {
   /**
    * List apps enabled for the tenant
    */
-  async listApps(params?: { includeAvailable?: boolean }): Promise<AppsListResponse> {
+  async listApps(params?: { includeAvailable?: boolean, provider?: string }): Promise<AppsListResponse> {
     const urlParams = new URLSearchParams()
     if (params?.includeAvailable)
       urlParams.append('include_available', 'true')
+    if (params?.provider)
+      urlParams.append('provider', params.provider)
 
     const query = urlParams.toString() ? `?${urlParams.toString()}` : ''
     return this.http.get<AppsListResponse>(`/integrations/apps${query}`)
   }
 
   /**
+   * List available integration providers
+   */
+  async listProviders(): Promise<ListProvidersResponse> {
+    return this.http.get<ListProvidersResponse>('/integrations/providers')
+  }
+
+  /**
    * Check if a specific app is enabled
    */
-  async checkAppEnabled(appName: string): Promise<AppEnabledResponse> {
+  async checkAppEnabled(params: CheckAppEnabledParams): Promise<AppEnabledResponse> {
+    const { appName, provider } = params
+    const queryParams = new URLSearchParams()
+    if (provider)
+      queryParams.append('provider', provider)
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
     return this.http.get<AppEnabledResponse>(
-      `/integrations/apps/${appName.toUpperCase()}/enabled`,
+      `/integrations/apps/${appName.toUpperCase()}/enabled${query}`,
     )
   }
 
   /**
    * Enable or disable an app for the tenant
    */
-  async updateAppStatus(appName: string, enabled: boolean): Promise<UpdateAppStatusResponse> {
+  async updateAppStatus(params: UpdateAppStatusParams): Promise<UpdateAppStatusResponse> {
+    const { appName, enabled, provider } = params
+    const queryParams = new URLSearchParams()
+    queryParams.append('enabled', String(enabled))
+    if (provider)
+      queryParams.append('provider', provider)
+
     return this.http.put<UpdateAppStatusResponse>(
-      `/integrations/apps/${appName.toUpperCase()}?enabled=${enabled}`,
+      `/integrations/apps/${appName.toUpperCase()}?${queryParams.toString()}`,
     )
   }
 
@@ -125,15 +160,15 @@ export class IntegrationsResource {
   }
 
   // Aliases for backward compatibility with client methods
-  async isAppEnabled(appName: string): Promise<AppEnabledResponse> {
-    return this.checkAppEnabled(appName)
+  async isAppEnabled(appName: string, provider?: string): Promise<AppEnabledResponse> {
+    return this.checkAppEnabled({ appName, provider: provider as any })
   }
 
-  async setAppEnabled(appName: string, data: { enabled: boolean }): Promise<UpdateAppStatusResponse> {
-    return this.updateAppStatus(appName, data.enabled)
+  async setAppEnabled(appName: string, data: { enabled: boolean, provider?: string }): Promise<UpdateAppStatusResponse> {
+    return this.updateAppStatus({ appName, enabled: data.enabled, provider: data.provider as any })
   }
 
-  async listConnections(userId: string, params?: { appFilter?: string }): Promise<UserConnectionsResponse> {
-    return this.getUserConnections(userId, params?.appFilter)
+  async listConnections(userId: string, params?: { appFilter?: string, provider?: string }): Promise<UserConnectionsResponse> {
+    return this.getUserConnections({ userId, appFilter: params?.appFilter, provider: params?.provider as any })
   }
 }

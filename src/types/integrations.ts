@@ -1,11 +1,25 @@
 // Integrations API types
 
+/**
+ * Integration provider types
+ */
+export enum ProviderType {
+  COMPOSIO = 'composio',
+  UNIPILE = 'unipile',
+  NANGO = 'nango', // Future
+  ARCADE = 'arcade', // Future
+  MERGE = 'merge', // Future
+}
+
 export type ConnectionStatus = 'pending' | 'active' | 'failed' | 'expired' | 'not_connected'
 
 export interface InitiateConnectionRequest {
   userId: string
   appName: string
+  provider?: ProviderType
   redirectUrl?: string
+  successRedirectUrl?: string
+  failureRedirectUrl?: string
   authMode?: string // Future use
   connectionParams?: Record<string, any> // Future use
 }
@@ -24,10 +38,14 @@ export interface ConnectionStatusResponse {
 }
 
 export interface ConnectionInfo {
+  connectionId: string | null
+  tenantId: string
+  userId: string
+  provider: ProviderType
   appName: string
   status: ConnectionStatus
-  connectedAt?: string | null
-  errorMessage?: string | null
+  connectedAt: string | null
+  metadata: Record<string, any>
 }
 
 export interface UserConnectionsResponse {
@@ -37,6 +55,7 @@ export interface UserConnectionsResponse {
 
 export interface GetToolsRequest {
   userId: string
+  provider?: ProviderType
   appFilter?: string[]
 }
 
@@ -56,6 +75,7 @@ export interface GetToolsResponse {
 export interface DisconnectRequest {
   userId: string
   appName: string
+  provider?: ProviderType
 }
 
 export interface DisconnectResponse {
@@ -77,13 +97,17 @@ export interface ConnectionCallbackResponse {
 }
 
 export interface AppsListResponse {
-  enabledApps: string[]
-  totalEnabled: number
+  providers: Record<string, string[]>
+  totalProviders: number
+  // Legacy fields for backward compatibility
+  enabledApps?: string[]
+  totalEnabled?: number
   availableApps?: string[]
   totalAvailable?: number
 }
 
 export interface AppEnabledResponse {
+  provider: ProviderType
   appName: string
   enabled: boolean
   message: string
@@ -94,4 +118,32 @@ export interface UpdateAppStatusResponse {
   enabled: boolean
   message: string
   updatedAt: string
+}
+
+export interface ListProvidersResponse {
+  providers: string[]
+  total: number
+}
+
+export interface GetConnectionStatusParams {
+  userId: string
+  appName: string
+  provider?: ProviderType
+}
+
+export interface GetUserConnectionsParams {
+  userId: string
+  provider?: ProviderType
+  appFilter?: string
+}
+
+export interface CheckAppEnabledParams {
+  appName: string
+  provider?: ProviderType
+}
+
+export interface UpdateAppStatusParams {
+  appName: string
+  enabled: boolean
+  provider?: ProviderType
 }
