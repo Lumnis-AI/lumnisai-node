@@ -35,6 +35,28 @@ export interface ModelOverrides {
   [key: string]: string
 }
 
+/**
+ * Available specialized agents
+ */
+export type SpecializedAgentType = 'quick_people_search'
+
+/**
+ * Parameters for specialized agent execution
+ */
+export interface SpecializedAgentParams {
+  /**
+   * Maximum number of results (1-100)
+   * Agent-specific: For quick_people_search, limits the number of candidates returned
+   */
+  limit?: number
+  /**
+   * Specific data sources to use (agent-specific)
+   * For quick_people_search: ["PDL", "CORESIGNAL", "CRUST_DATA"]
+   */
+  dataSources?: string[]
+  // Future specialized agents may add more parameters here
+}
+
 export interface CreateResponseRequest {
   threadId?: UUID
   messages: Message[]
@@ -45,6 +67,15 @@ export interface CreateResponseRequest {
   responseFormat?: Record<string, any>
   responseFormatInstructions?: string
   modelOverrides?: ModelOverrides
+  /**
+   * Route to a specialized agent instead of the main Lumnis agent
+   * Available agents: 'quick_people_search'
+   */
+  specializedAgent?: SpecializedAgentType
+  /**
+   * Parameters specific to the specialized agent
+   */
+  specializedAgentParams?: SpecializedAgentParams
 }
 
 export interface ProgressEntry {
@@ -158,4 +189,58 @@ export interface FeedbackListResponse {
   unconsumedCount: number
   feedback: FeedbackObject[]
   note: string
+}
+
+// Specialized Agent Response Types
+
+/**
+ * Salary range data for person results
+ */
+export interface SalaryRange {
+  min?: number
+  median?: number
+  max?: number
+  currency?: string
+  period?: string
+}
+
+/**
+ * Person result from quick_people_search specialized agent
+ */
+export interface PersonResult {
+  id: string
+  name: string
+  currentTitle?: string
+  currentCompany?: string
+  currentDepartment?: string
+  location?: string
+  city?: string
+  country?: string
+  email?: string
+  emails: string[]
+  linkedinUrl?: string
+  yearsExperience?: number
+  skills: string[]
+  seniorityLevel?: string
+  isDecisionMaker: boolean
+  connectionsCount?: number
+  recentlyChangedJobs: boolean
+  source: string
+  confidenceScore?: number
+  salaryRange?: SalaryRange
+  certificationsCount?: number
+  languages?: string[]
+  educationDegrees?: string[]
+}
+
+/**
+ * Structured output from quick_people_search specialized agent
+ * This will be available in ResponseObject.structuredResponse
+ */
+export interface QuickPeopleSearchOutput {
+  candidates: PersonResult[]
+  totalFound: number
+  appliedFilters: Record<string, any>
+  executionTimeMs: number
+  dataSourcesUsed: string[]
 }

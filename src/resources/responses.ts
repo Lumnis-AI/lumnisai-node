@@ -165,4 +165,43 @@ export class ResponsesResource {
 
     return this.http.get<FeedbackListResponse>(`/responses/${responseId}/feedback`, { params: queryParams })
   }
+
+  /**
+   * Perform a quick people search using the specialized quick_people_search agent
+   * @param query - Natural language search query (e.g., "Find engineers at Google in SF")
+   * @param options - Optional search parameters
+   * @param options.limit - Maximum number of results (1-100, default: 20)
+   * @param options.dataSources - Specific data sources to use: ["PDL", "CORESIGNAL", "CRUST_DATA"]
+   * @returns Response with structured_response containing:
+   *   - candidates: List of person results
+   *   - totalFound: Total unique candidates found
+   *   - appliedFilters: Extracted search filters
+   *   - executionTimeMs: Search duration
+   *   - dataSourcesUsed: Which sources were queried
+   */
+  async quickPeopleSearch(
+    query: string,
+    options?: {
+      limit?: number
+      dataSources?: string[]
+    },
+  ): Promise<CreateResponseResponse> {
+    const request: CreateResponseRequest = {
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'quick_people_search',
+    }
+
+    if (options) {
+      const params: Record<string, any> = {}
+      if (options.limit !== undefined)
+        params.limit = options.limit
+      if (options.dataSources)
+        params.dataSources = options.dataSources
+
+      if (Object.keys(params).length > 0)
+        request.specializedAgentParams = params
+    }
+
+    return this.create(request)
+  }
 }
