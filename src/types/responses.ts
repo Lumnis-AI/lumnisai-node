@@ -1,5 +1,6 @@
 // Response API types
 import type { Message, UUID } from './common'
+import type { PersonResult } from './people'
 
 export type ResponseStatus = 'queued' | 'in_progress' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -194,48 +195,9 @@ export interface FeedbackListResponse {
 // Specialized Agent Response Types
 
 /**
- * Salary range data for person results
- */
-export interface SalaryRange {
-  min?: number
-  median?: number
-  max?: number
-  currency?: string
-  period?: string
-}
-
-/**
- * Person result from quick_people_search specialized agent
- */
-export interface PersonResult {
-  id: string
-  name: string
-  currentTitle?: string
-  currentCompany?: string
-  currentDepartment?: string
-  location?: string
-  city?: string
-  country?: string
-  email?: string
-  emails: string[]
-  linkedinUrl?: string
-  yearsExperience?: number
-  skills: string[]
-  seniorityLevel?: string
-  isDecisionMaker: boolean
-  connectionsCount?: number
-  recentlyChangedJobs: boolean
-  source: string
-  confidenceScore?: number
-  salaryRange?: SalaryRange
-  certificationsCount?: number
-  languages?: string[]
-  educationDegrees?: string[]
-}
-
-/**
  * Structured output from quick_people_search specialized agent
  * This will be available in ResponseObject.structuredResponse
+ * Note: PersonResult is imported from './people' to avoid duplication
  */
 export interface QuickPeopleSearchOutput {
   candidates: PersonResult[]
