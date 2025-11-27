@@ -13,6 +13,7 @@ import { FilesResource } from '../resources/files'
 import { IntegrationsResource } from '../resources/integrations'
 import { MCPServersResource } from '../resources/mcp-servers'
 import { ModelPreferencesResource } from '../resources/model-preferences'
+import { PeopleResource } from '../resources/people'
 import { ResponsesResource } from '../resources/responses'
 import { SkillsResource } from '../resources/skills'
 import { TenantInfoResource } from '../resources/tenant-info'
@@ -59,6 +60,7 @@ export class LumnisClient {
   public readonly modelPreferences: ModelPreferencesResource
   public readonly mcpServers: MCPServersResource
   public readonly skills: SkillsResource
+  public readonly people: PeopleResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -100,6 +102,7 @@ export class LumnisClient {
     this.modelPreferences = new ModelPreferencesResource(this.http)
     this.mcpServers = new MCPServersResource(this.http)
     this.skills = new SkillsResource(this.http)
+    this.people = new PeopleResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {

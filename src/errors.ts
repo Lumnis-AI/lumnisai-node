@@ -75,3 +75,23 @@ export class LocalFileNotSupportedError extends ValidationError {
     this.name = 'LocalFileNotSupportedError'
   }
 }
+
+export class NoDataSourcesError extends ValidationError {
+  constructor(message?: string) {
+    super(
+      message || 'No people data sources configured. Please configure API keys.',
+      { code: 'NO_DATA_SOURCES' },
+    )
+    this.name = 'NoDataSourcesError'
+  }
+}
+
+export class SourcesNotAvailableError extends ValidationError {
+  public availableSources: string[]
+
+  constructor(message: string, availableSources: string[]) {
+    super(message, { code: 'SOURCES_NOT_AVAILABLE' })
+    this.name = 'SourcesNotAvailableError'
+    this.availableSources = availableSources
+  }
+}
