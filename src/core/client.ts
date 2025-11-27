@@ -1,6 +1,6 @@
 import type { Message, Scope } from '../types/common'
 import type { ApiKeyModeResponse, DeleteApiKeyResponse, ExternalApiKeyResponse } from '../types/external-api-keys'
-import type { AppEnabledResponse, AppsListResponse, ConnectionStatusResponse, GetToolsResponse, InitiateConnectionResponse, UpdateAppStatusResponse, UserConnectionsResponse } from '../types/integrations'
+import type { AppEnabledResponse, AppsListResponse, ConnectionStatusResponse, DisconnectResponse, GetToolsResponse, InitiateConnectionResponse, ListProvidersResponse, UpdateAppStatusResponse, UserConnectionsResponse } from '../types/integrations'
 import type { MCPServerListResponse, MCPServerResponse, MCPToolListResponse, TestConnectionResponse } from '../types/mcp-servers'
 import type { TenantModelPreferencesResponse } from '../types/model-preferences'
 import type { CreateResponseRequest, CreateResponseResponse, ProgressEntry, ResponseObject } from '../types/responses'
@@ -348,28 +348,36 @@ export class LumnisClient {
     return this.integrations.listApps(params)
   }
 
-  async isAppEnabled(appName: string): Promise<AppEnabledResponse> {
-    return this.integrations.isAppEnabled(appName)
+  async listProviders(): Promise<ListProvidersResponse> {
+    return this.integrations.listProviders()
   }
 
-  async setAppEnabled(appName: string, enabled: boolean): Promise<UpdateAppStatusResponse> {
-    return this.integrations.setAppEnabled(appName, { enabled })
+  async isAppEnabled(appName: string, provider?: string): Promise<AppEnabledResponse> {
+    return this.integrations.isAppEnabled(appName, provider)
+  }
+
+  async setAppEnabled(appName: string, enabled: boolean, provider?: string): Promise<UpdateAppStatusResponse> {
+    return this.integrations.setAppEnabled(appName, { enabled, provider })
   }
 
   async initiateConnection(params: Parameters<IntegrationsResource['initiateConnection']>[0]): Promise<InitiateConnectionResponse> {
     return this.integrations.initiateConnection(params)
   }
 
-  async getConnectionStatus(userId: string, appName: string): Promise<ConnectionStatusResponse> {
-    return this.integrations.getConnectionStatus({ userId, appName })
+  async getConnectionStatus(userId: string, appName: string, provider?: string): Promise<ConnectionStatusResponse> {
+    return this.integrations.getConnectionStatus({ userId, appName, provider: provider as any })
   }
 
-  async listConnections(userId: string, params?: Parameters<IntegrationsResource['listConnections']>[1]): Promise<UserConnectionsResponse> {
+  async listConnections(userId: string, params?: { appFilter?: string, provider?: string }): Promise<UserConnectionsResponse> {
     return this.integrations.listConnections(userId, params)
   }
 
-  async getIntegrationTools(userId: string, params?: { appFilter?: string[] }): Promise<GetToolsResponse> {
-    return this.integrations.getTools({ userId, appFilter: params?.appFilter })
+  async getIntegrationTools(userId: string, params?: { appFilter?: string[], provider?: string }): Promise<GetToolsResponse> {
+    return this.integrations.getTools({ userId, appFilter: params?.appFilter, provider: params?.provider as any })
+  }
+
+  async disconnect(userId: string, appName: string, provider?: string): Promise<DisconnectResponse> {
+    return this.integrations.disconnect({ userId, appName, provider: provider as any })
   }
 
   // Model Preference methods
