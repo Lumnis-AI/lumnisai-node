@@ -460,3 +460,29 @@ export interface BatchSendResponse {
   failed: number // Count failed
   queued: number // Count queued for later (rate limiting)
 }
+
+/**
+ * Response from deleting a single conversation
+ */
+export interface DeleteConversationResponse {
+  success: boolean
+  conversation_id: string
+}
+
+/**
+ * Response from deleting conversations by project
+ */
+export interface DeleteConversationsByProjectResponse {
+  success: boolean
+  project_id: string
+  deleted_count: number
+}
+
+/**
+ * Response from unlinking conversations from project
+ */
+export interface UnlinkConversationsResponse {
+  success: boolean
+  project_id: string
+  unlinked_count: number
+}

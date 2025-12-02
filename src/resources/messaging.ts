@@ -11,6 +11,8 @@ import type {
   ConversationDetail,
   ConversationSummary,
   CreateDraftRequest,
+  DeleteConversationResponse,
+  DeleteConversationsByProjectResponse,
   DraftResponse,
   EmailThreadSummary,
   LinkedInConnectionStatus,
@@ -25,9 +27,10 @@ import type {
   SyncProspectRequest,
   SyncProspectResponse,
   SyncRequest,
+  UnlinkConversationsResponse,
   UpdateLinkedInSubscriptionRequest,
 } from '../types/messaging'
-import { MessagingValidationError } from '../errors'
+import { MessagingNotFoundError, MessagingValidationError, NotFoundError, ValidationError } from '../errors'
 
 export class MessagingResource {
   constructor(private readonly http: Http) {}
@@ -379,6 +382,89 @@ export class MessagingResource {
     return this.http.post<BatchSendResponse>(
       `/messaging/drafts/batch/send?${queryParams.toString()}`,
       request,
+    )
+  }
+
+  /**
+   * Delete a single conversation and all its messages.
+   *
+   * @param conversationId - UUID of the conversation to delete
+   * @param userId - User ID or email
+   * @returns DeleteConversationResponse with success status and conversation_id
+   * @throws MessagingNotFoundError if conversation not found (404)
+   * @throws MessagingValidationError if conversation_id is invalid (400)
+   */
+  async deleteConversation(
+    conversationId: string,
+    userId: string,
+  ): Promise<DeleteConversationResponse> {
+    try {
+      const queryParams = new URLSearchParams()
+      queryParams.append('user_id', userId)
+
+      return await this.http.delete<DeleteConversationResponse>(
+        `/messaging/conversations/${encodeURIComponent(conversationId)}?${queryParams.toString()}`,
+      )
+    }
+    catch (error) {
+      if (error instanceof NotFoundError) {
+        throw new MessagingNotFoundError(
+          `Conversation ${conversationId} not found`,
+        )
+      }
+      if (error instanceof ValidationError) {
+        throw new MessagingValidationError(
+          `Invalid conversation ID: ${conversationId}`,
+        )
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Delete all conversations for a project.
+   *
+   * **Warning:** This permanently deletes conversations and messages.
+   * Consider using unlinkConversationsFromProject() instead.
+   *
+   * @param projectId - UUID of the project
+   * @param userId - User ID or email
+   * @returns DeleteConversationsByProjectResponse with deleted count
+   */
+  async deleteConversationsByProject(
+    projectId: string,
+    userId: string,
+  ): Promise<DeleteConversationsByProjectResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('project_id', projectId)
+    queryParams.append('user_id', userId)
+
+    return this.http.delete<DeleteConversationsByProjectResponse>(
+      `/messaging/conversations?${queryParams.toString()}`,
+    )
+  }
+
+  /**
+   * Unlink conversations from a project without deleting them.
+   *
+   * This preserves conversation history by setting project_id = NULL.
+   * Recommended approach when deleting a project.
+   *
+   * @param projectId - UUID of the project
+   * @param userId - User ID or email
+   * @returns UnlinkConversationsResponse with unlinked count
+   */
+  async unlinkConversationsFromProject(
+    projectId: string,
+    userId: string,
+  ): Promise<UnlinkConversationsResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('project_id', projectId)
+    queryParams.append('user_id', userId)
+
+    return this.http.post<UnlinkConversationsResponse>(
+      `/messaging/conversations/unlink-project?${queryParams.toString()}`,
+      null,
     )
   }
 }
