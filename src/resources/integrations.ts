@@ -3,6 +3,8 @@ import type { Http } from '../core/http'
 import type {
   AppEnabledResponse,
   AppsListResponse,
+  BatchConnectionRequest,
+  BatchConnectionResponse,
   CheckAppEnabledParams,
   ConnectionCallbackRequest,
   ConnectionCallbackResponse,
@@ -40,14 +42,33 @@ export class IntegrationsResource {
    * Check the status of a specific connection
    */
   async getConnectionStatus(params: GetConnectionStatusParams): Promise<ConnectionStatusResponse> {
-    const { userId, appName, provider } = params
+    const { userId, appName, provider, includeEnabled } = params
     const queryParams = new URLSearchParams()
     if (provider)
       queryParams.append('provider', provider)
+    if (includeEnabled)
+      queryParams.append('include_enabled', 'true')
 
     const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
     return this.http.get<ConnectionStatusResponse>(
       `/integrations/connections/${encodeURIComponent(userId)}/${appName.toUpperCase()}${query}`,
+    )
+  }
+
+  /**
+   * Check connection status for multiple apps in a single request
+   * Optimized for onboarding flows - checks multiple connections in parallel
+   */
+  async getConnectionsBatch(params: BatchConnectionRequest): Promise<BatchConnectionResponse> {
+    const requestData = {
+      userId: params.userId,
+      appNames: params.appNames.map(name => name.toUpperCase()),
+      provider: params.provider || 'composio',
+      includeEnabledStatus: params.includeEnabledStatus ?? true,
+    }
+    return this.http.post<BatchConnectionResponse>(
+      '/integrations/connections/batch',
+      requestData,
     )
   }
 

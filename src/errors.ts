@@ -95,3 +95,40 @@ export class SourcesNotAvailableError extends ValidationError {
     this.availableSources = availableSources
   }
 }
+
+// Messaging API specific errors
+
+export class MessagingAPIError extends LumnisError {
+  constructor(message: string, options: LumnisErrorOptions = {}) {
+    super(message, options)
+    this.name = 'MessagingAPIError'
+  }
+}
+
+export class MessagingNotFoundError extends MessagingAPIError {
+  constructor(message: string, options: LumnisErrorOptions = {}) {
+    super(message, { ...options, statusCode: 404 })
+    this.name = 'MessagingNotFoundError'
+  }
+}
+
+export class MessagingValidationError extends MessagingAPIError {
+  constructor(message: string, options: LumnisErrorOptions = {}) {
+    super(message, { ...options, statusCode: 400 })
+    this.name = 'MessagingValidationError'
+  }
+}
+
+export class MessagingSendError extends MessagingAPIError {
+  constructor(message: string, options: LumnisErrorOptions = {}) {
+    super(message, { ...options, statusCode: 400 })
+    this.name = 'MessagingSendError'
+  }
+}
+
+export class MessagingConnectionError extends MessagingAPIError {
+  constructor(message: string, options: LumnisErrorOptions = {}) {
+    super(message, { ...options, statusCode: 400 })
+    this.name = 'MessagingConnectionError'
+  }
+}

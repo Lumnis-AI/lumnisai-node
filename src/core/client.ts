@@ -1,6 +1,6 @@
 import type { Message, Scope } from '../types/common'
 import type { ApiKeyModeResponse, DeleteApiKeyResponse, ExternalApiKeyResponse } from '../types/external-api-keys'
-import type { AppEnabledResponse, AppsListResponse, ConnectionStatusResponse, DisconnectResponse, GetToolsResponse, InitiateConnectionResponse, ListProvidersResponse, UpdateAppStatusResponse, UserConnectionsResponse } from '../types/integrations'
+import type { AppEnabledResponse, AppsListResponse, BatchConnectionResponse, ConnectionStatusResponse, DisconnectResponse, GetToolsResponse, InitiateConnectionResponse, ListProvidersResponse, UpdateAppStatusResponse, UserConnectionsResponse } from '../types/integrations'
 import type { MCPServerListResponse, MCPServerResponse, MCPToolListResponse, TestConnectionResponse } from '../types/mcp-servers'
 import type { TenantModelPreferencesResponse } from '../types/model-preferences'
 import type { CreateResponseRequest, CreateResponseResponse, ProgressEntry, ResponseObject } from '../types/responses'
@@ -12,6 +12,7 @@ import { ExternalAPIKeysResource } from '../resources/external-api-keys'
 import { FilesResource } from '../resources/files'
 import { IntegrationsResource } from '../resources/integrations'
 import { MCPServersResource } from '../resources/mcp-servers'
+import { MessagingResource } from '../resources/messaging'
 import { ModelPreferencesResource } from '../resources/model-preferences'
 import { PeopleResource } from '../resources/people'
 import { ResponsesResource } from '../resources/responses'
@@ -61,6 +62,7 @@ export class LumnisClient {
   public readonly mcpServers: MCPServersResource
   public readonly skills: SkillsResource
   public readonly people: PeopleResource
+  public readonly messaging: MessagingResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -103,6 +105,7 @@ export class LumnisClient {
     this.mcpServers = new MCPServersResource(this.http)
     this.skills = new SkillsResource(this.http)
     this.people = new PeopleResource(this.http)
+    this.messaging = new MessagingResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {
@@ -364,8 +367,50 @@ export class LumnisClient {
     return this.integrations.initiateConnection(params)
   }
 
-  async getConnectionStatus(userId: string, appName: string, provider?: string): Promise<ConnectionStatusResponse> {
-    return this.integrations.getConnectionStatus({ userId, appName, provider: provider as any })
+  async getConnectionStatus(
+    userId: string,
+    appName: string,
+    provider?: string,
+  ): Promise<ConnectionStatusResponse>
+  async getConnectionStatus(
+    userId: string,
+    appName: string,
+    options?: { provider?: string, includeEnabled?: boolean },
+  ): Promise<ConnectionStatusResponse>
+  async getConnectionStatus(
+    userId: string,
+    appName: string,
+    providerOrOptions?: string | { provider?: string, includeEnabled?: boolean },
+  ): Promise<ConnectionStatusResponse> {
+    // Handle backward compatibility: if third param is a string, treat it as provider
+    if (typeof providerOrOptions === 'string') {
+      return this.integrations.getConnectionStatus({
+        userId,
+        appName,
+        provider: providerOrOptions as any,
+      })
+    }
+    // Otherwise, treat it as options object
+    return this.integrations.getConnectionStatus({
+      userId,
+      appName,
+      provider: providerOrOptions?.provider as any,
+      includeEnabled: providerOrOptions?.includeEnabled,
+    })
+  }
+
+  async getConnectionsBatch(params: {
+    userId: string
+    appNames: string[]
+    provider?: string
+    includeEnabledStatus?: boolean
+  }): Promise<BatchConnectionResponse> {
+    return this.integrations.getConnectionsBatch({
+      userId: params.userId,
+      appNames: params.appNames,
+      provider: params.provider as any,
+      includeEnabledStatus: params.includeEnabledStatus,
+    })
   }
 
   async listConnections(userId: string, params?: { appFilter?: string, provider?: string }): Promise<UserConnectionsResponse> {

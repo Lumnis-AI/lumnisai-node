@@ -1,4 +1,15 @@
+// UUID regex pattern - don't convert these keys
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isUUID(s: string): boolean {
+  return UUID_PATTERN.test(s)
+}
+
 function toCamel(s: string): string {
+  // Don't convert UUIDs - they contain hyphens that would be corrupted
+  if (isUUID(s))
+    return s
+
   return s.replace(/([-_][a-z])/gi, ($1) => {
     return $1.toUpperCase()
       .replace('-', '')
@@ -7,6 +18,10 @@ function toCamel(s: string): string {
 }
 
 function toSnake(s: string): string {
+  // Don't convert UUIDs
+  if (isUUID(s))
+    return s
+
   return s.replace(/[A-Z]/g, (letter, index) => {
     return index === 0 ? letter.toLowerCase() : `_${letter.toLowerCase()}`
   })

@@ -35,6 +35,7 @@ export interface ConnectionStatusResponse {
   status: ConnectionStatus
   connectedAt?: string | null
   errorMessage?: string | null
+  isEnabled?: boolean // Optional for backwards compatibility
 }
 
 export interface ConnectionInfo {
@@ -129,6 +130,7 @@ export interface GetConnectionStatusParams {
   userId: string
   appName: string
   provider?: ProviderType
+  includeEnabled?: boolean
 }
 
 export interface GetUserConnectionsParams {
@@ -146,4 +148,35 @@ export interface UpdateAppStatusParams {
   appName: string
   enabled: boolean
   provider?: ProviderType
+}
+
+/**
+ * Request parameters for batch connection status check
+ */
+export interface BatchConnectionRequest {
+  userId: string
+  appNames: string[]
+  provider?: ProviderType
+  includeEnabledStatus?: boolean
+}
+
+/**
+ * Connection status in batch response
+ */
+export interface BatchConnectionStatus {
+  appName: string
+  status: ConnectionStatus
+  connectedAt: string | null
+  isEnabled: boolean
+  errorMessage: string | null
+}
+
+/**
+ * Response from batch connection status check
+ */
+export interface BatchConnectionResponse {
+  userId: string
+  connections: BatchConnectionStatus[]
+  totalChecked: number
+  activeCount: number
 }
