@@ -2,12 +2,16 @@
 import type { Http } from '../core/http'
 import type {
   BatchCheckConnectionRequest,
+  BatchCheckPriorContactRequest,
+  BatchCheckPriorContactResponse,
   BatchConnectionStatusResponse,
   BatchDraftRequest,
   BatchDraftResponse,
   BatchSendRequest,
   BatchSendResponse,
   CheckLinkedInConnectionRequest,
+  CheckPriorContactRequest,
+  CheckPriorContactResponse,
   ConversationDetail,
   ConversationSummary,
   CreateDraftRequest,
@@ -465,6 +469,153 @@ export class MessagingResource {
     return this.http.post<UnlinkConversationsResponse>(
       `/messaging/conversations/unlink-project?${queryParams.toString()}`,
       null,
+    )
+  }
+
+  /**
+   * Check if there has been any prior contact with a person across all channels.
+   *
+   * This searches your connected messaging accounts (Gmail, Outlook, LinkedIn) to find
+   * any historical communication with a person, even if they're not in the system as a prospect.
+   *
+   * **Use cases:**
+   * - Before adding a new prospect, check if you've already contacted them
+   * - Detect duplicate outreach across different systems
+   * - Find historical conversation context before sending a new message
+   *
+   * **Required:** At least one of `email`, `linkedinUrl`, or `providerId` must be provided.
+   *
+   * **Channels:**
+   * - If `channels` is not specified, checks all channels based on identifiers provided:
+   *   - `email` → checks Gmail and Outlook
+   *   - `linkedinUrl` or `providerId` → checks LinkedIn
+   * - Specify `channels` to limit which accounts to search (e.g., `["linkedin"]`)
+   *
+   * **Returns:**
+   * - `hasPriorContact`: True if ANY communication exists on ANY channel
+   * - `channelsChecked`: List of channels that were searched
+   * - `channelsWithContact`: List of channels where contact was found
+   * - `contactHistory`: Per-channel details including:
+   *   - `isUserInitiated`: True if you sent the first message
+   *   - `messages`: Most recent N messages (configurable via `messageLimit`)
+   *   - `firstContactAt` / `lastContactAt`: Timestamps of first and last messages
+   * - `cached`: True if result was served from cache (results are cached for 2 hours)
+   *
+   * **Caching:**
+   * - Results are cached in Redis for 2 hours to improve performance
+   * - Set `skipCache: true` to force a fresh check
+   *
+   * @param userId - User ID or email
+   * @param request - CheckPriorContactRequest with identifiers and options
+   * @returns CheckPriorContactResponse with contact history
+   * @throws MessagingValidationError if no identifier provided
+   */
+  async checkPriorContact(
+    userId: string,
+    request: CheckPriorContactRequest,
+  ): Promise<CheckPriorContactResponse> {
+    // Validate at least one identifier provided
+    if (!request.email && !request.linkedinUrl && !request.providerId) {
+      throw new MessagingValidationError(
+        'At least one of email, linkedinUrl, or providerId must be provided',
+        { code: 'VALIDATION_ERROR' },
+      )
+    }
+
+    const queryParams = new URLSearchParams()
+    queryParams.append('user_id', userId)
+
+    const payload: Record<string, any> = {}
+    if (request.email) payload.email = request.email
+    if (request.linkedinUrl) payload.linkedin_url = request.linkedinUrl
+    if (request.providerId) payload.provider_id = request.providerId
+    if (request.channels) payload.channels = request.channels
+    if (request.messageLimit !== undefined && request.messageLimit !== null) {
+      payload.message_limit = request.messageLimit
+    }
+    if (request.skipCache !== undefined && request.skipCache !== null) {
+      payload.skip_cache = request.skipCache
+    }
+
+    return this.http.post<CheckPriorContactResponse>(
+      `/messaging/check-prior-contact?${queryParams.toString()}`,
+      payload,
+    )
+  }
+
+  /**
+   * Check prior contact for multiple prospects at once (parallelized).
+   *
+   * This is the batch version of `checkPriorContact` for efficiently checking
+   * many prospects at once. Useful when importing a list of prospects and need to
+   * identify which ones have been contacted before.
+   *
+   * **Limits:**
+   * - Max 50 prospects per request
+   * - Max 10 messages per channel per prospect (to keep response size manageable)
+   *
+   * **Request:**
+   * ```typescript
+   * {
+   *   prospects: [
+   *     { prospectId: "p1", email: "john@acme.com" },
+   *     { prospectId: "p2", linkedinUrl: "https://linkedin.com/in/jane" },
+   *     { prospectId: "p3", email: "bob@xyz.com", linkedinUrl: "https://linkedin.com/in/bob" }
+   *   ],
+   *   channels: ["gmail", "linkedin"],  // Optional
+   *   messageLimit: 3  // Messages per channel (default: 3)
+   * }
+   * ```
+   *
+   * **Response:**
+   * - `results`: Dict keyed by `prospectId` with contact history for each
+   * - `summary`: Aggregated counts {total, withContact, withoutContact, errors, cached}
+   *
+   * **Caching:**
+   * - Results are cached in Redis for 2 hours to improve performance
+   * - Set `skipCache: true` to force fresh checks for all prospects
+   *
+   * @param userId - User ID or email
+   * @param request - BatchCheckPriorContactRequest with prospects and options
+   * @returns BatchCheckPriorContactResponse with results keyed by prospectId
+   * @throws MessagingValidationError if any prospect lacks identifiers
+   */
+  async batchCheckPriorContact(
+    userId: string,
+    request: BatchCheckPriorContactRequest,
+  ): Promise<BatchCheckPriorContactResponse> {
+    // Validate each prospect has at least one identifier
+    for (const prospect of request.prospects) {
+      if (!prospect.email && !prospect.linkedinUrl && !prospect.providerId) {
+        throw new MessagingValidationError(
+          `Prospect '${prospect.prospectId}' must have at least one of: email, linkedinUrl, or providerId`,
+          { code: 'VALIDATION_ERROR' },
+        )
+      }
+    }
+
+    const queryParams = new URLSearchParams()
+    queryParams.append('user_id', userId)
+
+    const payload: Record<string, any> = {
+      prospects: request.prospects.map((p) => ({
+        prospect_id: p.prospectId,
+        email: p.email || undefined,
+        linkedin_url: p.linkedinUrl || undefined,
+        provider_id: p.providerId || undefined,
+      })),
+    }
+    if (request.channels) payload.channels = request.channels
+    if (request.messageLimit !== undefined && request.messageLimit !== null) {
+      payload.message_limit = request.messageLimit
+    }
+    if (request.skipCache !== undefined && request.skipCache !== null) {
+      payload.skip_cache = request.skipCache
+    }
+
+    return this.http.post<BatchCheckPriorContactResponse>(
+      `/messaging/check-prior-contact/batch?${queryParams.toString()}`,
+      payload,
     )
   }
 }

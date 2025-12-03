@@ -486,3 +486,131 @@ export interface UnlinkConversationsResponse {
   project_id: string
   unlinked_count: number
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// PRIOR CONTACT CHECK
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Request to check if there's been prior contact with a person
+ */
+export interface CheckPriorContactRequest {
+  /** Email address to check (for Gmail/Outlook) */
+  email?: string | null
+  /** LinkedIn profile URL to check */
+  linkedinUrl?: string | null
+  /** LinkedIn provider ID to check */
+  providerId?: string | null
+  /** Channels to check: 'gmail', 'outlook', 'linkedin'. Default: all connected channels */
+  channels?: string[] | null
+  /** Max messages to return per channel (1-20, default: 5) */
+  messageLimit?: number | null
+  /** Force fresh check, bypassing cache (default: false) */
+  skipCache?: boolean | null
+}
+
+/**
+ * A message from prior contact history
+ */
+export interface PriorContactMessage {
+  id: string
+  /** 'inbound' | 'outbound' */
+  direction: string
+  content: string
+  subject?: string | null
+  senderName: string
+  /** ISO timestamp */
+  sentAt: string
+}
+
+/**
+ * Contact history for a single channel
+ */
+export interface ChannelContactHistory {
+  /** 'gmail' | 'outlook' | 'linkedin' */
+  channel: string
+  hasContact: boolean
+  /** True if user sent first message */
+  isUserInitiated: boolean
+  threadId?: string | null
+  /** Internal ID if we have one */
+  conversationId?: string | null
+  messageCount: number
+  /** ISO timestamp */
+  firstContactAt?: string | null
+  /** ISO timestamp */
+  lastContactAt?: string | null
+  prospectName?: string | null
+  messages: PriorContactMessage[]
+}
+
+/**
+ * Response from prior contact check
+ */
+export interface CheckPriorContactResponse {
+  /** True if ANY channel has contact */
+  hasPriorContact: boolean
+  channelsChecked: string[]
+  channelsWithContact: string[]
+  contactHistory: ChannelContactHistory[]
+  /** True if result was served from cache */
+  cached?: boolean
+}
+
+/**
+ * Identifier for a prospect in batch prior contact check
+ */
+export interface BatchProspectIdentifier {
+  /** Unique identifier for this prospect (for mapping results) */
+  prospectId: string
+  /** Email address to check */
+  email?: string | null
+  /** LinkedIn profile URL */
+  linkedinUrl?: string | null
+  /** LinkedIn provider ID */
+  providerId?: string | null
+}
+
+/**
+ * Request to check prior contact for multiple prospects
+ */
+export interface BatchCheckPriorContactRequest {
+  /** List of prospects to check (max 50) */
+  prospects: BatchProspectIdentifier[]
+  /** Channels to check: 'gmail', 'outlook', 'linkedin'. Default: all based on identifiers */
+  channels?: string[] | null
+  /** Max messages per channel per prospect (1-10, default: 3) */
+  messageLimit?: number | null
+  /** Force fresh check for all prospects, bypassing cache (default: false) */
+  skipCache?: boolean | null
+}
+
+/**
+ * Prior contact result for a single prospect in batch
+ */
+export interface ProspectPriorContactResult {
+  prospectId: string
+  hasPriorContact: boolean
+  channelsWithContact: string[]
+  contactHistory: ChannelContactHistory[]
+  /** True if this result was from cache */
+  cached?: boolean
+  error?: string | null
+}
+
+/**
+ * Response from batch prior contact check
+ */
+export interface BatchCheckPriorContactResponse {
+  /** Keyed by prospect_id */
+  results: Record<string, ProspectPriorContactResult>
+  /** Aggregated counts */
+  summary: {
+    total: number
+    withContact: number
+    withoutContact: number
+    errors: number
+    /** Number of results served from cache */
+    cached?: number
+  }
+}
