@@ -147,6 +147,7 @@ export interface LinkedInSendRequest {
   escalationDays?: number // 1-30
   projectId?: string | null
   prospectExternalId?: string | null
+  organizationId?: string | null // Frontend organization ID for multi-org support
 }
 
 /**
@@ -161,6 +162,7 @@ export interface SendMessageRequest {
   recipientName?: string | null
   projectId?: string | null
   prospectExternalId?: string | null
+  organizationId?: string | null // Frontend organization ID for multi-org support
 }
 
 /**
@@ -168,6 +170,7 @@ export interface SendMessageRequest {
  */
 export interface SendReplyRequest {
   content: string
+  organizationId?: string | null // Frontend organization ID for multi-org support
 }
 
 /**
@@ -202,6 +205,7 @@ export interface CreateDraftRequest {
   subject?: string | null
   isPriority?: boolean
   outreachMethod?: string | null
+  organizationId?: string | null // Frontend organization ID for multi-org support
 }
 
 /**
@@ -234,6 +238,7 @@ export interface BatchDraftRequest {
   contentTemplate?: string | null
   useAiGeneration?: boolean
   aiContext?: Record<string, any> | null
+  organizationId?: string | null // Frontend organization ID for multi-org support
 }
 
 /**
