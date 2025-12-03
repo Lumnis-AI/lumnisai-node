@@ -431,6 +431,69 @@ export interface BatchDraftResponse {
 }
 
 /**
+ * Progress event data from streaming batch draft creation
+ */
+export interface BatchDraftProgressData {
+  processed: number
+  total: number
+  percentage: number
+  currentProspect: string
+}
+
+/**
+ * Draft created event data from streaming batch draft creation
+ */
+export interface BatchDraftCreatedData {
+  draft: DraftResponse
+  prospectExternalId?: string | null
+}
+
+/**
+ * Error event data from streaming batch draft creation
+ */
+export interface BatchDraftErrorData {
+  prospect: string
+  error: string
+}
+
+/**
+ * Complete event data from streaming batch draft creation
+ */
+export interface BatchDraftCompleteData {
+  created: number
+  errors: number
+  drafts: DraftResponse[]
+  errorDetails: Array<{ prospect: string; error: string }>
+}
+
+/**
+ * Stream event types for batch draft creation
+ */
+export type BatchDraftStreamEventType = 'progress' | 'draft_created' | 'error' | 'complete'
+
+/**
+ * Stream event from batch draft creation
+ */
+export interface BatchDraftStreamEvent {
+  event: BatchDraftStreamEventType
+  data: BatchDraftProgressData | BatchDraftCreatedData | BatchDraftErrorData | BatchDraftCompleteData
+}
+
+/**
+ * Callbacks for batch draft streaming
+ */
+export interface BatchDraftStreamCallbacks {
+  /** Callback for progress updates */
+  onProgress?: (processed: number, total: number, percentage: number, prospectName: string) => void
+  /** Callback when a draft is created */
+  onDraftCreated?: (draft: DraftResponse) => void
+  /** Callback when an error occurs for a prospect */
+  onError?: (prospect: string, error: string) => void
+  /** Callback when batch processing completes */
+  onComplete?: (result: BatchDraftResponse) => void
+}
+
+/**
  * Send result (returned by reply, linkedin/send, drafts endpoints)
  */
 export interface SendResult {

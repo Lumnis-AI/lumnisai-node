@@ -1,5 +1,13 @@
 // Messaging API resource
 import type { Http } from '../core/http'
+import { toCamelCase, toSnakeCase } from '../utils/case-conversion'
+import {
+  AuthenticationError,
+  LumnisError,
+  NotFoundError,
+  RateLimitError,
+  ValidationError,
+} from '../errors'
 import type {
   BatchCheckConnectionRequest,
   BatchCheckPriorContactRequest,
@@ -7,6 +15,8 @@ import type {
   BatchConnectionStatusResponse,
   BatchDraftRequest,
   BatchDraftResponse,
+  BatchDraftStreamCallbacks,
+  BatchDraftStreamEvent,
   BatchSendRequest,
   BatchSendResponse,
   CheckLinkedInConnectionRequest,
@@ -34,7 +44,7 @@ import type {
   UnlinkConversationsResponse,
   UpdateLinkedInSubscriptionRequest,
 } from '../types/messaging'
-import { MessagingNotFoundError, MessagingValidationError, NotFoundError, ValidationError } from '../errors'
+import { MessagingNotFoundError, MessagingValidationError } from '../errors'
 
 export class MessagingResource {
   constructor(private readonly http: Http) {}
@@ -356,6 +366,357 @@ export class MessagingResource {
       `/messaging/drafts/batch?${queryParams.toString()}`,
       request,
     )
+  }
+
+  /**
+   * Create drafts for multiple prospects with real-time progress updates via Server-Sent Events (SSE).
+   *
+   * This method provides real-time progress updates as drafts are being created, significantly
+   * improving user experience for large batch operations (30+ prospects).
+   *
+   * **Event Types:**
+   * - `progress`: Progress update with percentage and current prospect
+   * - `draft_created`: Draft successfully created
+   * - `error`: Error occurred for a specific prospect
+   * - `complete`: Batch processing completed
+   *
+   * **Example:**
+   * ```typescript
+   * const result = await client.messaging.createBatchDraftsStream(
+   *   'user@example.com',
+   *   {
+   *     prospects: [...],
+   *     channel: 'linkedin',
+   *     useAiGeneration: true
+   *   },
+   *   {
+   *     onProgress: (processed, total, percentage, prospectName) => {
+   *       console.log(`${percentage}% - ${prospectName}`)
+   *     },
+   *     onDraftCreated: (draft) => {
+   *       console.log(`Draft created: ${draft.id}`)
+   *     },
+   *     onError: (prospect, error) => {
+   *       console.error(`Error for ${prospect}: ${error}`)
+   *     },
+   *     onComplete: (result) => {
+   *       console.log(`Complete! Created: ${result.created}, Errors: ${result.errors}`)
+   *     }
+   *   }
+   * )
+   * ```
+   *
+   * @param userId - User ID or email
+   * @param request - Batch draft creation request
+   * @param callbacks - Optional callbacks for stream events
+   * @returns Final result with created drafts and error details
+   */
+  async createBatchDraftsStream(
+    userId: string,
+    request: BatchDraftRequest,
+    callbacks?: BatchDraftStreamCallbacks,
+  ): Promise<BatchDraftResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('user_id', userId)
+
+    // Build URL with base URL and path
+    const baseUrl = (this.http as any).options.baseUrl
+    const apiPrefix = (this.http as any).options.apiPrefix || ''
+    const path = `/messaging/drafts/batch/stream?${queryParams.toString()}`
+    const url = `${baseUrl}${apiPrefix}${path}`
+
+    // Get headers from HTTP client
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      ...(this.http as any).options.headers,
+    }
+
+    // Convert request body to snake_case
+    const body = JSON.stringify(toSnakeCase(request))
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+    })
+
+    if (!response.ok) {
+      // Handle errors using the HTTP client's error handling
+      const requestId = response.headers.get('x-request-id')
+      const contentType = response.headers.get('content-type') || ''
+      let detail: any = { raw: await response.text() }
+      try {
+        if (contentType.includes('application/json'))
+          detail = JSON.parse(detail.raw)
+      }
+      catch {}
+
+      const errorMsg = detail?.error?.message || `Server error: ${response.status}`
+
+      if (response.status === 401) {
+        throw new AuthenticationError('Invalid or missing API key', { requestId, statusCode: 401, details: detail })
+      }
+      if (response.status === 403) {
+        throw new AuthenticationError('Forbidden - insufficient permissions', { requestId, statusCode: 403, details: detail })
+      }
+      if (response.status === 404) {
+        throw new NotFoundError('Resource not found', { requestId, statusCode: 404, details: detail })
+      }
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After')
+        throw new RateLimitError({ requestId, statusCode: 429, details: detail, retryAfter })
+      }
+      if (response.status >= 400 && response.status < 500) {
+        throw new ValidationError(errorMsg, { requestId, statusCode: response.status, details: detail })
+      }
+      throw new LumnisError(`Server error: ${response.status}`, { requestId, statusCode: response.status, details: detail })
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('Response body reader not available')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finalResult: BatchDraftResponse | null = null
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done)
+          break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: '))
+            continue
+
+          try {
+            const eventData: BatchDraftStreamEvent = JSON.parse(line.slice(6)) // Remove "data: " prefix
+            const { event, data } = eventData
+
+            switch (event) {
+              case 'progress': {
+                // Convert snake_case to camelCase
+                const progressData = toCamelCase<any>(data as any)
+                callbacks?.onProgress?.(
+                  progressData.processed || 0,
+                  progressData.total || 0,
+                  progressData.percentage || 0,
+                  progressData.currentProspect || '',
+                )
+                break
+              }
+
+              case 'draft_created': {
+                // Convert snake_case to camelCase
+                const draftData = toCamelCase<any>(data as any)
+                const draft = draftData.draft
+                if (draft) {
+                  // Ensure draft is properly converted to camelCase
+                  const convertedDraft = toCamelCase<DraftResponse>(draft)
+                  callbacks?.onDraftCreated?.(convertedDraft)
+                }
+                break
+              }
+
+              case 'error': {
+                // Convert snake_case to camelCase
+                const errorData = toCamelCase<any>(data as any)
+                callbacks?.onError?.(
+                  errorData.prospect || 'Unknown',
+                  errorData.error || '',
+                )
+                break
+              }
+
+              case 'complete': {
+                // Convert snake_case to camelCase
+                const completeData = toCamelCase<any>(data as any)
+                finalResult = {
+                  created: completeData.created || 0,
+                  errors: completeData.errors || 0,
+                  drafts: (completeData.drafts || []).map((d: any) => toCamelCase<DraftResponse>(d)),
+                  errorDetails: completeData.errorDetails || [],
+                }
+                callbacks?.onComplete?.(finalResult)
+                break
+              }
+            }
+          }
+          catch (parseError) {
+            // Skip invalid JSON lines
+            continue
+          }
+        }
+      }
+    }
+    finally {
+      reader.releaseLock()
+    }
+
+    return finalResult || { created: 0, errors: 0, drafts: [], errorDetails: [] }
+  }
+
+  /**
+   * Create drafts with streaming events as an async generator.
+   *
+   * This method yields events as they arrive, providing more control over event handling.
+   *
+   * **Example:**
+   * ```typescript
+   * for await (const event of client.messaging.createBatchDraftsStreamGenerator(
+   *   'user@example.com',
+   *   {
+   *     prospects: [...],
+   *     channel: 'linkedin',
+   *     useAiGeneration: true
+   *   }
+   * )) {
+   *   switch (event.event) {
+   *     case 'progress':
+   *       console.log(`Progress: ${event.data.percentage}%`)
+   *       break
+   *     case 'draft_created':
+   *       console.log(`Draft: ${event.data.draft.id}`)
+   *       break
+   *     case 'error':
+   *       console.error(`Error: ${event.data.error}`)
+   *       break
+   *     case 'complete':
+   *       console.log(`Done! ${event.data.created} drafts created`)
+   *       break
+   *   }
+   * }
+   * ```
+   *
+   * @param userId - User ID or email
+   * @param request - Batch draft creation request
+   * @yields Stream events with 'event' and 'data' keys
+   * @returns Final result with created drafts and error details
+   */
+  async *createBatchDraftsStreamGenerator(
+    userId: string,
+    request: BatchDraftRequest,
+  ): AsyncGenerator<BatchDraftStreamEvent, BatchDraftResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('user_id', userId)
+
+    // Build URL with base URL and path
+    const baseUrl = (this.http as any).options.baseUrl
+    const apiPrefix = (this.http as any).options.apiPrefix || ''
+    const path = `/messaging/drafts/batch/stream?${queryParams.toString()}`
+    const url = `${baseUrl}${apiPrefix}${path}`
+
+    // Get headers from HTTP client
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      ...(this.http as any).options.headers,
+    }
+
+    // Convert request body to snake_case
+    const body = JSON.stringify(toSnakeCase(request))
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+    })
+
+    if (!response.ok) {
+      // Handle errors using the HTTP client's error handling
+      const requestId = response.headers.get('x-request-id')
+      const contentType = response.headers.get('content-type') || ''
+      let detail: any = { raw: await response.text() }
+      try {
+        if (contentType.includes('application/json'))
+          detail = JSON.parse(detail.raw)
+      }
+      catch {}
+
+      const errorMsg = detail?.error?.message || `Server error: ${response.status}`
+
+      if (response.status === 401) {
+        throw new AuthenticationError('Invalid or missing API key', { requestId, statusCode: 401, details: detail })
+      }
+      if (response.status === 403) {
+        throw new AuthenticationError('Forbidden - insufficient permissions', { requestId, statusCode: 403, details: detail })
+      }
+      if (response.status === 404) {
+        throw new NotFoundError('Resource not found', { requestId, statusCode: 404, details: detail })
+      }
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After')
+        throw new RateLimitError({ requestId, statusCode: 429, details: detail, retryAfter })
+      }
+      if (response.status >= 400 && response.status < 500) {
+        throw new ValidationError(errorMsg, { requestId, statusCode: response.status, details: detail })
+      }
+      throw new LumnisError(`Server error: ${response.status}`, { requestId, statusCode: response.status, details: detail })
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('Response body reader not available')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finalResult: BatchDraftResponse | null = null
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done)
+          break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: '))
+            continue
+
+          try {
+            const eventData: BatchDraftStreamEvent = JSON.parse(line.slice(6)) // Remove "data: " prefix
+            // Convert snake_case to camelCase for data
+            const camelEventData: BatchDraftStreamEvent = {
+              event: eventData.event,
+              data: toCamelCase(eventData.data) as BatchDraftStreamEvent['data'],
+            }
+            yield camelEventData
+
+            if (eventData.event === 'complete') {
+              const completeData = camelEventData.data as any
+              finalResult = {
+                created: completeData.created || 0,
+                errors: completeData.errors || 0,
+                drafts: (completeData.drafts || []).map((d: any) => toCamelCase<DraftResponse>(d)),
+                errorDetails: completeData.errorDetails || [],
+              }
+            }
+          }
+          catch (parseError) {
+            // Skip invalid JSON lines
+            continue
+          }
+        }
+      }
+    }
+    finally {
+      reader.releaseLock()
+    }
+
+    return finalResult || { created: 0, errors: 0, drafts: [], errorDetails: [] }
   }
 
   /**
