@@ -418,6 +418,8 @@ export interface DraftResponse {
   conversationId?: string | null
   /** Outreach method used for this draft: 'connection_request' | 'direct_message' | 'inmail' | 'email' */
   outreachMethod?: 'direct_message' | 'connection_request' | 'inmail' | 'email' | null
+  /** Subject line for email drafts (optional) */
+  subject?: string | null
 }
 
 /**
@@ -463,7 +465,7 @@ export interface BatchDraftCompleteData {
   created: number
   errors: number
   drafts: DraftResponse[]
-  errorDetails: Array<{ prospect: string; error: string }>
+  errorDetails: Array<{ prospect: string, error: string }>
 }
 
 /**

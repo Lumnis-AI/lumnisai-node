@@ -1,13 +1,5 @@
 // Messaging API resource
 import type { Http } from '../core/http'
-import { toCamelCase, toSnakeCase } from '../utils/case-conversion'
-import {
-  AuthenticationError,
-  LumnisError,
-  NotFoundError,
-  RateLimitError,
-  ValidationError,
-} from '../errors'
 import type {
   BatchCheckConnectionRequest,
   BatchCheckPriorContactRequest,
@@ -44,7 +36,16 @@ import type {
   UnlinkConversationsResponse,
   UpdateLinkedInSubscriptionRequest,
 } from '../types/messaging'
-import { MessagingNotFoundError, MessagingValidationError } from '../errors'
+import {
+  AuthenticationError,
+  LumnisError,
+  MessagingNotFoundError,
+  MessagingValidationError,
+  NotFoundError,
+  RateLimitError,
+  ValidationError,
+} from '../errors'
+import { toCamelCase, toSnakeCase } from '../utils/case-conversion'
 
 export class MessagingResource {
   constructor(private readonly http: Http) {}
@@ -353,6 +354,40 @@ export class MessagingResource {
   }
 
   /**
+   * Get a draft by ID.
+   *
+   * @param userId - User ID or email
+   * @param draftId - Draft UUID
+   * @returns Promise resolving to DraftResponse
+   * @throws MessagingNotFoundError if draft not found (404) or other API error
+   *
+   * @example
+   * ```typescript
+   * const draft = await client.messaging.getDraft('user@example.com', 'draft-uuid');
+   * console.log(draft.content);
+   * ```
+   */
+  async getDraft(
+    userId: string,
+    draftId: string,
+  ): Promise<DraftResponse> {
+    try {
+      const queryParams = new URLSearchParams()
+      queryParams.append('user_id', userId)
+
+      return await this.http.get<DraftResponse>(
+        `/messaging/drafts/${encodeURIComponent(draftId)}?${queryParams.toString()}`,
+      )
+    }
+    catch (error) {
+      if (error instanceof NotFoundError) {
+        throw new MessagingNotFoundError(`Draft not found: ${draftId}`)
+      }
+      throw error
+    }
+  }
+
+  /**
    * Create drafts for multiple prospects with AI generation
    */
   async createBatchDrafts(
@@ -550,7 +585,7 @@ export class MessagingResource {
               }
             }
           }
-          catch (parseError) {
+          catch {
             // Skip invalid JSON lines
             continue
           }
@@ -601,7 +636,7 @@ export class MessagingResource {
    * @yields Stream events with 'event' and 'data' keys
    * @returns Final result with created drafts and error details
    */
-  async *createBatchDraftsStreamGenerator(
+  async* createBatchDraftsStreamGenerator(
     userId: string,
     request: BatchDraftRequest,
   ): AsyncGenerator<BatchDraftStreamEvent, BatchDraftResponse> {
@@ -705,7 +740,7 @@ export class MessagingResource {
               }
             }
           }
-          catch (parseError) {
+          catch {
             // Skip invalid JSON lines
             continue
           }
@@ -887,10 +922,14 @@ export class MessagingResource {
     queryParams.append('user_id', userId)
 
     const payload: Record<string, any> = {}
-    if (request.email) payload.email = request.email
-    if (request.linkedinUrl) payload.linkedin_url = request.linkedinUrl
-    if (request.providerId) payload.provider_id = request.providerId
-    if (request.channels) payload.channels = request.channels
+    if (request.email)
+      payload.email = request.email
+    if (request.linkedinUrl)
+      payload.linkedin_url = request.linkedinUrl
+    if (request.providerId)
+      payload.provider_id = request.providerId
+    if (request.channels)
+      payload.channels = request.channels
     if (request.messageLimit !== undefined && request.messageLimit !== null) {
       payload.message_limit = request.messageLimit
     }
@@ -959,14 +998,15 @@ export class MessagingResource {
     queryParams.append('user_id', userId)
 
     const payload: Record<string, any> = {
-      prospects: request.prospects.map((p) => ({
+      prospects: request.prospects.map(p => ({
         prospect_id: p.prospectId,
         email: p.email || undefined,
         linkedin_url: p.linkedinUrl || undefined,
         provider_id: p.providerId || undefined,
       })),
     }
-    if (request.channels) payload.channels = request.channels
+    if (request.channels)
+      payload.channels = request.channels
     if (request.messageLimit !== undefined && request.messageLimit !== null) {
       payload.message_limit = request.messageLimit
     }
