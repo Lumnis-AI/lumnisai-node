@@ -38,11 +38,13 @@ export interface ModelOverrides {
 
 /**
  * Available specialized agents
+ * Using a union type that can be extended with any string to support future agents
  */
-export type SpecializedAgentType = 'quick_people_search'
+export type SpecializedAgentType = 'quick_people_search' | 'deep_people_search' | (string & {})
 
 /**
  * Parameters for specialized agent execution
+ * This is a flexible interface that supports any agent-specific parameters
  */
 export interface SpecializedAgentParams {
   /**
@@ -51,11 +53,20 @@ export interface SpecializedAgentParams {
    */
   limit?: number
   /**
+   * Number of candidates requested (for deep_people_search)
+   * Range: 1-1000
+   */
+  requestedCandidates?: number
+  /**
    * Specific data sources to use (agent-specific)
-   * For quick_people_search: ["PDL", "CORESIGNAL", "CRUST_DATA"]
+   * For people search agents: ["PDL", "CORESIGNAL", "CRUST_DATA"]
    */
   dataSources?: string[]
-  // Future specialized agents may add more parameters here
+  /**
+   * Additional parameters for any specialized agent
+   * This allows flexibility for future agents without SDK updates
+   */
+  [key: string]: any
 }
 
 export interface CreateResponseRequest {
@@ -70,7 +81,8 @@ export interface CreateResponseRequest {
   modelOverrides?: ModelOverrides
   /**
    * Route to a specialized agent instead of the main Lumnis agent
-   * Available agents: 'quick_people_search'
+   * Known agents: 'quick_people_search', 'deep_people_search'
+   * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
   /**
@@ -206,3 +218,12 @@ export interface QuickPeopleSearchOutput {
   executionTimeMs: number
   dataSourcesUsed: string[]
 }
+
+/**
+ * Note: Deep people search and other specialized agents may return different
+ * structured outputs. The actual structure will be available in
+ * ResponseObject.structuredResponse as a generic Record<string, any>
+ *
+ * The SDK is designed to be flexible and accept any specialized agent
+ * without requiring updates for each new agent type.
+ */
