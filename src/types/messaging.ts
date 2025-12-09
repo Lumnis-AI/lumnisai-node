@@ -345,6 +345,53 @@ export interface LinkedInCreditsResponse {
 }
 
 /**
+ * LinkedIn subscription information
+ */
+export interface LinkedInSubscriptionInfo {
+  type: string // basic, premium_career, premium_business, sales_navigator, recruiter_lite, recruiter_corporate
+  feature: string // Raw Unipile feature: classic, sales_navigator, recruiter
+
+  // InMail credits for this specific subscription
+  inmailCreditsRemaining?: number | null
+  inmailCreditsUpdatedAt?: string | null // ISO 8601 datetime
+
+  // Credit allowances for this subscription type
+  monthlyAllowance: number
+  maxAccumulation: number
+
+  isActive: boolean
+}
+
+/**
+ * Comprehensive LinkedIn account information response
+ */
+export interface LinkedInAccountInfoResponse {
+  // Connection status
+  connected: boolean
+  accountId?: string | null
+  connectedAt?: string | null // ISO 8601 datetime
+
+  // Multiple subscriptions support
+  subscriptions: LinkedInSubscriptionInfo[]
+
+  // Legacy fields for backward compatibility
+  subscriptionType?: string | null // Primary subscription
+  feature?: string | null // Primary Unipile feature
+  inmailCreditsRemaining?: number | null // Total across all subscriptions
+  inmailCreditsUpdatedAt?: string | null // ISO 8601 datetime
+  monthlyInmailAllowance?: number | null // Total monthly allowance
+  maxInmailAccumulation?: number | null // Total max accumulation
+
+  // Capabilities (derived from all subscriptions)
+  canSendInmail: boolean
+  canUseSalesNavigatorApi: boolean
+  canUseRecruiterApi: boolean
+
+  // Account status from Unipile
+  unipileStatus?: string | null // OK, CREDENTIALS, ERROR, etc.
+}
+
+/**
  * Conversation summary
  */
 export interface ConversationSummary {

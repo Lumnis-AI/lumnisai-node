@@ -21,6 +21,7 @@ import type {
   DeleteConversationsByProjectResponse,
   DraftResponse,
   EmailThreadSummary,
+  LinkedInAccountInfoResponse,
   LinkedInConnectionStatus,
   LinkedInCreditsResponse,
   LinkedInSendRequest,
@@ -283,6 +284,66 @@ export class MessagingResource {
     return this.http.post<SendResult>(
       `/messaging/linkedin/send?${queryParams.toString()}`,
       request,
+    )
+  }
+
+  /**
+   * Get comprehensive LinkedIn account information including subscriptions, InMail credits, and capabilities.
+   * By default returns cached data if fresh (< 1 hour old). Set forceRefresh=true to fetch real-time data from Unipile API.
+   *
+   * **Features:**
+   * - Multiple subscription detection (Sales Navigator + Recruiter simultaneously)
+   * - InMail credit tracking per subscription
+   * - Capability flags (canSendInmail, canUseSalesNavigatorApi, canUseRecruiterApi)
+   * - Smart caching with auto-refresh
+   *
+   * **Example:**
+   * ```typescript
+   * // Get account info (uses smart caching)
+   * const accountInfo = await client.messaging.getLinkedInAccountInfo('user@example.com');
+   *
+   * // Force refresh from Unipile API
+   * const freshInfo = await client.messaging.getLinkedInAccountInfo('user@example.com', {
+   *   forceRefresh: true
+   * });
+   *
+   * // Check capabilities
+   * if (accountInfo.canSendInmail) {
+   *   console.log(`User has ${accountInfo.inmailCreditsRemaining} InMail credits`);
+   * }
+   *
+   * // Check specific subscriptions
+   * const hasSalesNav = accountInfo.subscriptions.some(s => s.type === 'sales_navigator');
+   * const hasRecruiter = accountInfo.subscriptions.some(s =>
+   *   s.type === 'recruiter_lite' || s.type === 'recruiter_corporate'
+   * );
+   *
+   * // Get credits per subscription
+   * for (const sub of accountInfo.subscriptions) {
+   *   console.log(`${sub.type}: ${sub.inmailCreditsRemaining}/${sub.monthlyAllowance} credits`);
+   * }
+   * ```
+   *
+   * @param userId - User ID or email
+   * @param options - Optional parameters
+   * @param options.forceRefresh - Force refresh from Unipile API (default: false)
+   * @returns LinkedInAccountInfoResponse with account information
+   */
+  async getLinkedInAccountInfo(
+    userId: string,
+    options?: {
+      forceRefresh?: boolean // Fetch from Unipile API instead of cache
+    },
+  ): Promise<LinkedInAccountInfoResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('user_id', userId)
+
+    if (options?.forceRefresh) {
+      queryParams.append('force_refresh', 'true')
+    }
+
+    return this.http.get<LinkedInAccountInfoResponse>(
+      `/messaging/linkedin/account-info?${queryParams.toString()}`,
     )
   }
 
