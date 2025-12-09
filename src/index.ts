@@ -7,9 +7,13 @@ export {
   getInmailAllowance,
   getLimits,
   getMessageLimit,
+  hasOpenProfileMessages,
   LINKEDIN_LIMITS,
   type LinkedInLimits,
   type LinkedInLimitSubscriptionType,
+  RATE_LIMIT_COOLDOWNS,
+  UNIPILE_RATE_LIMIT_ERRORS,
+  UNIPILE_SAFE_LIMITS,
 } from './constants/linkedin-limits'
 // Main export file for Lumnis AI SDK
 export { LumnisClient } from './core/client'

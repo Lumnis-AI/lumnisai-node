@@ -1,15 +1,20 @@
 // LinkedIn rate limit constants and helpers
 // These constants match the backend implementation for safe automation
 //
-// NOTE: Connection request limits are primarily reputation-based (SSI score),
-// not subscription-based. Premium, Sales Navigator, and Recruiter Lite do NOT
-// increase your weekly connection request capacity beyond the base limits.
+// IMPORTANT: Connection request limits are primarily SSI (Social Selling Index) and
+// reputation-based, NOT subscription-based. Premium/Sales Navigator/Recruiter do NOT
+// automatically increase your connection request capacity. Only InMail credits and
+// profile view limits vary significantly by subscription tier.
+//
+// Unipile recommends: 80-100 connection requests/day for paid active accounts,
+// ~200/week. For automation, stay conservative (our safe limits are 15-30/day).
 
 /**
  * LinkedIn subscription types
  */
 export type LinkedInLimitSubscriptionType =
   | 'basic'
+  | 'premium'
   | 'premium_career'
   | 'premium_business'
   | 'sales_navigator'
@@ -23,6 +28,7 @@ export interface LinkedInLimits {
   connectionRequests: {
     weeklyMax: number
     dailySafe: number
+    personalizedMonthly: number | null // null = unlimited
   }
   messages: {
     weeklyMax: number
@@ -37,6 +43,7 @@ export interface LinkedInLimits {
     dailyMax: number
     dailySafe: number
   }
+  openProfileMessagesMonthly: number | null // Recruiter only
 }
 
 /**
@@ -47,6 +54,7 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
     connectionRequests: {
       weeklyMax: 100,
       dailySafe: 15,
+      personalizedMonthly: 10, // Very limited personalized requests
     },
     messages: {
       weeklyMax: 100,
@@ -61,11 +69,13 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
       dailyMax: 500,
       dailySafe: 250,
     },
+    openProfileMessagesMonthly: null,
   },
-  premium_career: {
+  premium: {
     connectionRequests: {
-      weeklyMax: 150,
+      weeklyMax: 150, // Same as basic, SSI-dependent
       dailySafe: 20,
+      personalizedMonthly: null, // Unlimited
     },
     messages: {
       weeklyMax: 150,
@@ -78,13 +88,36 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
     },
     profileViews: {
       dailyMax: 1000, // Premium (non-SN): 150-1000/day
-      dailySafe: 300,
+      dailySafe: 500,
     },
+    openProfileMessagesMonthly: null,
+  },
+  premium_career: {
+    connectionRequests: {
+      weeklyMax: 150, // Same as basic, SSI-dependent
+      dailySafe: 20,
+      personalizedMonthly: null, // Unlimited
+    },
+    messages: {
+      weeklyMax: 150,
+      dailySafe: 20,
+    },
+    inmail: {
+      monthlyCredits: 5,
+      maxAccumulation: 15,
+      rollover: true,
+    },
+    profileViews: {
+      dailyMax: 1000, // Premium (non-SN): 150-1000/day
+      dailySafe: 500,
+    },
+    openProfileMessagesMonthly: null,
   },
   premium_business: {
     connectionRequests: {
       weeklyMax: 150, // Same as Premium Career, SSI-dependent
       dailySafe: 20,
+      personalizedMonthly: null,
     },
     messages: {
       weeklyMax: 150,
@@ -97,13 +130,15 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
     },
     profileViews: {
       dailyMax: 1000, // Premium (non-SN): 150-1000/day
-      dailySafe: 300,
+      dailySafe: 500,
     },
+    openProfileMessagesMonthly: null,
   },
   sales_navigator: {
     connectionRequests: {
       weeklyMax: 200,
       dailySafe: 25,
+      personalizedMonthly: null,
     },
     messages: {
       weeklyMax: 150,
@@ -116,13 +151,15 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
     },
     profileViews: {
       dailyMax: 2000,
-      dailySafe: 500,
+      dailySafe: 1000,
     },
+    openProfileMessagesMonthly: null,
   },
   recruiter_lite: {
     connectionRequests: {
       weeklyMax: 200,
       dailySafe: 25,
+      personalizedMonthly: null,
     },
     messages: {
       weeklyMax: 200,
@@ -135,13 +172,15 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
     },
     profileViews: {
       dailyMax: 2000,
-      dailySafe: 500,
+      dailySafe: 1000,
     },
+    openProfileMessagesMonthly: 1000,
   },
   recruiter_corporate: {
     connectionRequests: {
       weeklyMax: 250,
       dailySafe: 30,
+      personalizedMonthly: null,
     },
     messages: {
       weeklyMax: 200,
@@ -154,9 +193,66 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
     },
     profileViews: {
       dailyMax: 2000,
-      dailySafe: 500,
+      dailySafe: 1000,
     },
+    openProfileMessagesMonthly: 1000,
   },
+}
+
+/**
+ * Safe limits when using automation (more conservative than LinkedIn's limits)
+ * These are Unipile-recommended limits for automation
+ */
+export const UNIPILE_SAFE_LIMITS = {
+  // Connection requests per day (Unipile recommends 80-100 for paid)
+  connectionRequestsDaily: {
+    basic: 15,
+    premium: 20,
+    premium_career: 20,
+    premium_business: 20,
+    sales_navigator: 25,
+    recruiter_lite: 25,
+    recruiter_corporate: 30,
+  },
+  // Messages per day (steady pace recommended)
+  messagesDaily: {
+    basic: 15,
+    premium: 20,
+    premium_career: 20,
+    premium_business: 20,
+    sales_navigator: 20,
+    recruiter_lite: 25,
+    recruiter_corporate: 30,
+  },
+  // Profile views per day (stay under 50% of max)
+  profileViewsDaily: {
+    basic: 250,
+    premium: 300, // 50% of 1000 max, conservative
+    premium_career: 300,
+    premium_business: 300,
+    sales_navigator: 500, // 50% of 2000 max
+    recruiter_lite: 500,
+    recruiter_corporate: 500,
+  },
+} as const
+
+/**
+ * Cooldown periods (in seconds) after hitting limits
+ */
+export const RATE_LIMIT_COOLDOWNS = {
+  connectionRequestRejected: 3600, // 1 hour after rejection
+  messageRateLimited: 1800, // 30 min after rate limit
+  dailyLimitReached: 86400, // 24 hours
+  weeklyLimitReached: 604800, // 7 days
+} as const
+
+/**
+ * HTTP error codes from Unipile indicating rate limits
+ */
+export const UNIPILE_RATE_LIMIT_ERRORS: Record<number, string> = {
+  422: 'cannot_resend_yet', // Connection request limit
+  429: 'rate_limited', // Too many requests
+  500: 'server_error_possibly_rate_limited', // Sometimes indicates limits
 }
 
 /**
@@ -222,7 +318,19 @@ export function canSendInmail(subscriptionType: LinkedInLimitSubscriptionType | 
 }
 
 /**
+ * Check if subscription has Open Profile messaging (Recruiter only)
+ */
+export function hasOpenProfileMessages(subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined): boolean {
+  const limits = getLimits(subscriptionType)
+  return limits.openProfileMessagesMonthly !== null
+}
+
+/**
  * Get best subscription for a specific action when user has multiple subscriptions
+ *
+ * Priority order matches backend:
+ * - InMail: recruiter_corporate > sales_navigator > recruiter_lite > premium_business > premium_career
+ * - Other actions: recruiter_corporate > sales_navigator > recruiter_lite > premium_business > premium_career > basic
  */
 export function getBestSubscriptionForAction(
   subscriptionTypes: (LinkedInLimitSubscriptionType | string)[],
@@ -234,32 +342,23 @@ export function getBestSubscriptionForAction(
   if (subscriptionTypes.length === 1)
     return subscriptionTypes[0]
 
-  // Priority order for InMail: recruiter_corporate > recruiter_lite > sales_navigator > premium_business > premium_career > basic
+  // Priority order for InMail: recruiter_corporate > sales_navigator > recruiter_lite > premium_business > premium/premium_career
   if (action === 'inmail') {
-    const priority = ['recruiter_corporate', 'recruiter_lite', 'sales_navigator', 'premium_business', 'premium_career', 'basic']
+    const priority = ['recruiter_corporate', 'sales_navigator', 'recruiter_lite', 'premium_business', 'premium', 'premium_career']
+    for (const priorityType of priority) {
+      if (subscriptionTypes.includes(priorityType))
+        return priorityType
+    }
+  }
+  else {
+    // Priority order for connection_requests/messages: recruiter_corporate > sales_navigator > recruiter_lite > premium_business > premium/premium_career > basic
+    const priority = ['recruiter_corporate', 'sales_navigator', 'recruiter_lite', 'premium_business', 'premium', 'premium_career', 'basic']
     for (const priorityType of priority) {
       if (subscriptionTypes.includes(priorityType))
         return priorityType
     }
   }
 
-  // Priority order for connection requests: recruiter_corporate > sales_navigator/recruiter_lite > premium_business > premium_career > basic
-  if (action === 'connection_requests') {
-    const priority = ['recruiter_corporate', 'sales_navigator', 'recruiter_lite', 'premium_business', 'premium_career', 'basic']
-    for (const priorityType of priority) {
-      if (subscriptionTypes.includes(priorityType))
-        return priorityType
-    }
-  }
-
-  // Priority order for messages: recruiter_corporate > recruiter_lite > sales_navigator > premium_business > premium_career > basic
-  if (action === 'messages') {
-    const priority = ['recruiter_corporate', 'recruiter_lite', 'sales_navigator', 'premium_business', 'premium_career', 'basic']
-    for (const priorityType of priority) {
-      if (subscriptionTypes.includes(priorityType))
-        return priorityType
-    }
-  }
-
+  // Return first available if none in priority list
   return subscriptionTypes[0]
 }

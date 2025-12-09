@@ -109,11 +109,15 @@ export interface ProspectSyncIdentifier {
 }
 
 /**
- * Request to sync conversations (prospects REQUIRED)
+ * Request to sync conversations for specific prospects.
+ *
+ * Prospects list is required - syncs only conversations for the specified prospects.
+ * This ensures efficient, targeted syncing without pulling unrelated inbox data.
  */
 export interface SyncRequest {
   channels?: string[] | null
-  prospects: ProspectSyncIdentifier[] // REQUIRED: Must provide at least one prospect
+  /** List of prospects to sync (required). Must include at least one prospect with an identifier. */
+  prospects: ProspectSyncIdentifier[]
 }
 
 /**
@@ -233,7 +237,8 @@ export interface ProspectInfo {
 export interface BatchDraftRequest {
   prospects: ProspectInfo[]
   projectId: string
-  channel?: string // Default: "linkedin"
+  /** Default channel if not specified per prospect */
+  channel: string
   subjectTemplate?: string | null
   contentTemplate?: string | null
   useAiGeneration?: boolean
@@ -341,56 +346,67 @@ export interface BatchConnectionStatusResponse {
  * Each subscription has its own InMail credit pool.
  */
 export interface LinkedInCreditsResponse {
-  // Per-subscription breakdown
+  // Per-subscription breakdown (same as account-info)
   subscriptions: LinkedInSubscriptionInfo[]
 
   // Legacy/summary fields for backward compatibility
-  subscriptionType?: string | null // Primary subscription type: 'basic' | 'premium' | 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate'
+  subscriptionType?: string | null // Primary subscription type
   creditsRemaining?: number | null // Total credits across all subscriptions
-  creditsUpdatedAt?: string | null // ISO timestamp
-  isRealTime?: boolean // True if fetched from Unipile API (not cached)
+  creditsUpdatedAt?: string | null
+  isRealTime: boolean // True if fetched from Unipile API (not cached)
 
   // Capabilities
-  canSendInmail: boolean // True if user can send InMail (has at least one active subscription with credits)
+  canSendInmail: boolean
 }
 
 /**
  * Individual LinkedIn subscription with its own InMail credit pool.
- * A LinkedIn account can have multiple subscriptions simultaneously.
+ *
+ * A LinkedIn account can have multiple subscriptions (e.g., Sales Navigator + Recruiter).
+ * Each subscription has its own InMail credits.
  */
 export interface LinkedInSubscriptionInfo {
-  type: string // 'basic' | 'premium' | 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate'
-  // Note: Premium Career and Premium Business both appear as "premium" because Unipile cannot distinguish between them
-  feature: string // Raw Unipile feature: 'classic' | 'sales_navigator' | 'recruiter'
+  /** Subscription type: 'basic' | 'premium' | 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate' */
+  type: string
+  /** Raw Unipile feature: 'classic' | 'sales_navigator' | 'recruiter' */
+  feature: string
 
   // InMail credits for this specific subscription
   inmailCreditsRemaining?: number | null
-  inmailCreditsUpdatedAt?: string | null // ISO 8601 datetime
+  inmailCreditsUpdatedAt?: string | null
 
   // Credit allowances for this subscription type
-  monthlyAllowance: number // Monthly credit allocation
-  maxAccumulation: number // Max credits that can roll over
+  monthlyAllowance: number
+  maxAccumulation: number
 
-  isActive: boolean // True if subscription is active
+  // Is this subscription currently active
+  isActive: boolean
 }
 
 /**
- * Comprehensive LinkedIn account information response
+ * Full LinkedIn account information with multiple subscription support.
+ *
+ * A LinkedIn account can have multiple subscriptions simultaneously:
+ * - Sales Navigator (for sales professionals)
+ * - Recruiter (for hiring)
+ * - Premium Career (personal use)
+ *
+ * Each subscription has its own InMail credit pool.
  */
 export interface LinkedInAccountInfoResponse {
   // Connection status
   connected: boolean
   accountId?: string | null
-  connectedAt?: string | null // ISO 8601 datetime
+  connectedAt?: string | null
 
   // Multiple subscriptions support
   subscriptions: LinkedInSubscriptionInfo[]
 
-  // Legacy fields for backward compatibility
-  subscriptionType?: string | null // Primary subscription
-  feature?: string | null // Primary Unipile feature
-  inmailCreditsRemaining?: number | null // Total across all subscriptions
-  inmailCreditsUpdatedAt?: string | null // ISO 8601 datetime
+  // Legacy fields for backward compatibility (primary subscription)
+  subscriptionType?: string | null // Primary subscription type
+  feature?: string | null // Primary feature from Unipile
+  inmailCreditsRemaining?: number | null // Total credits across all subscriptions
+  inmailCreditsUpdatedAt?: string | null
   monthlyInmailAllowance?: number | null // Total monthly allowance
   maxInmailAccumulation?: number | null // Total max accumulation
 
@@ -398,6 +414,13 @@ export interface LinkedInAccountInfoResponse {
   canSendInmail: boolean
   canUseSalesNavigatorApi: boolean
   canUseRecruiterApi: boolean
+
+  // Daily usage statistics
+  inmailSentToday?: number | null // Number of InMails sent today
+  directMessagesSentToday?: number | null // Number of LinkedIn DMs sent today
+  connectionRequestsSentToday?: number | null // Number of connection requests sent today
+  gmailSentToday?: number | null // Number of emails sent via Gmail today
+  outlookSentToday?: number | null // Number of emails sent via Outlook today
 
   // Account status from Unipile
   unipileStatus?: string | null // OK, CREDENTIALS, ERROR, etc.
