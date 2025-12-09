@@ -348,8 +348,17 @@ export class MessagingResource {
   }
 
   /**
-   * Get InMail credit information.
+   * Get InMail credit information with multi-subscription support.
+   *
+   * A LinkedIn account can have multiple subscriptions (e.g., Sales Navigator + Recruiter).
+   * Each subscription has its own InMail credit pool.
+   *
    * By default returns cached data. Set forceRefresh=true to fetch real-time data from Unipile API.
+   *
+   * @param userId - User ID or email
+   * @param options - Optional parameters
+   * @param options.forceRefresh - If true, fetch real-time data from Unipile API
+   * @returns LinkedInCreditsResponse with subscriptions array and totals
    */
   async getLinkedInCredits(
     userId: string,
@@ -371,7 +380,12 @@ export class MessagingResource {
 
   /**
    * Force refresh InMail credits from Unipile API.
+   *
    * Fetches real-time credit balance from provider and updates cache.
+   * Returns multi-subscription breakdown with per-subscription credit pools.
+   *
+   * @param userId - User ID or email
+   * @returns LinkedInCreditsResponse with isRealTime=true and subscriptions array
    */
   async refreshLinkedInCredits(userId: string): Promise<LinkedInCreditsResponse> {
     const queryParams = new URLSearchParams()

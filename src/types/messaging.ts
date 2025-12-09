@@ -335,31 +335,43 @@ export interface BatchConnectionStatusResponse {
 }
 
 /**
- * LinkedIn credits response
+ * LinkedIn credits response with multiple subscription support.
+ *
+ * A LinkedIn account can have multiple subscriptions (e.g., Sales Navigator + Recruiter).
+ * Each subscription has its own InMail credit pool.
  */
 export interface LinkedInCreditsResponse {
-  subscriptionType?: string | null // 'basic' | 'premium' | 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate'
-  creditsRemaining?: number | null
+  // Per-subscription breakdown
+  subscriptions: LinkedInSubscriptionInfo[]
+
+  // Legacy/summary fields for backward compatibility
+  subscriptionType?: string | null // Primary subscription type: 'basic' | 'premium' | 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate'
+  creditsRemaining?: number | null // Total credits across all subscriptions
   creditsUpdatedAt?: string | null // ISO timestamp
   isRealTime?: boolean // True if fetched from Unipile API (not cached)
+
+  // Capabilities
+  canSendInmail: boolean // True if user can send InMail (has at least one active subscription with credits)
 }
 
 /**
- * LinkedIn subscription information
+ * Individual LinkedIn subscription with its own InMail credit pool.
+ * A LinkedIn account can have multiple subscriptions simultaneously.
  */
 export interface LinkedInSubscriptionInfo {
-  type: string // basic, premium_career, premium_business, sales_navigator, recruiter_lite, recruiter_corporate
-  feature: string // Raw Unipile feature: classic, sales_navigator, recruiter
+  type: string // 'basic' | 'premium' | 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate'
+  // Note: Premium Career and Premium Business both appear as "premium" because Unipile cannot distinguish between them
+  feature: string // Raw Unipile feature: 'classic' | 'sales_navigator' | 'recruiter'
 
   // InMail credits for this specific subscription
   inmailCreditsRemaining?: number | null
   inmailCreditsUpdatedAt?: string | null // ISO 8601 datetime
 
   // Credit allowances for this subscription type
-  monthlyAllowance: number
-  maxAccumulation: number
+  monthlyAllowance: number // Monthly credit allocation
+  maxAccumulation: number // Max credits that can roll over
 
-  isActive: boolean
+  isActive: boolean // True if subscription is active
 }
 
 /**
