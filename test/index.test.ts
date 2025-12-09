@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest'
 import * as exports from '../src/index'
 
 describe('sDK exports', () => {
-  it('should export default LumnisAI class', () => {
-    expect(exports.default).toBeDefined()
-  })
-
   it('should export named LumnisClient', () => {
     expect(exports.LumnisClient).toBeDefined()
   })

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import LumnisAI from '../src/index'
+import { LumnisClient as LumnisAI } from '../src/index'
 
 // Mock fetch
 globalThis.fetch = vi.fn() as any
