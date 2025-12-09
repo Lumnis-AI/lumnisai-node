@@ -851,9 +851,9 @@ export class MessagingResource {
    *
    * @param conversationId - UUID of the conversation to delete
    * @param userId - User ID or email
-   * @returns DeleteConversationResponse with success status and conversation_id
+   * @returns DeleteConversationResponse with success status and conversationId
    * @throws MessagingNotFoundError if conversation not found (404)
-   * @throws MessagingValidationError if conversation_id is invalid (400)
+   * @throws MessagingValidationError if conversationId is invalid (400)
    */
   async deleteConversation(
     conversationId: string,

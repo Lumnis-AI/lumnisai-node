@@ -583,7 +583,7 @@ export interface BatchSendResponse {
  */
 export interface DeleteConversationResponse {
   success: boolean
-  conversation_id: string
+  conversationId: string
 }
 
 /**
@@ -591,8 +591,8 @@ export interface DeleteConversationResponse {
  */
 export interface DeleteConversationsByProjectResponse {
   success: boolean
-  project_id: string
-  deleted_count: number
+  projectId: string
+  deletedCount: number
 }
 
 /**
@@ -600,8 +600,8 @@ export interface DeleteConversationsByProjectResponse {
  */
 export interface UnlinkConversationsResponse {
   success: boolean
-  project_id: string
-  unlinked_count: number
+  projectId: string
+  unlinkedCount: number
 }
 
 // ═══════════════════════════════════════════════════════════════════
