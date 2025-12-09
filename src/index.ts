@@ -9,15 +9,15 @@ export {
   getMessageLimit,
   LINKEDIN_LIMITS,
   type LinkedInLimits,
-  type LinkedInSubscriptionType,
+  type LinkedInLimitSubscriptionType,
 } from './constants/linkedin-limits'
 // Main export file for Lumnis AI SDK
 export { LumnisClient } from './core/client'
 
 export type { LumnisClientOptions } from './core/client'
 
-// Default export
-export { LumnisClient as default } from './core/client'
+// Note: Default export removed to fix TypeScript declaration compatibility
+// Use named import: import { LumnisClient } from 'lumnisai'
 
 // Export errors
 export * from './errors'

@@ -8,7 +8,7 @@
 /**
  * LinkedIn subscription types
  */
-export type LinkedInSubscriptionType =
+export type LinkedInLimitSubscriptionType =
   | 'basic'
   | 'premium_career'
   | 'premium_business'
@@ -42,7 +42,7 @@ export interface LinkedInLimits {
 /**
  * LinkedIn rate limits by subscription type
  */
-export const LINKEDIN_LIMITS: Record<LinkedInSubscriptionType, LinkedInLimits> = {
+export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimits> = {
   basic: {
     connectionRequests: {
       weeklyMax: 100,
@@ -172,8 +172,8 @@ export const ACTION_DELAYS = {
 /**
  * Get all limits for a subscription type
  */
-export function getLimits(subscriptionType: LinkedInSubscriptionType | string | null | undefined): LinkedInLimits {
-  const type = (subscriptionType || 'basic') as LinkedInSubscriptionType
+export function getLimits(subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined): LinkedInLimits {
+  const type = (subscriptionType || 'basic') as LinkedInLimitSubscriptionType
   return LINKEDIN_LIMITS[type] || LINKEDIN_LIMITS.basic
 }
 
@@ -181,7 +181,7 @@ export function getLimits(subscriptionType: LinkedInSubscriptionType | string | 
  * Get connection request limit for a subscription type
  */
 export function getConnectionRequestLimit(
-  subscriptionType: LinkedInSubscriptionType | string | null | undefined,
+  subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined,
   useSafeLimit = true,
 ): number {
   const limits = getLimits(subscriptionType)
@@ -192,7 +192,7 @@ export function getConnectionRequestLimit(
  * Get message limit for a subscription type
  */
 export function getMessageLimit(
-  subscriptionType: LinkedInSubscriptionType | string | null | undefined,
+  subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined,
   useSafeLimit = true,
 ): number {
   const limits = getLimits(subscriptionType)
@@ -203,7 +203,7 @@ export function getMessageLimit(
  * Get InMail allowance for a subscription type
  */
 export function getInmailAllowance(
-  subscriptionType: LinkedInSubscriptionType | string | null | undefined,
+  subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined,
 ): {
     monthlyCredits: number
     maxAccumulation: number
@@ -216,7 +216,7 @@ export function getInmailAllowance(
 /**
  * Check if subscription can send InMail
  */
-export function canSendInmail(subscriptionType: LinkedInSubscriptionType | string | null | undefined): boolean {
+export function canSendInmail(subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined): boolean {
   const limits = getLimits(subscriptionType)
   return limits.inmail.monthlyCredits > 0
 }
@@ -225,9 +225,9 @@ export function canSendInmail(subscriptionType: LinkedInSubscriptionType | strin
  * Get best subscription for a specific action when user has multiple subscriptions
  */
 export function getBestSubscriptionForAction(
-  subscriptionTypes: (LinkedInSubscriptionType | string)[],
+  subscriptionTypes: (LinkedInLimitSubscriptionType | string)[],
   action: 'inmail' | 'connection_requests' | 'messages',
-): LinkedInSubscriptionType | string | null {
+): LinkedInLimitSubscriptionType | string | null {
   if (subscriptionTypes.length === 0)
     return null
 
