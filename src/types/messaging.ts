@@ -251,6 +251,11 @@ export interface ProspectInfo {
    * Merged with batch context (prospect keys take precedence).
    */
   aiContext?: Record<string, any> | null
+  /**
+   * Queue priority (0-10). Higher = processed first when rate limited.
+   * @default 0
+   */
+  priority?: number
 }
 
 /**
@@ -276,11 +281,19 @@ export interface BatchDraftRequest {
 }
 
 /**
- * Request to batch send drafts
+ * Request to batch send drafts with optional rate limiting and queue priority.
  */
 export interface BatchSendRequest {
   draftIds: string[]
-  sendRatePerDay?: number // 1-100
+  /**
+   * Daily send limit (1-100). If not provided, uses subscription-based limits for LinkedIn.
+   */
+  sendRatePerDay?: number
+  /**
+   * Queue priority (0-10). Higher = processed first. Only applies to rate-limited items.
+   * @default 0
+   */
+  priority?: number
 }
 
 /**
@@ -522,6 +535,7 @@ export interface EmailThreadSummary {
  */
 export interface DraftResponse {
   id: string
+  /** Draft status: 'pending_review' | 'approved' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'discarded' */
   status: string
   content: string
   createdAt: string
@@ -531,6 +545,10 @@ export interface DraftResponse {
   outreachMethod?: 'direct_message' | 'connection_request' | 'inmail' | 'email' | null
   /** Subject line for email drafts (optional) */
   subject?: string | null
+  /** ISO timestamp when queued message will be sent (if status is 'scheduled') */
+  scheduledFor?: string | null
+  /** Error details if status is 'failed' */
+  errorMessage?: string | null
 }
 
 /**
@@ -690,6 +708,16 @@ export interface BatchSendResponse {
   sent: number // Count sent immediately
   failed: number // Count failed
   queued: number // Count queued for later (rate limiting)
+}
+
+/**
+ * Response from cancelling a draft
+ */
+export interface CancelDraftResponse {
+  success: boolean
+  draftId?: string
+  prospectExternalId?: string | null
+  error?: string
 }
 
 /**

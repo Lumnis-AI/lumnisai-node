@@ -13,6 +13,7 @@ import type {
   BatchDraftStreamEvent,
   BatchSendRequest,
   BatchSendResponse,
+  CancelDraftResponse,
   CheckLinkedInConnectionRequest,
   CheckPriorContactRequest,
   CheckPriorContactResponse,
@@ -977,6 +978,54 @@ export class MessagingResource {
       `/messaging/drafts/batch/send?${queryParams.toString()}`,
       request,
     )
+  }
+
+  /**
+   * Cancel a queued draft.
+   *
+   * This cancels a draft that was queued for later sending (status='scheduled').
+   * The draft status will be set to 'discarded' and removed from the send queue.
+   *
+   * Can also cancel drafts in 'pending_review' or 'approved' status.
+   *
+   * @param userId - User ID or email
+   * @param draftId - Draft UUID to cancel
+   * @returns CancelDraftResponse with success status
+   * @throws MessagingValidationError if draft cannot be cancelled (already sent, etc.)
+   * @throws MessagingNotFoundError if draft not found
+   *
+   * @example
+   * ```typescript
+   * // Cancel a queued draft
+   * const result = await client.messaging.cancelDraft('user@example.com', 'draft-uuid');
+   * if (result.success) {
+   *   console.log(`Draft cancelled: ${result.draftId}`);
+   * }
+   * ```
+   */
+  async cancelDraft(
+    userId: string,
+    draftId: string,
+  ): Promise<CancelDraftResponse> {
+    try {
+      const queryParams = new URLSearchParams()
+      queryParams.append('user_id', userId)
+
+      return await this.http.post<CancelDraftResponse>(
+        `/messaging/drafts/${encodeURIComponent(draftId)}/cancel?${queryParams.toString()}`,
+      )
+    }
+    catch (error) {
+      if (error instanceof NotFoundError) {
+        throw new MessagingNotFoundError(`Draft not found: ${draftId}`)
+      }
+      if (error instanceof ValidationError) {
+        throw new MessagingValidationError(
+          (error as any).message || `Cannot cancel draft: ${draftId}`,
+        )
+      }
+      throw error
+    }
   }
 
   /**
