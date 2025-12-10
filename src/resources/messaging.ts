@@ -5,6 +5,8 @@ import type {
   BatchCheckPriorContactRequest,
   BatchCheckPriorContactResponse,
   BatchConnectionStatusResponse,
+  BatchDraftJobResponse,
+  BatchDraftJobStatusResponse,
   BatchDraftRequest,
   BatchDraftResponse,
   BatchDraftStreamCallbacks,
@@ -463,18 +465,92 @@ export class MessagingResource {
   }
 
   /**
-   * Create drafts for multiple prospects with AI generation
+   * Create drafts for multiple prospects with AI generation.
+   *
+   * **Default behavior (async):**
+   * Returns immediately with a job_id (202 response). Poll `getBatchDraftJobStatus()`
+   * for progress and results. The job continues processing in the background even
+   * if the client disconnects.
+   *
+   * **Legacy behavior (sync):**
+   * Set `wait: true` to block until completion. Not recommended for large batches
+   * as the request may timeout.
+   *
+   * @param userId - User ID or email
+   * @param request - Batch draft creation request
+   * @param options - Optional parameters
+   * @param options.wait - If true, wait for completion (legacy behavior)
+   * @returns BatchDraftJobResponse (async) or BatchDraftResponse (sync with wait=true)
+   *
+   * @example
+   * ```typescript
+   * // Async (recommended) - returns immediately with job_id
+   * const job = await client.messaging.createBatchDrafts(userId, request);
+   * if ('jobId' in job) {
+   *   // Poll for status
+   *   const status = await client.messaging.getBatchDraftJobStatus(userId, job.jobId);
+   * }
+   *
+   * // Sync (legacy) - blocks until complete
+   * const result = await client.messaging.createBatchDrafts(userId, request, { wait: true });
+   * console.log(result.drafts); // All drafts available immediately
+   * ```
    */
   async createBatchDrafts(
     userId: string,
     request: BatchDraftRequest,
-  ): Promise<BatchDraftResponse> {
+    options?: { wait?: boolean },
+  ): Promise<BatchDraftJobResponse | BatchDraftResponse> {
     const queryParams = new URLSearchParams()
     queryParams.append('user_id', userId)
 
-    return this.http.post<BatchDraftResponse>(
+    if (options?.wait) {
+      queryParams.append('wait', 'true')
+    }
+
+    return this.http.post<BatchDraftJobResponse | BatchDraftResponse>(
       `/messaging/drafts/batch?${queryParams.toString()}`,
       request,
+    )
+  }
+
+  /**
+   * Get status and results of a batch draft job.
+   *
+   * Poll this endpoint to track progress and retrieve results for batch draft jobs
+   * created via `createBatchDrafts()`. Jobs are retained for 24 hours after creation.
+   *
+   * @param userId - User ID or email
+   * @param jobId - The job ID returned from createBatchDrafts()
+   * @returns BatchDraftJobStatusResponse with progress and results
+   * @throws NotFoundError if job not found or expired
+   *
+   * @example
+   * ```typescript
+   * // Create job
+   * const job = await client.messaging.createBatchDrafts(userId, request);
+   * if ('jobId' in job) {
+   *   // Poll until complete
+   *   let status;
+   *   do {
+   *     await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
+   *     status = await client.messaging.getBatchDraftJobStatus(userId, job.jobId);
+   *     console.log(`Progress: ${status.progress.percentage}%`);
+   *   } while (status.status !== 'completed' && status.status !== 'failed');
+   *
+   *   console.log(`Created ${status.drafts.length} drafts`);
+   * }
+   * ```
+   */
+  async getBatchDraftJobStatus(
+    userId: string,
+    jobId: string,
+  ): Promise<BatchDraftJobStatusResponse> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('user_id', userId)
+
+    return this.http.get<BatchDraftJobStatusResponse>(
+      `/messaging/drafts/batch/jobs/${encodeURIComponent(jobId)}?${queryParams.toString()}`,
     )
   }
 
@@ -484,7 +560,14 @@ export class MessagingResource {
    * This method provides real-time progress updates as drafts are being created, significantly
    * improving user experience for large batch operations (30+ prospects).
    *
+   * **Resilience features:**
+   * - Job state is stored in Redis and survives client disconnects
+   * - Background task continues processing even if SSE connection drops
+   * - Client can reconnect using `jobId` option to resume streaming
+   * - Poll `getBatchDraftJobStatus()` as fallback
+   *
    * **Event Types:**
+   * - `job_started`: First event with job_id for reconnection
    * - `progress`: Progress update with percentage and current prospect
    * - `draft_created`: Draft successfully created
    * - `error`: Error occurred for a specific prospect
@@ -492,6 +575,8 @@ export class MessagingResource {
    *
    * **Example:**
    * ```typescript
+   * let savedJobId: string | undefined;
+   *
    * const result = await client.messaging.createBatchDraftsStream(
    *   'user@example.com',
    *   {
@@ -500,6 +585,9 @@ export class MessagingResource {
    *     useAiGeneration: true
    *   },
    *   {
+   *     onJobStarted: (jobId) => {
+   *       savedJobId = jobId; // Save for reconnection if disconnected
+   *     },
    *     onProgress: (processed, total, percentage, prospectName) => {
    *       console.log(`${percentage}% - ${prospectName}`)
    *     },
@@ -519,15 +607,22 @@ export class MessagingResource {
    * @param userId - User ID or email
    * @param request - Batch draft creation request
    * @param callbacks - Optional callbacks for stream events
+   * @param options - Optional parameters
+   * @param options.jobId - Existing job ID to resume streaming (for reconnection)
    * @returns Final result with created drafts and error details
    */
   async createBatchDraftsStream(
     userId: string,
     request: BatchDraftRequest,
     callbacks?: BatchDraftStreamCallbacks,
+    options?: { jobId?: string },
   ): Promise<BatchDraftResponse> {
     const queryParams = new URLSearchParams()
     queryParams.append('user_id', userId)
+
+    if (options?.jobId) {
+      queryParams.append('job_id', options.jobId)
+    }
 
     // Build URL with base URL and path
     const baseUrl = (this.http as any).options.baseUrl
@@ -612,6 +707,13 @@ export class MessagingResource {
             const { event, data } = eventData
 
             switch (event) {
+              case 'job_started': {
+                // Convert snake_case to camelCase
+                const jobData = toCamelCase<any>(data as any)
+                callbacks?.onJobStarted?.(jobData.jobId || '')
+                break
+              }
+
               case 'progress': {
                 // Convert snake_case to camelCase
                 const progressData = toCamelCase<any>(data as any)
@@ -679,8 +781,15 @@ export class MessagingResource {
    *
    * This method yields events as they arrive, providing more control over event handling.
    *
+   * **Resilience features:**
+   * - Job state is stored in Redis and survives client disconnects
+   * - First event is `job_started` with job_id for reconnection
+   * - Client can reconnect using `jobId` option to resume streaming
+   *
    * **Example:**
    * ```typescript
+   * let savedJobId: string | undefined;
+   *
    * for await (const event of client.messaging.createBatchDraftsStreamGenerator(
    *   'user@example.com',
    *   {
@@ -690,6 +799,9 @@ export class MessagingResource {
    *   }
    * )) {
    *   switch (event.event) {
+   *     case 'job_started':
+   *       savedJobId = event.data.jobId; // Save for reconnection
+   *       break;
    *     case 'progress':
    *       console.log(`Progress: ${event.data.percentage}%`)
    *       break
@@ -708,15 +820,22 @@ export class MessagingResource {
    *
    * @param userId - User ID or email
    * @param request - Batch draft creation request
+   * @param options - Optional parameters
+   * @param options.jobId - Existing job ID to resume streaming (for reconnection)
    * @yields Stream events with 'event' and 'data' keys
    * @returns Final result with created drafts and error details
    */
   async* createBatchDraftsStreamGenerator(
     userId: string,
     request: BatchDraftRequest,
+    options?: { jobId?: string },
   ): AsyncGenerator<BatchDraftStreamEvent, BatchDraftResponse> {
     const queryParams = new URLSearchParams()
     queryParams.append('user_id', userId)
+
+    if (options?.jobId) {
+      queryParams.append('job_id', options.jobId)
+    }
 
     // Build URL with base URL and path
     const baseUrl = (this.http as any).options.baseUrl

@@ -65,6 +65,16 @@ export enum SyncJobStatus {
 }
 
 /**
+ * Batch job status types (for batch draft jobs)
+ */
+export enum BatchJobStatus {
+  PENDING = 'pending',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
+/**
  * Queue item status types
  */
 export enum QueueItemStatus {
@@ -229,6 +239,18 @@ export interface ProspectInfo {
   outreachMethod?: 'direct_message' | 'connection_request' | 'inmail' | 'email' | null
   /** Whether the user is already connected to this prospect on LinkedIn */
   isConnected?: boolean | null
+  /**
+   * Override batch-level usePriorContact setting for this prospect.
+   * - `true`: Check for prior contact and include in AI context
+   * - `false`: Don't check for prior contact
+   * - `null`/`undefined`: Use batch-level setting
+   */
+  usePriorContact?: boolean | null
+  /**
+   * Override/extend batch-level aiContext for this prospect.
+   * Merged with batch context (prospect keys take precedence).
+   */
+  aiContext?: Record<string, any> | null
 }
 
 /**
@@ -242,6 +264,13 @@ export interface BatchDraftRequest {
   subjectTemplate?: string | null
   contentTemplate?: string | null
   useAiGeneration?: boolean
+  /**
+   * If true and useAiGeneration=true, check for prior contact with each prospect
+   * and include conversation history in AI context for more personalized messages.
+   * Can be overridden per-prospect via ProspectInfo.usePriorContact.
+   * @default true
+   */
+  usePriorContact?: boolean
   aiContext?: Record<string, any> | null
   organizationId?: string | null // Frontend organization ID for multi-org support
 }
@@ -505,13 +534,59 @@ export interface DraftResponse {
 }
 
 /**
- * Response from batch draft creation
+ * Response from batch draft creation (legacy synchronous mode)
  */
 export interface BatchDraftResponse {
   drafts: DraftResponse[]
   created: number
   errors: number
   errorDetails?: Array<Record<string, any>> | null
+}
+
+/**
+ * Response when batch draft job is queued (async mode, 202 response).
+ * Poll GET /drafts/batch/jobs/{jobId} for progress and results.
+ */
+export interface BatchDraftJobResponse {
+  jobId: string
+  status: string // 'pending'
+  totalProspects: number
+  pollUrl: string
+  message?: string
+}
+
+/**
+ * Progress information for a batch job
+ */
+export interface BatchDraftJobProgress {
+  processed: number
+  total: number
+  percentage: number
+  draftsCreated: number
+  errors: number
+}
+
+/**
+ * Response for GET /drafts/batch/jobs/{jobId} (polling endpoint)
+ */
+export interface BatchDraftJobStatusResponse {
+  jobId: string
+  status: string // 'pending' | 'in_progress' | 'completed' | 'failed'
+  progress: BatchDraftJobProgress
+  drafts: DraftResponse[]
+  errors: Array<Record<string, any>>
+  createdAt: string
+  startedAt?: string | null
+  completedAt?: string | null
+  errorMessage?: string | null
+}
+
+/**
+ * Job started event data from streaming batch draft creation.
+ * First event emitted, contains job_id for reconnection.
+ */
+export interface BatchDraftJobStartedData {
+  jobId: string
 }
 
 /**
@@ -544,29 +619,33 @@ export interface BatchDraftErrorData {
  * Complete event data from streaming batch draft creation
  */
 export interface BatchDraftCompleteData {
+  jobId?: string
   created: number
   errors: number
   drafts: DraftResponse[]
   errorDetails: Array<{ prospect: string, error: string }>
+  errorMessage?: string | null
 }
 
 /**
  * Stream event types for batch draft creation
  */
-export type BatchDraftStreamEventType = 'progress' | 'draft_created' | 'error' | 'complete'
+export type BatchDraftStreamEventType = 'job_started' | 'progress' | 'draft_created' | 'error' | 'complete'
 
 /**
  * Stream event from batch draft creation
  */
 export interface BatchDraftStreamEvent {
   event: BatchDraftStreamEventType
-  data: BatchDraftProgressData | BatchDraftCreatedData | BatchDraftErrorData | BatchDraftCompleteData
+  data: BatchDraftJobStartedData | BatchDraftProgressData | BatchDraftCreatedData | BatchDraftErrorData | BatchDraftCompleteData
 }
 
 /**
  * Callbacks for batch draft streaming
  */
 export interface BatchDraftStreamCallbacks {
+  /** Callback when job starts, provides job_id for reconnection if disconnected */
+  onJobStarted?: (jobId: string) => void
   /** Callback for progress updates */
   onProgress?: (processed: number, total: number, percentage: number, prospectName: string) => void
   /** Callback when a draft is created */
