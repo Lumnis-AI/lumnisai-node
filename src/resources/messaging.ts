@@ -38,6 +38,7 @@ import type {
   SyncProspectResponse,
   SyncRequest,
   UnlinkConversationsResponse,
+  UpdateDraftRequest,
   UpdateLinkedInSubscriptionRequest,
 } from '../types/messaging'
 import {
@@ -455,6 +456,51 @@ export class MessagingResource {
 
       return await this.http.get<DraftResponse>(
         `/messaging/drafts/${encodeURIComponent(draftId)}?${queryParams.toString()}`,
+      )
+    }
+    catch (error) {
+      if (error instanceof NotFoundError) {
+        throw new MessagingNotFoundError(`Draft not found: ${draftId}`)
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Update a draft's content, subject, status, or outreach method.
+   *
+   * @param userId - User ID or email
+   * @param draftId - Draft UUID to update
+   * @param request - Draft update parameters
+   * @param request.content - Optional new content
+   * @param request.subject - Optional new subject
+   * @param request.status - Optional new status
+   * @param request.outreachMethod - Optional new outreach method (LinkedIn only)
+   * @returns Updated draft
+   * @throws MessagingNotFoundError if draft not found
+   *
+   * @example
+   * ```typescript
+   * // Update draft outreach method
+   * const draft = await client.messaging.updateDraft(
+   *   'user@example.com',
+   *   'draft-uuid',
+   *   { outreachMethod: OutreachMethod.INMAIL }
+   * );
+   * ```
+   */
+  async updateDraft(
+    userId: string,
+    draftId: string,
+    request: UpdateDraftRequest,
+  ): Promise<DraftResponse> {
+    try {
+      const queryParams = new URLSearchParams()
+      queryParams.append('user_id', userId)
+
+      return await this.http.patch<DraftResponse>(
+        `/messaging/drafts/${encodeURIComponent(draftId)}?${queryParams.toString()}`,
+        request,
       )
     }
     catch (error) {
@@ -965,7 +1011,15 @@ export class MessagingResource {
   }
 
   /**
-   * Send multiple drafts with rate limiting
+   * Send multiple drafts with rate limiting and optional per-draft overrides.
+   *
+   * @param userId - User ID or email
+   * @param request - Batch send parameters
+   * @param request.draftIds - List of draft IDs to send
+   * @param request.sendRatePerDay - Optional daily send limit (1-100)
+   * @param request.priority - Optional queue priority (0-10)
+   * @param request.draftOverrides - Optional per-draft overrides
+   * @returns Batch send response with results
    */
   async sendBatchDrafts(
     userId: string,

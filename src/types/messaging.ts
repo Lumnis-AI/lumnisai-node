@@ -223,6 +223,20 @@ export interface CreateDraftRequest {
 }
 
 /**
+ * Request to update a draft
+ */
+export interface UpdateDraftRequest {
+  content?: string | null
+  subject?: string | null
+  status?: string | null
+  /**
+   * Override outreach method (LinkedIn only).
+   * Valid values: 'connection_request' | 'direct_message' | 'inmail' | 'inmail_escalation'
+   */
+  outreachMethod?: OutreachMethod | null
+}
+
+/**
  * Prospect info for batch draft creation
  */
 export interface ProspectInfo {
@@ -281,6 +295,27 @@ export interface BatchDraftRequest {
 }
 
 /**
+ * Per-draft override options for batch send.
+ */
+export interface DraftSendOverride {
+  /** Draft ID to apply override to */
+  draftId: string
+
+  /**
+   * If true, send connection request without personalized note (empty content).
+   * Only applies to LinkedIn connection requests.
+   */
+  skipNote?: boolean
+
+  /**
+   * Override the outreach method (e.g., switch to InMail).
+   * Valid values: 'connection_request' | 'direct_message' | 'inmail' | 'inmail_escalation'
+   * Note: Only applies to LinkedIn drafts.
+   */
+  outreachMethod?: OutreachMethod
+}
+
+/**
  * Request to batch send drafts with optional rate limiting and queue priority.
  */
 export interface BatchSendRequest {
@@ -288,12 +323,17 @@ export interface BatchSendRequest {
   /**
    * Daily send limit (1-100). If not provided, uses subscription-based limits for LinkedIn.
    */
-  sendRatePerDay?: number
+  sendRatePerDay?: number | null
   /**
    * Queue priority (0-10). Higher = processed first. Only applies to rate-limited items.
    * @default 0
    */
   priority?: number
+  /**
+   * Optional per-draft overrides.
+   * Applied before sending (updates drafts via PATCH).
+   */
+  draftOverrides?: DraftSendOverride[]
 }
 
 /**
