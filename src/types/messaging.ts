@@ -97,6 +97,12 @@ export enum LinkedInSubscriptionType {
 }
 
 /**
+ * InMail subscription types for explicit subscription selection when sending InMails.
+ * Use null or omit to auto-select based on available credits.
+ */
+export type InmailSubscription = 'sales_navigator' | 'recruiter_lite' | 'recruiter_corporate' | 'premium'
+
+/**
  * LinkedIn network distance values
  */
 export enum NetworkDistance {
@@ -220,6 +226,15 @@ export interface CreateDraftRequest {
   isPriority?: boolean
   outreachMethod?: string | null
   organizationId?: string | null // Frontend organization ID for multi-org support
+  /**
+   * Explicit InMail subscription to use for sending (LinkedIn InMail only).
+   * - 'sales_navigator': Use Sales Navigator InMail credits
+   * - 'recruiter_lite': Use Recruiter Lite InMail credits
+   * - 'recruiter_corporate': Use Recruiter Corporate InMail credits
+   * - 'premium': Use Premium/Career InMail credits
+   * - null/undefined: Auto-select subscription with available credits (default)
+   */
+  inmailSubscription?: InmailSubscription | null
 }
 
 /**
@@ -234,6 +249,15 @@ export interface UpdateDraftRequest {
    * Valid values: 'connection_request' | 'direct_message' | 'inmail' | 'inmail_escalation'
    */
   outreachMethod?: OutreachMethod | null
+  /**
+   * Explicit InMail subscription to use for sending (LinkedIn InMail only).
+   * - 'sales_navigator': Use Sales Navigator InMail credits
+   * - 'recruiter_lite': Use Recruiter Lite InMail credits
+   * - 'recruiter_corporate': Use Recruiter Corporate InMail credits
+   * - 'premium': Use Premium/Career InMail credits
+   * - null/undefined: Auto-select subscription with available credits (default)
+   */
+  inmailSubscription?: InmailSubscription | null
 }
 
 /**
@@ -270,6 +294,16 @@ export interface ProspectInfo {
    * @default 0
    */
   priority?: number
+  /**
+   * Explicit InMail subscription to use for this prospect (LinkedIn InMail only).
+   * Overrides batch-level auto-selection when outreachMethod is 'inmail'.
+   * - 'sales_navigator': Use Sales Navigator InMail credits
+   * - 'recruiter_lite': Use Recruiter Lite InMail credits
+   * - 'recruiter_corporate': Use Recruiter Corporate InMail credits
+   * - 'premium': Use Premium/Career InMail credits
+   * - null/undefined: Auto-select subscription with available credits (default)
+   */
+  inmailSubscription?: InmailSubscription | null
 }
 
 /**
@@ -313,6 +347,16 @@ export interface DraftSendOverride {
    * Note: Only applies to LinkedIn drafts.
    */
   outreachMethod?: OutreachMethod
+
+  /**
+   * Override the InMail subscription for this draft (LinkedIn InMail only).
+   * - 'sales_navigator': Use Sales Navigator InMail credits
+   * - 'recruiter_lite': Use Recruiter Lite InMail credits
+   * - 'recruiter_corporate': Use Recruiter Corporate InMail credits
+   * - 'premium': Use Premium/Career InMail credits
+   * - null: Clear any previous selection and auto-select
+   */
+  inmailSubscription?: InmailSubscription | null
 }
 
 /**
@@ -589,6 +633,11 @@ export interface DraftResponse {
   scheduledFor?: string | null
   /** Error details if status is 'failed' */
   errorMessage?: string | null
+  /**
+   * InMail subscription selected for this draft (LinkedIn InMail only).
+   * null means auto-selection will be used when sending.
+   */
+  inmailSubscription?: InmailSubscription | null
 }
 
 /**
