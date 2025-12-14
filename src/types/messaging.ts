@@ -161,6 +161,8 @@ export interface LinkedInSendRequest {
   prospectProviderId?: string | null
   prospectLinkedInUrl?: string | null
   prospectName: string
+  /** Optional subject line (used for LinkedIn InMail). */
+  subject?: string | null
   content: string
   isPriority?: boolean
   enableEscalation?: boolean

@@ -63,6 +63,20 @@ export interface SpecializedAgentParams {
    */
   dataSources?: string[]
   /**
+   * Custom LinkedIn profile URLs to exclude from people search results.
+   * Used for CrustData post-processing (exclude_profiles) and also applied as a server-side post-filter.
+   */
+  excludeProfiles?: string[]
+  /**
+   * If true, exclude people the user has previously contacted (best-effort via stored LinkedIn URLs).
+   * @default false
+   */
+  excludePreviouslyContacted?: boolean
+  /**
+   * Names to exclude from results (passed through to CrustData post-processing when supported).
+   */
+  excludeNames?: string[]
+  /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates
    */
