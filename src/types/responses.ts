@@ -62,6 +62,11 @@ export interface AddCriterionRequest {
   weight?: number
 }
 
+export interface AddAndRunCriterionRequest {
+  criterionText: string
+  suggestedColumnName?: string
+}
+
 export interface CriteriaMetadata {
   version: number
   createdAt: string
@@ -137,8 +142,12 @@ export interface SpecializedAgentParams {
   addCriterion?: AddCriterionRequest
   /**
    * Add a new criterion from English text and run only that criterion.
+   * Can be a string (criterion text) or an object with criterion_text and optional suggested_column_name.
+   * Example string: 'Must have 5+ years Python experience'
+   * Example object: { criterionText: 'Has ML experience', suggestedColumnName: 'ml_experience' }
+   * If suggestedColumnName not provided, it will be auto-generated from the text.
    */
-  addAndRunCriterion?: string
+  addAndRunCriterion?: string | AddAndRunCriterionRequest
   /**
    * List of candidate profiles to score (for people_scoring agent).
    * Each candidate must include at least one identifier: linkedin_url or email/emails.

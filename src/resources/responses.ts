@@ -2,6 +2,7 @@
 import type { Http } from '../core/http'
 import type { PaginationParams } from '../types/common'
 import type {
+  AddAndRunCriterionRequest,
   ArtifactsListResponse,
   CancelResponseResponse,
   CreateFeedbackRequest,
@@ -115,7 +116,11 @@ export class ResponsesResource {
     )
     const runSingleCriterion = this._getParamValue<string>(rawParams, 'runSingleCriterion', 'run_single_criterion')
     const addCriterion = this._getParamValue<Record<string, any>>(rawParams, 'addCriterion', 'add_criterion')
-    const addAndRunCriterion = this._getParamValue<string>(rawParams, 'addAndRunCriterion', 'add_and_run_criterion')
+    const addAndRunCriterion = this._getParamValue<string | Record<string, any>>(
+      rawParams,
+      'addAndRunCriterion',
+      'add_and_run_criterion',
+    )
     const candidateProfiles = this._getParamValue<Array<Record<string, any>>>(
       rawParams,
       'candidateProfiles',
@@ -163,8 +168,27 @@ export class ResponsesResource {
     if (addAndRunCriterion !== undefined) {
       if (!reuseCriteriaFrom && !hasCriteria)
         throw new ValidationError('add_and_run_criterion requires existing criteria (reuse or direct criteria).')
-      if (typeof addAndRunCriterion !== 'string' || !addAndRunCriterion.trim())
-        throw new ValidationError('add_and_run_criterion must be a non-empty string')
+
+      if (typeof addAndRunCriterion === 'string') {
+        if (!addAndRunCriterion.trim())
+          throw new ValidationError('add_and_run_criterion must be a non-empty string')
+      }
+      else if (this._isPlainObject(addAndRunCriterion)) {
+        const criterionText = this._getParamValue<string>(addAndRunCriterion, 'criterionText', 'criterion_text')
+        const suggestedColumnName = this._getParamValue<string>(
+          addAndRunCriterion,
+          'suggestedColumnName',
+          'suggested_column_name',
+        )
+
+        if (!criterionText || typeof criterionText !== 'string')
+          throw new ValidationError('add_and_run_criterion object requires criterion_text')
+        if (suggestedColumnName !== undefined && typeof suggestedColumnName !== 'string')
+          throw new ValidationError('add_and_run_criterion suggested_column_name must be a string if provided')
+      }
+      else {
+        throw new ValidationError('add_and_run_criterion must be a string or an object')
+      }
     }
 
     if (specializedAgent === 'people_scoring') {
@@ -390,7 +414,10 @@ export class ResponsesResource {
    * @param options.criteriaClassification - Pre-defined criteria classification
    * @param options.runSingleCriterion - Run only a single criterion by ID
    * @param options.addCriterion - Add a new criterion to existing criteria
-   * @param options.addAndRunCriterion - Add criterion from text and run only that criterion
+   * @param options.addAndRunCriterion - Add criterion from text and run only that criterion.
+   *   Can be a string (criterion text) or an object with criterionText and optional suggestedColumnName.
+   *   Example string: 'Must have 5+ years Python experience'
+   *   Example object: { criterionText: 'Has ML experience', suggestedColumnName: 'ml_experience' }
    * @param options.excludeProfiles - LinkedIn URLs to exclude from results
    * @param options.excludePreviouslyContacted - Exclude previously contacted people
    * @param options.excludeNames - Names to exclude from results
@@ -414,7 +441,7 @@ export class ResponsesResource {
         criterionType?: CriterionType
         weight?: number
       }
-      addAndRunCriterion?: string
+      addAndRunCriterion?: string | AddAndRunCriterionRequest
       excludeProfiles?: string[]
       excludePreviouslyContacted?: boolean
       excludeNames?: string[]
@@ -467,7 +494,10 @@ export class ResponsesResource {
    * @param options.criteriaClassification - Pre-defined criteria classification
    * @param options.runSingleCriterion - Run only a single criterion by ID
    * @param options.addCriterion - Add a new criterion to existing criteria
-   * @param options.addAndRunCriterion - Add criterion from text and run only that criterion
+   * @param options.addAndRunCriterion - Add criterion from text and run only that criterion.
+   *   Can be a string (criterion text) or an object with criterionText and optional suggestedColumnName.
+   *   Example string: 'Must have 5+ years Python experience'
+   *   Example object: { criterionText: 'Has ML experience', suggestedColumnName: 'ml_experience' }
    * @returns Response with structured_response containing:
    *   - candidates: Scored candidates with validation results
    *   - criteria: Generated/reused criteria definitions and classification
@@ -486,7 +516,7 @@ export class ResponsesResource {
         criterionType?: CriterionType
         weight?: number
       }
-      addAndRunCriterion?: string
+      addAndRunCriterion?: string | AddAndRunCriterionRequest
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
