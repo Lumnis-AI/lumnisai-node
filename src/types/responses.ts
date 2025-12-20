@@ -36,11 +36,50 @@ export interface ModelOverrides {
   [key: string]: string
 }
 
+export type CriterionType = 'universal' | 'varying' | 'validation_only'
+
+export interface CriterionDefinition {
+  criterionId: string
+  columnName: string
+  criterionText: string
+  criterionType: CriterionType
+  weight: number
+}
+
+export interface CriteriaClassification {
+  universalCriteria: CriterionDefinition[]
+  varyingCriteria: CriterionDefinition[]
+  validationOnlyCriteria: CriterionDefinition[]
+  universalReasoning?: string
+  varyingReasoning?: string
+  validationReasoning?: string
+}
+
+export interface AddCriterionRequest {
+  columnName: string
+  criterionText: string
+  criterionType?: CriterionType
+  weight?: number
+}
+
+export interface CriteriaMetadata {
+  version: number
+  createdAt: string
+  source: 'generated' | 'reused' | 'provided'
+  sourceResponseId?: string
+  criteriaDefinitions: CriterionDefinition[]
+  criteriaClassification: CriteriaClassification
+}
+
+export interface StructuredResponse extends Record<string, any> {
+  criteria?: CriteriaMetadata
+}
+
 /**
  * Available specialized agents
  * Using a union type that can be extended with any string to support future agents
  */
-export type SpecializedAgentType = 'quick_people_search' | 'deep_people_search' | (string & {})
+export type SpecializedAgentType = 'quick_people_search' | 'deep_people_search' | 'people_scoring' | (string & {})
 
 /**
  * Parameters for specialized agent execution
@@ -77,6 +116,35 @@ export interface SpecializedAgentParams {
    */
   excludeNames?: string[]
   /**
+   * Response ID to reuse criteria from.
+   */
+  reuseCriteriaFrom?: string
+  /**
+   * Pre-defined criteria definitions to use.
+   */
+  criteriaDefinitions?: CriterionDefinition[]
+  /**
+   * Pre-defined criteria classification to use.
+   */
+  criteriaClassification?: CriteriaClassification
+  /**
+   * Run validation against a single criterion ID.
+   */
+  runSingleCriterion?: string
+  /**
+   * Add a new criterion to existing criteria.
+   */
+  addCriterion?: AddCriterionRequest
+  /**
+   * Add a new criterion from English text and run only that criterion.
+   */
+  addAndRunCriterion?: string
+  /**
+   * List of candidate profiles to score (for people_scoring agent).
+   * Each candidate must include at least one identifier: linkedin_url or email/emails.
+   */
+  candidateProfiles?: Array<Record<string, any>>
+  /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates
    */
@@ -95,7 +163,7 @@ export interface CreateResponseRequest {
   modelOverrides?: ModelOverrides
   /**
    * Route to a specialized agent instead of the main Lumnis agent
-   * Known agents: 'quick_people_search', 'deep_people_search'
+   * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
@@ -131,7 +199,7 @@ export interface ResponseObject {
   outputText?: string | null
   content?: string | null // Alias for outputText
   responseTitle?: string | null // Human-readable title for the response (generated after plan creation)
-  structuredResponse?: Record<string, any> | null
+  structuredResponse?: StructuredResponse | null
   artifacts?: ResponseArtifact[] | null
   createdAt: string
   completedAt?: string | null
