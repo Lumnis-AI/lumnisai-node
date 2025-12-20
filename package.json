@@ -1,7 +1,7 @@
 {
   "name": "lumnisai",
   "type": "module",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "packageManager": "pnpm@10.6.2",
   "description": "Official Node.js SDK for the Lumnis AI API",
   "author": "Lumnis AI",
