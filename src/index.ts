@@ -15,6 +15,14 @@ export {
   UNIPILE_RATE_LIMIT_ERRORS,
   UNIPILE_SAFE_LIMITS,
 } from './constants/linkedin-limits'
+
+// Export sequence content limits
+export {
+  CONTENT_LIMITS,
+  CONTENT_LIMITS_MAP,
+  type ContentLimit,
+  getContentLimit,
+} from './constants/sequence-limits'
 // Main export file for Lumnis AI SDK
 export { LumnisClient } from './core/client'
 
@@ -35,6 +43,7 @@ export type { MessagingResource } from './resources/messaging'
 export type { ModelPreferencesResource } from './resources/model-preferences'
 export type { PeopleResource } from './resources/people'
 export type { ResponsesResource } from './resources/responses'
+export type { SequencesResource } from './resources/sequences'
 export type { SkillsResource } from './resources/skills'
 export type { TenantInfoResource } from './resources/tenant-info'
 export type { ThreadsResource } from './resources/threads'
@@ -50,6 +59,7 @@ export * from './types/messaging'
 export * from './types/model-preferences'
 export * from './types/people'
 export * from './types/responses'
+export * from './types/sequences'
 export * from './types/skills'
 export * from './types/tenant-info'
 export * from './types/threads'
