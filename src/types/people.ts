@@ -50,13 +50,15 @@ export interface PersonResult {
   country?: string
   /** Primary email address */
   email?: string
-  /** List of email addresses (up to 3) */
+  /** List of email addresses */
   emails: string[]
   /** LinkedIn profile URL */
   linkedinUrl?: string
+  /** Profile picture URL for frontend display */
+  profilePictureUrl?: string
   /** Years of professional experience */
   yearsExperience?: number
-  /** List of skills (up to 15) */
+  /** List of skills */
   skills: string[]
   /** Seniority level (e.g., "Senior", "Director", "VP") */
   seniorityLevel?: string
@@ -76,7 +78,7 @@ export interface PersonResult {
   certificationsCount?: number
   /** List of languages spoken (CoreSignal only) */
   languages?: string[]
-  /** List of education degrees (CoreSignal only, up to 3) */
+  /** List of education degrees (CoreSignal only) */
   educationDegrees?: string[]
 }
 
