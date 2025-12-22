@@ -3,6 +3,8 @@ import type {
   ApprovalListResponse,
   ApprovalResponse,
   ApproveStepRequest,
+  BatchPollRequest,
+  BatchPollResponse,
   BulkApprovalRequest,
   BulkApprovalResponse,
   BulkCompleteRequest,
@@ -460,5 +462,32 @@ export class SequencesResource {
     userId: string,
   ): Promise<BulkApprovalResponse> {
     return this.bulkApprovalAction({ ...request, action: 'approve' }, userId)
+  }
+
+  // ==================== Batch Polling ====================
+
+  /**
+   * Batch poll multiple sequence data types in a single request.
+   *
+   * Supports fetching executions, metrics, approvals, and rate limits
+   * across multiple projects efficiently.
+   *
+   * Limits:
+   * - Max 10 requests per batch
+   * - Max 20 project_ids per request item
+   * - Max 100 limit per executions/approvals
+   *
+   * @param request - The batch poll request containing multiple request items
+   * @param userId - User ID or email making the request
+   */
+  async batchPoll(
+    request: BatchPollRequest,
+    userId: string,
+  ): Promise<BatchPollResponse> {
+    return this.http.post<BatchPollResponse>(
+      '/sequences/poll',
+      request,
+      { params: { user_id: userId } },
+    )
   }
 }

@@ -476,3 +476,189 @@ export interface ListApprovalsOptions {
   limit?: number
   offset?: number
 }
+
+// ==================== Batch Polling ====================
+
+export type BatchRequestType = 'executions' | 'metrics' | 'approvals' | 'rate_limits'
+
+export interface ExecutionsParams {
+  projectIds: string[]
+  status?: ExecutionStatus
+  limit?: number
+  includeProspectDetails?: boolean
+}
+
+export interface MetricsParams {
+  projectIds: string[]
+}
+
+export interface ApprovalsParams {
+  projectIds: string[]
+  limit?: number
+  includeContent?: boolean
+}
+
+export interface RateLimitsParams {
+  channels?: string[]
+}
+
+export interface ExecutionsRequestItem {
+  id: string
+  type: 'executions'
+  params: ExecutionsParams
+}
+
+export interface MetricsRequestItem {
+  id: string
+  type: 'metrics'
+  params: MetricsParams
+}
+
+export interface ApprovalsRequestItem {
+  id: string
+  type: 'approvals'
+  params: ApprovalsParams
+}
+
+export interface RateLimitsRequestItem {
+  id: string
+  type: 'rate_limits'
+  params?: RateLimitsParams
+}
+
+export type BatchRequestItem =
+  | ExecutionsRequestItem
+  | MetricsRequestItem
+  | ApprovalsRequestItem
+  | RateLimitsRequestItem
+
+export interface BatchPollRequest {
+  requests: BatchRequestItem[]
+}
+
+// Batch Polling Response Types
+
+export interface ExecutionSummaryExtended {
+  id: string
+  templateId: string
+  templateName: string
+  prospectId: string
+  prospectExternalId?: string
+  prospectName?: string
+  prospectTitle?: string
+  projectId?: string
+  status: string
+  currentStepKey?: string
+  currentStepName?: string
+  currentStepStatus?: string
+  nextTransitionAt?: string
+  startedAt?: string
+  createdAt: string
+}
+
+export interface ProjectExecutionsData {
+  executions: ExecutionSummaryExtended[]
+  total: number
+  hasMore: boolean
+}
+
+export interface BatchStepMetric {
+  stepKey: string
+  stepName: string
+  sent: number
+  delivered: number
+  replied: number
+  accepted: number
+}
+
+export interface ProjectMetricsData {
+  total: number
+  statusCounts: Record<string, number>
+  replied: number
+  stepMetrics: BatchStepMetric[]
+  funnel: Record<string, number>
+}
+
+export interface PendingApprovalExtended {
+  stepExecutionId: string
+  executionId: string
+  templateId: string
+  projectId?: string
+  prospectId: string
+  prospectExternalId?: string
+  prospectName?: string
+  prospectTitle?: string
+  prospectCompany?: string
+  stepName: string
+  channel: string
+  action: string
+  content?: string
+  aiPrecheckResult?: string
+  aiPrecheckReason?: string
+  createdAt: string
+}
+
+export interface ProjectApprovalsData {
+  approvals: PendingApprovalExtended[]
+  total: number
+  hasMore: boolean
+}
+
+export interface RateLimitInfo {
+  used: number
+  limit: number
+  resetsAt: string
+}
+
+export interface RateLimitData {
+  linkedin: Record<string, RateLimitInfo>
+  email: Record<string, RateLimitInfo>
+}
+
+export interface ExecutionsResponseItem {
+  id: string
+  type: 'executions'
+  data: Record<string, ProjectExecutionsData>
+}
+
+export interface MetricsResponseItem {
+  id: string
+  type: 'metrics'
+  data: Record<string, ProjectMetricsData>
+}
+
+export interface ApprovalsResponseItem {
+  id: string
+  type: 'approvals'
+  data: Record<string, ProjectApprovalsData>
+}
+
+export interface RateLimitsResponseItem {
+  id: string
+  type: 'rate_limits'
+  data: RateLimitData
+}
+
+export interface ErrorDetail {
+  code: string
+  message: string
+  requestType: string
+}
+
+export interface ErrorResponseItem {
+  id: string
+  type: 'error'
+  error: ErrorDetail
+}
+
+export type BatchResponseItem =
+  | ExecutionsResponseItem
+  | MetricsResponseItem
+  | ApprovalsResponseItem
+  | RateLimitsResponseItem
+  | ErrorResponseItem
+
+export interface BatchPollResponse {
+  responses: BatchResponseItem[]
+  polledAt: string
+}
