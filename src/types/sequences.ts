@@ -81,11 +81,13 @@ export type SequenceEventType =
   // Outcome events
   | 'meeting_booked'
   | 'opted_out'
+  | 'outcome_recorded' // Manual outcome recording
   // Failure events
   | 'step_failed'
   // Manual events
   | 'manual_advance'
   | 'manual_exit'
+  | 'step_skipped' // Step skipped by user
 
 export interface TransitionEventParams {
   sentiment?: ReplySentiment
@@ -256,8 +258,10 @@ export interface ExecutionDetailResponse extends ExecutionSummary {
 
 export interface ExecutionListResponse {
   executions: ExecutionSummary[]
+  total: number
   limit: number
   offset: number
+  hasMore: boolean
 }
 
 export interface StepMetric {
@@ -298,13 +302,19 @@ export interface LifecycleOperationResponse {
 export interface BulkOperationRequest {
   templateId?: string
   projectId?: string
+  projectIds?: string[]
   executionIds?: string[]
   reason?: string
+  dryRun?: boolean
 }
 
 export interface BulkOperationResponse {
   status: string
   affectedCount: number
+  failedCount?: number
+  failedIds?: string[]
+  errors?: Record<string, string>
+  isDryRun?: boolean
 }
 
 // ==================== Approval Types ====================
@@ -341,24 +351,105 @@ export interface RejectStepRequest {
   reason: string
 }
 
+export interface SkipStepRequest {
+  reason?: string
+}
+
+export interface SkipStepResponse {
+  success: boolean
+  stepExecutionId: string
+  previousStepKey: string
+  previousStatus: string
+  executionId: string
+  executionStatus: string
+  nextStepKey?: string
+  nextStepAt?: string
+}
+
 export type ApprovalStatus = 'approved' | 'rejected'
 
 export interface ApprovalResponse {
   status: ApprovalStatus
 }
 
+export type BulkApprovalAction = 'approve' | 'reject' | 'skip'
+
 export interface BulkApprovalRequest {
   stepExecutionIds: string[]
+  action?: BulkApprovalAction
+  reason?: string
 }
 
-export interface BulkApprovalError {
-  stepExecutionId: string
+export interface BulkApprovalFailure {
+  id: string
   error: string
 }
 
 export interface BulkApprovalResponse {
-  approved: number
-  errors: BulkApprovalError[]
+  succeeded: string[]
+  failed: BulkApprovalFailure[]
+  totalSucceeded: number
+  totalFailed: number
+}
+
+// ==================== Outcome Recording ====================
+
+export type OutcomeType =
+  | 'meeting_booked'
+  | 'interested'
+  | 'hired'
+  | 'not_interested'
+  | 'other'
+
+export interface CompleteExecutionRequest {
+  outcome: OutcomeType
+  notes?: string
+}
+
+export interface CompleteExecutionResponse {
+  success: boolean
+  executionId: string
+  finalStatus: string
+  exitReason: string
+  completedAt: string
+}
+
+export interface BulkCompleteRequest {
+  executionIds: string[]
+  outcome: OutcomeType
+  notes?: string
+}
+
+export interface BulkCompleteFailure {
+  id: string
+  error: string
+}
+
+export interface BulkCompleteResponse {
+  succeeded: string[]
+  failed: BulkCompleteFailure[]
+  totalSucceeded: number
+  totalFailed: number
+}
+
+// ==================== Rate Limit Status ====================
+
+export interface ActionLimit {
+  used: number
+  limit: number
+  remaining: number
+  resetsAt: string
+}
+
+export interface RateLimitStatusResponse {
+  linkedin: Record<string, ActionLimit>
+  email: Record<string, ActionLimit>
+}
+
+// ==================== Template Management ====================
+
+export interface DuplicateTemplateRequest {
+  name: string
 }
 
 // ==================== Validation Types ====================
@@ -400,6 +491,8 @@ export interface ExecutionMetricsOptions {
 export interface ListApprovalsOptions {
   templateId?: string
   projectId?: string
+  channel?: SequenceChannel
+  action?: SequenceAction
   limit?: number
   offset?: number
 }

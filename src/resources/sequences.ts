@@ -5,8 +5,13 @@ import type {
   ApproveStepRequest,
   BulkApprovalRequest,
   BulkApprovalResponse,
+  BulkCompleteRequest,
+  BulkCompleteResponse,
   BulkOperationRequest,
   BulkOperationResponse,
+  CompleteExecutionRequest,
+  CompleteExecutionResponse,
+  DuplicateTemplateRequest,
   ExecutionDetailResponse,
   ExecutionListResponse,
   ExecutionMetricsOptions,
@@ -16,9 +21,13 @@ import type {
   ListApprovalsOptions,
   ListExecutionsOptions,
   ListTemplatesOptions,
+  RateLimitStatusResponse,
   RejectStepRequest,
   SequenceTemplateCreate,
   SequenceTemplateResponse,
+  SequenceTemplateUpdate,
+  SkipStepRequest,
+  SkipStepResponse,
   StartExecutionRequest,
   StartExecutionResponse,
   ValidationResponse,
@@ -82,6 +91,44 @@ export class SequencesResource {
   async archiveTemplate(templateId: string): Promise<void> {
     await this.http.delete(
       `/sequences/templates/${encodeURIComponent(templateId)}`,
+    )
+  }
+
+  /**
+   * Update an existing sequence template.
+   * Note: Cannot update steps/transitions if template has active executions.
+   * @param templateId - The template ID to update
+   * @param template - The fields to update
+   * @param userId - User ID or email updating the template
+   */
+  async updateTemplate(
+    templateId: string,
+    template: SequenceTemplateUpdate,
+    userId: string,
+  ): Promise<SequenceTemplateResponse> {
+    return this.http.put<SequenceTemplateResponse>(
+      `/sequences/templates/${encodeURIComponent(templateId)}`,
+      template,
+      { params: { user_id: userId } },
+    )
+  }
+
+  /**
+   * Duplicate an existing template with a new name.
+   * Copies all steps and transitions, resets usage statistics.
+   * @param templateId - The template ID to duplicate
+   * @param request - The duplicate request with new name
+   * @param userId - User ID or email duplicating the template
+   */
+  async duplicateTemplate(
+    templateId: string,
+    request: DuplicateTemplateRequest,
+    userId: string,
+  ): Promise<SequenceTemplateResponse> {
+    return this.http.post<SequenceTemplateResponse>(
+      `/sequences/templates/${encodeURIComponent(templateId)}/duplicate`,
+      request,
+      { params: { user_id: userId } },
     )
   }
 
@@ -267,6 +314,55 @@ export class SequencesResource {
     )
   }
 
+  // ==================== Outcome Recording ====================
+
+  /**
+   * Record an outcome and complete an execution.
+   * @param executionId - The execution ID to complete
+   * @param request - The outcome and optional notes
+   * @param userId - User ID or email recording the outcome
+   */
+  async completeExecution(
+    executionId: string,
+    request: CompleteExecutionRequest,
+    userId: string,
+  ): Promise<CompleteExecutionResponse> {
+    return this.http.post<CompleteExecutionResponse>(
+      `/sequences/executions/${encodeURIComponent(executionId)}/complete`,
+      request,
+      { params: { user_id: userId } },
+    )
+  }
+
+  /**
+   * Record outcome and complete multiple executions.
+   * @param request - The execution IDs, outcome, and optional notes
+   * @param userId - User ID or email recording the outcomes
+   */
+  async bulkCompleteExecutions(
+    request: BulkCompleteRequest,
+    userId: string,
+  ): Promise<BulkCompleteResponse> {
+    return this.http.post<BulkCompleteResponse>(
+      '/sequences/executions/bulk/complete',
+      request,
+      { params: { user_id: userId } },
+    )
+  }
+
+  // ==================== Rate Limits ====================
+
+  /**
+   * Get current rate limit status for all actions.
+   * @param userId - User ID or email to check rate limits for
+   */
+  async getRateLimitStatus(userId: string): Promise<RateLimitStatusResponse> {
+    return this.http.get<RateLimitStatusResponse>(
+      '/sequences/rate-limits/status',
+      { params: { user_id: userId } },
+    )
+  }
+
   // ==================== Approvals ====================
 
   /**
@@ -280,6 +376,10 @@ export class SequencesResource {
       params.template_id = options.templateId
     if (options?.projectId)
       params.project_id = options.projectId
+    if (options?.channel)
+      params.channel = options.channel
+    if (options?.action)
+      params.action = options.action
     if (options?.limit !== undefined)
       params.limit = options.limit
     if (options?.offset !== undefined)
@@ -321,9 +421,26 @@ export class SequencesResource {
   }
 
   /**
-   * Bulk approve multiple steps.
+   * Skip a step without canceling the execution.
+   * Advances to the next step in the sequence, or completes if no more steps.
    */
-  async bulkApprove(
+  async skipStep(
+    stepExecutionId: string,
+    userId: string,
+    options?: SkipStepRequest,
+  ): Promise<SkipStepResponse> {
+    return this.http.post<SkipStepResponse>(
+      `/sequences/approvals/${encodeURIComponent(stepExecutionId)}/skip`,
+      options ?? {},
+      { params: { user_id: userId } },
+    )
+  }
+
+  /**
+   * Bulk approve, reject, or skip multiple steps.
+   * Use request.action to specify the operation (defaults to 'approve').
+   */
+  async bulkApprovalAction(
     request: BulkApprovalRequest,
     userId: string,
   ): Promise<BulkApprovalResponse> {
@@ -332,5 +449,16 @@ export class SequencesResource {
       request,
       { params: { user_id: userId } },
     )
+  }
+
+  /**
+   * Bulk approve multiple steps.
+   * @deprecated Use bulkApprovalAction with action='approve' instead.
+   */
+  async bulkApprove(
+    request: BulkApprovalRequest,
+    userId: string,
+  ): Promise<BulkApprovalResponse> {
+    return this.bulkApprovalAction({ ...request, action: 'approve' }, userId)
   }
 }
