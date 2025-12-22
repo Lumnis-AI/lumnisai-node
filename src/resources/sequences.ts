@@ -32,6 +32,8 @@ import type {
   SkipStepResponse,
   StartExecutionRequest,
   StartExecutionResponse,
+  TemplateShareRequest,
+  TemplateSharesResponse,
   ValidationResponse,
 } from '../types/sequences'
 
@@ -44,18 +46,30 @@ export class SequencesResource {
   // ==================== Templates ====================
 
   /**
-   * List all sequence templates for the tenant.
+   * List sequence templates accessible to the user.
+   *
+   * When userId is provided:
+   * - Returns templates the user owns (created_by = userId)
+   * - Plus templates shared with the user specifically
+   * - Plus templates shared tenant-wide (unless ownedOnly=true)
+   *
+   * When userId is not provided:
+   * - Returns all templates in the tenant (admin view)
    */
   async listTemplates(
     options?: ListTemplatesOptions,
   ): Promise<SequenceTemplateResponse[]> {
     const params: Record<string, unknown> = {}
+    if (options?.userId)
+      params.user_id = options.userId
     if (options?.useCase)
       params.use_case = options.useCase
     if (options?.includeSystem !== undefined)
       params.include_system = options.includeSystem
     if (options?.includeArchived !== undefined)
       params.include_archived = options.includeArchived
+    if (options?.ownedOnly !== undefined)
+      params.owned_only = options.ownedOnly
 
     return this.http.get<SequenceTemplateResponse[]>('/sequences/templates', {
       params,
@@ -64,26 +78,40 @@ export class SequencesResource {
 
   /**
    * Get a specific sequence template with all steps and transitions.
+   * @param templateId - The template ID
+   * @param userId - Optional user ID for permission context
    */
-  async getTemplate(templateId: string): Promise<SequenceTemplateResponse> {
+  async getTemplate(
+    templateId: string,
+    userId?: string,
+  ): Promise<SequenceTemplateResponse> {
+    const params: Record<string, unknown> = {}
+    if (userId)
+      params.user_id = userId
+
     return this.http.get<SequenceTemplateResponse>(
       `/sequences/templates/${encodeURIComponent(templateId)}`,
+      { params },
     )
   }
 
   /**
    * Create a new sequence template.
    * @param template - The template configuration
-   * @param userId - User ID or email creating the template
+   * @param userId - Optional user ID or email creating the template (for audit)
    */
   async createTemplate(
     template: SequenceTemplateCreate,
-    userId: string,
+    userId?: string,
   ): Promise<SequenceTemplateResponse> {
+    const params: Record<string, unknown> = {}
+    if (userId)
+      params.user_id = userId
+
     return this.http.post<SequenceTemplateResponse>(
       '/sequences/templates',
       template,
-      { params: { user_id: userId } },
+      { params },
     )
   }
 
@@ -143,6 +171,64 @@ export class SequencesResource {
     return this.http.post<ValidationResponse>(
       '/sequences/templates/validate',
       template,
+    )
+  }
+
+  // ==================== Template Sharing ====================
+
+  /**
+   * Get sharing information for a template.
+   */
+  async getTemplateShares(
+    templateId: string,
+  ): Promise<TemplateSharesResponse> {
+    return this.http.get<TemplateSharesResponse>(
+      `/sequences/templates/${encodeURIComponent(templateId)}/shares`,
+    )
+  }
+
+  /**
+   * Update sharing settings for a template.
+   * Only the template owner can modify shares.
+   * @param templateId - The template ID
+   * @param request - The sharing request
+   * @param userId - Optional user ID making the request (for permission check)
+   */
+  async updateTemplateShares(
+    templateId: string,
+    request: TemplateShareRequest,
+    userId?: string,
+  ): Promise<TemplateSharesResponse> {
+    const params: Record<string, unknown> = {}
+    if (userId)
+      params.user_id = userId
+
+    return this.http.post<TemplateSharesResponse>(
+      `/sequences/templates/${encodeURIComponent(templateId)}/shares`,
+      request,
+      { params },
+    )
+  }
+
+  /**
+   * Remove a specific share from a template.
+   * Only the template owner can remove shares.
+   * @param templateId - The template ID
+   * @param shareId - The share ID to remove
+   * @param userId - Optional user ID making the request (for permission check)
+   */
+  async removeTemplateShare(
+    templateId: string,
+    shareId: string,
+    userId?: string,
+  ): Promise<void> {
+    const params: Record<string, unknown> = {}
+    if (userId)
+      params.user_id = userId
+
+    await this.http.delete(
+      `/sequences/templates/${encodeURIComponent(templateId)}/shares/${encodeURIComponent(shareId)}`,
+      { params },
     )
   }
 

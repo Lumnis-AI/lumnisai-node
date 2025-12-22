@@ -117,12 +117,25 @@ export interface TransitionConfig {
 
 // ==================== Template Types ====================
 
+export enum SharePermission {
+  VIEW = 'view',
+  USE = 'use',
+  EDIT = 'edit',
+}
+
+export interface TemplateShareConfig {
+  userId?: string | null
+  permission: SharePermission
+}
+
 export interface SequenceTemplateCreate {
   name: string
   description?: string
   useCase?: string
   steps: StepConfig[]
   transitions: TransitionConfig[]
+  shareWithTenant?: boolean
+  shareWith?: TemplateShareConfig[]
 }
 
 export interface SequenceTemplateUpdate {
@@ -143,6 +156,10 @@ export interface SequenceTemplateResponse {
   transitions: TransitionConfig[]
   timesUsed: number
   avgReplyRate?: number
+  createdBy?: string | null
+  isOwner?: boolean
+  isTenantWide?: boolean
+  userPermission?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -447,12 +464,37 @@ export interface ValidationResponse {
   warnings: ValidationIssue[]
 }
 
+// ==================== Template Sharing Types ====================
+
+export interface TemplateShareRequest {
+  shareWithTenant?: boolean | null
+  addUsers?: TemplateShareConfig[]
+  removeUsers?: string[]
+}
+
+export interface TemplateShareInfo {
+  id: string
+  userId?: string | null
+  userEmail?: string | null
+  permission: string
+  sharedBy?: string | null
+  createdAt: string
+}
+
+export interface TemplateSharesResponse {
+  templateId: string
+  isTenantWide: boolean
+  shares: TemplateShareInfo[]
+}
+
 // ==================== List/Filter Options ====================
 
 export interface ListTemplatesOptions {
+  userId?: string
   useCase?: string
   includeSystem?: boolean
   includeArchived?: boolean
+  ownedOnly?: boolean
 }
 
 export interface ListExecutionsOptions {
