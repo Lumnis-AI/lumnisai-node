@@ -22,22 +22,6 @@ export type ContentSource = 'template' | 'ai_generate' | 'ai_enhance' | 'none'
 
 export type OnFailure = 'fail' | 'skip' | 'retry'
 
-export type DayOfWeek =
-  | 'monday'
-  | 'tuesday'
-  | 'wednesday'
-  | 'thursday'
-  | 'friday'
-  | 'saturday'
-  | 'sunday'
-
-export interface ScheduleConfig {
-  sendWindowStart?: string // "09:00" format (24h)
-  sendWindowEnd?: string // "17:00" format (24h)
-  sendDays?: DayOfWeek[]
-  timezone?: string // IANA timezone, e.g., "America/New_York"
-}
-
 export interface StepConfig {
   stepKey: string
   name: string
@@ -55,7 +39,6 @@ export interface StepConfig {
   maxRetries?: number
   uiPositionX?: number
   uiPositionY?: number
-  scheduleConfig?: ScheduleConfig
 }
 
 export type ReplySentiment = 'positive' | 'negative' | 'neutral' | 'objection' | 'ooo'
@@ -172,14 +155,11 @@ export interface ProspectInput {
   context?: Record<string, unknown>
 }
 
-export type ExecutionMode = 'live' | 'dry_run' | 'preview'
-
 export interface StartExecutionRequest {
   templateId: string
   prospects: ProspectInput[]
   projectId?: string
   stepOverrides?: Record<string, unknown>
-  executionMode?: ExecutionMode
 }
 
 export interface StartExecutionResponse {
