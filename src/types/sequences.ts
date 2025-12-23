@@ -157,6 +157,7 @@ export interface SequenceTemplateResponse {
   timesUsed: number
   avgReplyRate?: number
   createdBy?: string | null
+  created_by_email?: string | null
   isOwner?: boolean
   isTenantWide?: boolean
   userPermission?: string | null
