@@ -448,6 +448,7 @@ export interface RateLimitStatusResponse {
 
 export interface DuplicateTemplateRequest {
   name: string
+  share_with_tenant?: boolean
 }
 
 // ==================== Validation Types ====================
