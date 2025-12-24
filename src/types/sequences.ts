@@ -72,6 +72,29 @@ export type SequenceEventType =
   | 'manual_exit'
   | 'step_skipped' // Step skipped by user
 
+/**
+ * Valid sequence event types as a readonly array for validation purposes.
+ */
+export const VALID_EVENT_TYPES: readonly SequenceEventType[] = [
+  'step_completed',
+  'delay_elapsed',
+  'reply_received',
+  'connection_accepted',
+  'connection_ignored',
+  'inmail_accepted',
+  'profile_viewed_back',
+  'email_opened',
+  'email_clicked',
+  'email_bounced',
+  'meeting_booked',
+  'opted_out',
+  'outcome_recorded',
+  'step_failed',
+  'manual_advance',
+  'manual_exit',
+  'step_skipped',
+] as const
+
 export interface TransitionEventParams {
   sentiment?: ReplySentiment
   daysWaiting?: number
@@ -141,6 +164,7 @@ export interface SequenceTemplateCreate {
 export interface SequenceTemplateUpdate {
   name?: string
   description?: string
+  useCase?: string
   steps?: StepConfig[]
   transitions?: TransitionConfig[]
 }
@@ -178,6 +202,15 @@ export interface StartExecutionRequest {
   prospects: ProspectInput[]
   projectId?: string
   stepOverrides?: Record<string, unknown>
+  replaceExisting?: boolean
+}
+
+export interface SkippedProspect {
+  prospectId: string
+  prospectExternalId?: string | null
+  reason: string
+  existingExecutionId?: string | null
+  existingStatus?: string | null
 }
 
 export interface StartExecutionResponse {
@@ -185,6 +218,8 @@ export interface StartExecutionResponse {
   executionIds: string[]
   templateId: string
   projectId?: string
+  skipped?: SkippedProspect[]
+  skippedCount?: number
 }
 
 export type ExecutionStatus =
