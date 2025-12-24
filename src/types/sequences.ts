@@ -237,11 +237,25 @@ export interface StepHistoryEntry {
   sentAt?: string
   completedAt?: string
   actualContent?: string
+  replyReceivedAt?: string
+  replyContent?: string
+  replySentiment?: ReplySentiment
+}
+
+export interface ExecutionEventData {
+  sentiment?: ReplySentiment
+  messageContent?: string
+  messagePreview?: string
+  skipped?: boolean
+  reason?: string
+  notes?: string
+  atStepKey?: string
+  [key: string]: unknown
 }
 
 export interface ExecutionEvent {
   eventType: string
-  eventData: Record<string, unknown>
+  eventData?: ExecutionEventData
   createdAt: string
 }
 
