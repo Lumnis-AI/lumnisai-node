@@ -117,10 +117,13 @@ export class SequencesResource {
 
   /**
    * Archive a sequence template (soft delete).
+   * @param templateId - The template ID to archive
+   * @param userId - User ID or email archiving the template
    */
-  async archiveTemplate(templateId: string): Promise<void> {
+  async archiveTemplate(templateId: string, userId: string): Promise<void> {
     await this.http.delete(
       `/sequences/templates/${encodeURIComponent(templateId)}`,
+      { params: { user_id: userId } },
     )
   }
 
