@@ -676,6 +676,7 @@ export interface BatchStepMetric {
   delivered: number
   replied: number
   accepted: number
+  pending: number
 }
 
 export interface ProjectMetricsData {
