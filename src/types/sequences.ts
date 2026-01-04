@@ -268,10 +268,17 @@ export interface ExecutionSummary {
 
 export interface StepHistoryEntry {
   stepKey: string
+  stepName?: string
+  action?: string
   status: string
+  scheduledAt?: string
+  startedAt?: string
   sentAt?: string
   completedAt?: string
+  actualChannel?: string
+  actualAction?: string
   actualContent?: string
+  errorMessage?: string
   replyReceivedAt?: string
   replyContent?: string
   replySentiment?: ReplySentiment
@@ -292,6 +299,7 @@ export interface ExecutionEvent {
   eventType: string
   eventData?: ExecutionEventData
   createdAt: string
+  processingStatus?: string
 }
 
 export interface ExecutionDetailResponse extends ExecutionSummary {
@@ -299,6 +307,12 @@ export interface ExecutionDetailResponse extends ExecutionSummary {
     stepKey: string
     name: string
   }
+  completedAt?: string
+  exitReason?: string
+  pausedAt?: string
+  pauseReason?: string
+  lastError?: string
+  errorCount?: number
   stepHistory: StepHistoryEntry[]
   events: ExecutionEvent[]
 }
