@@ -56,6 +56,8 @@ export type SequenceEventType =
   // LinkedIn events
   | 'connection_accepted'
   | 'connection_ignored' // No response after X days
+  | 'is_connected' // Already connected (from check_connection)
+  | 'is_not_connected' // Not connected (from check_connection)
   | 'inmail_accepted'
   | 'profile_viewed_back'
   // Email events
@@ -82,6 +84,8 @@ export const VALID_EVENT_TYPES: readonly SequenceEventType[] = [
   'reply_received',
   'connection_accepted',
   'connection_ignored',
+  'is_connected',
+  'is_not_connected',
   'inmail_accepted',
   'profile_viewed_back',
   'email_opened',
