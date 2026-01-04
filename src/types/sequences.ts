@@ -7,6 +7,7 @@
 export type SequenceChannel = 'linkedin' | 'email'
 
 export type LinkedInAction =
+  | 'check_connection'
   | 'connection_request'
   | 'message'
   | 'inmail'
