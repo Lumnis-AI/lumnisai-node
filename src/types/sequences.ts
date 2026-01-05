@@ -777,3 +777,55 @@ export interface BatchPollResponse {
   responses: BatchResponseItem[]
   polledAt: string
 }
+
+// ==================== Batch Execution History ====================
+
+export interface BatchExecutionInclude {
+  stepHistory?: boolean
+  events?: boolean
+}
+
+export interface BatchExecutionRequest {
+  executionIds: string[]
+  include?: BatchExecutionInclude
+}
+
+export interface BatchExecutionResponse {
+  executions: Record<string, ExecutionDetailResponse | null>
+  errors: Record<string, string>
+  fetchedAt: string
+}
+
+// ==================== Engagement Status ====================
+
+export type EngagementStatus =
+  | 'connection_pending'
+  | 'connection_accepted'
+  | 'message_sent'
+  | 'awaiting_reply'
+  | 'replied'
+  | 'replied_positive'
+  | 'replied_negative'
+  | 'replied_neutral'
+  | 'no_response'
+  | 'sequence_active'
+  | 'sequence_failed'
+  | 'unknown'
+
+export interface EngagementStatusRequest {
+  executionIds: string[]
+}
+
+export interface EngagementStatusData {
+  status: EngagementStatus
+  lastActionAt?: string
+  daysSinceAction?: number
+  replySentiment?: string
+  currentStepKey?: string
+}
+
+export interface EngagementStatusResponse {
+  statuses: Record<string, EngagementStatusData>
+  errors: Record<string, string>
+  computedAt: string
+}

@@ -3,6 +3,8 @@ import type {
   ApprovalListResponse,
   ApprovalResponse,
   ApproveStepRequest,
+  BatchExecutionRequest,
+  BatchExecutionResponse,
   BatchPollRequest,
   BatchPollResponse,
   BulkApprovalRequest,
@@ -14,6 +16,8 @@ import type {
   CompleteExecutionRequest,
   CompleteExecutionResponse,
   DuplicateTemplateRequest,
+  EngagementStatusRequest,
+  EngagementStatusResponse,
   ExecutionDetailResponse,
   ExecutionListResponse,
   ExecutionMetricsOptions,
@@ -300,6 +304,53 @@ export class SequencesResource {
   async getExecution(executionId: string): Promise<ExecutionDetailResponse> {
     return this.http.get<ExecutionDetailResponse>(
       `/sequences/executions/${encodeURIComponent(executionId)}`,
+    )
+  }
+
+  /**
+   * Fetch execution histories for multiple executions in a single request.
+   *
+   * Returns full execution details including step history and events for up to 100
+   * execution IDs. Missing or unauthorized executions are returned as null with
+   * an error message.
+   *
+   * @param request - The batch request with execution IDs and include options
+   */
+  async batchGetExecutions(
+    request: BatchExecutionRequest,
+  ): Promise<BatchExecutionResponse> {
+    return this.http.post<BatchExecutionResponse>(
+      '/sequences/executions/batch',
+      request,
+    )
+  }
+
+  /**
+   * Derive engagement status for multiple executions in a single request.
+   *
+   * This is a lightweight endpoint that computes engagement status server-side
+   * without returning full execution histories. Ideal for filtering and UI display.
+   *
+   * Engagement statuses:
+   * - connection_pending: Connection request sent, awaiting acceptance
+   * - connection_accepted: They accepted the connection
+   * - message_sent: Follow-up message delivered
+   * - awaiting_reply: Waiting for their response
+   * - replied: They replied (no sentiment)
+   * - replied_positive/negative/neutral: Reply with sentiment
+   * - no_response: No response after 7+ days
+   * - sequence_active: Still running
+   * - sequence_failed: Error occurred
+   * - unknown: Unable to determine status
+   *
+   * @param request - The request with up to 500 execution IDs
+   */
+  async getEngagementStatus(
+    request: EngagementStatusRequest,
+  ): Promise<EngagementStatusResponse> {
+    return this.http.post<EngagementStatusResponse>(
+      '/sequences/executions/engagement-status',
+      request,
     )
   }
 
