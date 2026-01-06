@@ -266,6 +266,30 @@ export const ACTION_DELAYS = {
 } as const
 
 /**
+ * Daily InMail sending limits by subscription type.
+ *
+ * These are the maximum InMails you can SEND per day (rate limit), separate from
+ * the monthly credits you have available.
+ *
+ * Per LinkedIn official documentation (https://www.linkedin.com/help/recruiter/answer/a745199):
+ * - Recruiter Corporate/RPS: 1,000 InMails per day per seat
+ * - Recruiter Lite: Limited by monthly credits (30/month + 100 Open Profile/month)
+ * - Other tiers: No official daily limit, but limited by monthly credits
+ *
+ * For non-Recruiter accounts, we set daily limit = monthly credits to allow
+ * flexibility while still respecting credit availability.
+ */
+export const DAILY_INMAIL_LIMITS: Record<LinkedInLimitSubscriptionType, number> = {
+  basic: 0, // No InMail capability
+  premium: 5, // 5 credits/month - can send all in one day if desired
+  premium_career: 5, // Same as premium
+  premium_business: 15, // 15 credits/month
+  sales_navigator: 50, // 50 credits/month
+  recruiter_lite: 100, // 30 InMails + up to 100 Open Profile/month
+  recruiter_corporate: 1000, // LinkedIn official: 1,000/day per seat
+}
+
+/**
  * Get all limits for a subscription type
  */
 export function getLimits(subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined): LinkedInLimits {
@@ -361,4 +385,32 @@ export function getBestSubscriptionForAction(
 
   // Return first available if none in priority list
   return subscriptionTypes[0]
+}
+
+/**
+ * Get daily InMail sending limit for a subscription type.
+ *
+ * Per LinkedIn official documentation:
+ * - Recruiter Corporate: 1,000 InMails per day per seat
+ * - Recruiter Lite: ~100/day (30 regular + 100 Open Profile per month)
+ * - Other tiers: Limited by monthly credits
+ *
+ * Note: This is the daily SENDING rate limit, not the total credits available.
+ * Credits are still consumed per InMail sent.
+ */
+export function getDailyInmailLimit(subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined): number {
+  const type = (subscriptionType || 'basic') as LinkedInLimitSubscriptionType
+  return DAILY_INMAIL_LIMITS[type] ?? DAILY_INMAIL_LIMITS.basic
+}
+
+/**
+ * Check if subscription type is a Recruiter subscription.
+ *
+ * Recruiter subscriptions have special privileges:
+ * - High daily InMail limits (up to 1,000/day for Corporate)
+ * - Access to Recruiter API features
+ * - Open Profile messaging (free InMails to open profiles)
+ */
+export function isRecruiterSubscription(subscriptionType: LinkedInLimitSubscriptionType | string | null | undefined): boolean {
+  return subscriptionType === 'recruiter_lite' || subscriptionType === 'recruiter_corporate'
 }

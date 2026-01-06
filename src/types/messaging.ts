@@ -550,6 +550,17 @@ export interface LinkedInAccountInfoResponse {
   gmailSentToday?: number | null // Number of emails sent via Gmail today
   outlookSentToday?: number | null // Number of emails sent via Outlook today
 
+  // Daily limits (based on subscription type)
+  // Per LinkedIn official docs: https://www.linkedin.com/help/recruiter/answer/a745199
+  inmailDailyLimit?: number | null // Max InMails per day (1000 for Recruiter Corporate)
+  directMessageDailyLimit?: number | null // Max DMs per day
+  connectionRequestDailyLimit?: number | null // Max connection requests per day
+
+  // Remaining quota for today (limit - sent_today)
+  inmailRemainingToday?: number | null // InMails remaining today
+  directMessagesRemainingToday?: number | null // DMs remaining today
+  connectionRequestsRemainingToday?: number | null // Connection requests remaining today
+
   // Account status from Unipile
   unipileStatus?: string | null // OK, CREDENTIALS, ERROR, etc.
 }
