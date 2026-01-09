@@ -19,7 +19,12 @@ export type ApiProvider =
   | 'HUGGINGFACE_API_KEY'
   | 'DEEPSEEK_API_KEY'
   | 'IBM_API_KEY'
+  | 'PDL_API_KEY'
+  | 'CRUSTDATA_API_KEY'
+  | 'ENRICH_LAYER_API_KEY'
   | 'E2B_API_KEY'
+  | 'AWS_ACCESS_KEY_ID'
+  | 'AWS_SECRET_ACCESS_KEY'
 
 export interface StoreApiKeyRequest {
   provider: ApiProvider

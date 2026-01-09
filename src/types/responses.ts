@@ -153,6 +153,111 @@ export interface SpecializedAgentParams {
    * Each candidate must include at least one identifier: linkedin_url or email/emails.
    */
   candidateProfiles?: Array<Record<string, any>>
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LinkedIn Posts Integration (deep_people_search)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Whether to search profile databases (CrustData/PDL).
+   * Options: true (always), false (never), 'auto' (LLM decides).
+   * @default true
+   * Used by deep_people_search.
+   */
+  searchProfiles?: boolean | 'auto'
+
+  /**
+   * Whether to search LinkedIn posts for engagement (authors, reactors, commenters).
+   * Options: true (always), false (never), 'auto' (LLM decides based on query).
+   * @default 'auto'
+   * Used by deep_people_search.
+   */
+  searchPosts?: boolean | 'auto'
+
+  /**
+   * Whether to include LinkedIn post engagement in candidate scoring.
+   * Options: true (always), false (never), 'auto' (LLM decides).
+   * @default 'auto'
+   * Used by deep_people_search.
+   */
+  includeEngagementInScore?: boolean | 'auto'
+
+  /**
+   * Maximum number of posts to search.
+   * Range: 1-500
+   * @default 50
+   * Used by deep_people_search when searchPosts is enabled.
+   */
+  postsMaxResults?: number
+
+  /**
+   * Maximum number of keywords to use for posts search.
+   * If not provided, all extracted keywords are used.
+   * Range: 1-20
+   * Used by deep_people_search when searchPosts is enabled.
+   */
+  postsMaxKeywords?: number
+
+  /**
+   * Date range for posts search.
+   * Options: 'past-24h', 'past-week', 'past-month', 'past-year'
+   * @default 'past-month'
+   * Used by deep_people_search.
+   */
+  postsDateRange?: 'past-24h' | 'past-week' | 'past-month' | 'past-year'
+
+  /**
+   * Engagement fields to fetch from posts.
+   * Options: 'reactors' (5 credits/post), 'comments' (5 credits/post), 'reactors,comments' (10 credits/post)
+   * @default 'reactors'
+   * Used by deep_people_search when searchPosts is enabled.
+   */
+  postsFields?: 'reactors' | 'comments' | 'reactors,comments'
+
+  /**
+   * Maximum reactors per post to fetch.
+   * Range: 1-5000
+   * @default 5000
+   * No additional cost (same 5 credits/post for 1-5000 reactors).
+   * Used by deep_people_search when postsFields includes 'reactors'.
+   */
+  postsMaxReactors?: number
+
+  /**
+   * Maximum comments per post to fetch.
+   * Range: 1-5000
+   * @default 5000
+   * No additional cost (same 5 credits/post for 1-5000 comments).
+   * Used by deep_people_search when postsFields includes 'comments'.
+   */
+  postsMaxComments?: number
+
+  /**
+   * Whether to enrich posts candidates with EnrichLayer.
+   * @default false
+   * CrustData posts API already provides rich data (skills, experience, education).
+   * Enable only if you need additional fields from EnrichLayer.
+   * Used by deep_people_search when searchPosts is enabled.
+   */
+  postsEnableEnrichment?: boolean
+
+  /**
+   * Whether to filter posts for relevance before extracting people.
+   * @default true
+   * Uses LLM to identify and skip hiring posts, spam, and irrelevant content.
+   * Improves candidate quality at cost of ~1 LLM call per post.
+   * Used by deep_people_search when searchPosts is enabled.
+   */
+  postsEnableFiltering?: boolean
+
+  /**
+   * Weight for engagement score when included in match score calculation.
+   * Range: 0.0-0.3
+   * @default 0.15
+   * Used by deep_people_search when includeEngagementInScore is true.
+   */
+  engagementScoreWeight?: number
+
   /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates

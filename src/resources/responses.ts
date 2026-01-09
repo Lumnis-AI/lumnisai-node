@@ -445,6 +445,19 @@ export class ResponsesResource {
       excludeProfiles?: string[]
       excludePreviouslyContacted?: boolean
       excludeNames?: string[]
+      // LinkedIn Posts Integration options
+      searchProfiles?: boolean | 'auto'
+      searchPosts?: boolean | 'auto'
+      includeEngagementInScore?: boolean | 'auto'
+      postsMaxResults?: number
+      postsMaxKeywords?: number
+      postsDateRange?: 'past-24h' | 'past-week' | 'past-month' | 'past-year'
+      postsFields?: 'reactors' | 'comments' | 'reactors,comments'
+      postsMaxReactors?: number
+      postsMaxComments?: number
+      postsEnableEnrichment?: boolean
+      postsEnableFiltering?: boolean
+      engagementScoreWeight?: number
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -476,6 +489,31 @@ export class ResponsesResource {
         params.excludePreviouslyContacted = options.excludePreviouslyContacted
       if (options.excludeNames)
         params.excludeNames = options.excludeNames
+      // LinkedIn Posts Integration parameters
+      if (options.searchProfiles !== undefined)
+        params.searchProfiles = options.searchProfiles
+      if (options.searchPosts !== undefined)
+        params.searchPosts = options.searchPosts
+      if (options.includeEngagementInScore !== undefined)
+        params.includeEngagementInScore = options.includeEngagementInScore
+      if (options.postsMaxResults !== undefined)
+        params.postsMaxResults = options.postsMaxResults
+      if (options.postsMaxKeywords !== undefined)
+        params.postsMaxKeywords = options.postsMaxKeywords
+      if (options.postsDateRange)
+        params.postsDateRange = options.postsDateRange
+      if (options.postsFields)
+        params.postsFields = options.postsFields
+      if (options.postsMaxReactors !== undefined)
+        params.postsMaxReactors = options.postsMaxReactors
+      if (options.postsMaxComments !== undefined)
+        params.postsMaxComments = options.postsMaxComments
+      if (options.postsEnableEnrichment !== undefined)
+        params.postsEnableEnrichment = options.postsEnableEnrichment
+      if (options.postsEnableFiltering !== undefined)
+        params.postsEnableFiltering = options.postsEnableFiltering
+      if (options.engagementScoreWeight !== undefined)
+        params.engagementScoreWeight = options.engagementScoreWeight
 
       if (Object.keys(params).length > 0)
         request.specializedAgentParams = params
