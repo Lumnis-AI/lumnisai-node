@@ -258,6 +258,61 @@ export interface SpecializedAgentParams {
    */
   engagementScoreWeight?: number
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Direct LinkedIn Post URLs (deep_people_search)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Direct LinkedIn post URLs to extract candidates from.
+   * System will extract authors, reactors, and commenters with full profile data.
+   *
+   * **Format:** `['https://www.linkedin.com/posts/username_topic-activity-123456-hash']`
+   *
+   * **Note:** Only works reliably for recent posts (~1 month). Older posts return author only.
+   *
+   * **Cost:** ~11 + N credits per URL (N = people to enrich).
+   *
+   * Used by deep_people_search.
+   */
+  directPostUrls?: string[]
+
+  /**
+   * Maximum number of reactors to fetch per direct post URL.
+   * Range: 0-5000
+   * @default 500
+   * Used by deep_people_search when directPostUrls is provided.
+   */
+  directPostsMaxReactors?: number
+
+  /**
+   * Maximum number of comments to fetch per direct post URL.
+   * Range: 0-5000
+   * @default 100
+   * Used by deep_people_search when directPostUrls is provided.
+   */
+  directPostsMaxComments?: number
+
+  /**
+   * Whether to extract the post author as a candidate.
+   * @default true
+   * Used by deep_people_search when directPostUrls is provided.
+   */
+  directPostsExtractAuthor?: boolean
+
+  /**
+   * Whether to extract post reactors as candidates.
+   * @default true
+   * Used by deep_people_search when directPostUrls is provided.
+   */
+  directPostsExtractReactors?: boolean
+
+  /**
+   * Whether to extract post commenters as candidates.
+   * @default true
+   * Used by deep_people_search when directPostUrls is provided.
+   */
+  directPostsExtractCommenters?: boolean
+
   /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates
