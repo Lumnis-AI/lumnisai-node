@@ -313,6 +313,20 @@ export interface SpecializedAgentParams {
    */
   directPostsExtractCommenters?: boolean
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LinkedIn Connections Search (deep_people_search)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Search user's 1st-degree LinkedIn connections for candidates.
+   * Requires LinkedIn connected and synced.
+   * Cost: ~$0.01 per connection enriched (EnrichLayer).
+   * LLM pre-filters connections based on headline before enrichment.
+   * @default false
+   * Used by deep_people_search.
+   */
+  searchConnections?: boolean
+
   /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates

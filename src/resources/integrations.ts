@@ -9,6 +9,7 @@ import type {
   ConnectionCallbackRequest,
   ConnectionCallbackResponse,
   ConnectionStatusResponse,
+  DeleteConnectionsResponse,
   DisconnectRequest,
   DisconnectResponse,
   GetConnectionStatusParams,
@@ -17,7 +18,9 @@ import type {
   GetUserConnectionsParams,
   InitiateConnectionRequest,
   InitiateConnectionResponse,
+  LinkedInSyncStatusResponse,
   ListProvidersResponse,
+  TriggerSyncResponse,
   UpdateAppStatusParams,
   UpdateAppStatusResponse,
   UserConnectionsResponse,
@@ -191,5 +194,97 @@ export class IntegrationsResource {
 
   async listConnections(userId: string, params?: { appFilter?: string, provider?: string }): Promise<UserConnectionsResponse> {
     return this.getUserConnections({ userId, appFilter: params?.appFilter, provider: params?.provider as any })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LinkedIn Connections Sync Methods
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Get LinkedIn contact history & connections sync status
+   *
+   * Returns separate progress for:
+   * - Contact history (message sync)
+   * - Connections (network sync)
+   *
+   * Use this endpoint to show sync progress in the UI.
+   *
+   * @param userId - User ID or email
+   * @returns Detailed sync status with progress tracking
+   *
+   * @example
+   * ```typescript
+   * const status = await client.integrations.getLinkedInSyncStatus('user@example.com')
+   * console.log(`Connected: ${status.connected}`)
+   * console.log(`Contacts messaged: ${status.contactHistory?.contactsMessaged}`)
+   * console.log(`Connections stored: ${status.connections?.connectionsStored}`)
+   * ```
+   */
+  async getLinkedInSyncStatus(userId: string): Promise<LinkedInSyncStatusResponse> {
+    const params = new URLSearchParams({ user_id: userId })
+    return this.http.get<LinkedInSyncStatusResponse>(
+      `/integrations/linkedin/sync-status?${params.toString()}`,
+    )
+  }
+
+  /**
+   * Manually trigger LinkedIn connections sync
+   *
+   * Runs in background. Use getLinkedInSyncStatus() to poll progress.
+   *
+   * This syncs:
+   * - 1st-degree LinkedIn connections
+   * - Connection metadata (name, headline, connected_at)
+   * - Resolves hashed URLs using CrustData (if API key is configured)
+   *
+   * @param userId - User ID or email
+   * @returns Sync trigger status
+   *
+   * @example
+   * ```typescript
+   * const response = await client.integrations.triggerLinkedInSync('user@example.com')
+   * console.log(response.message) // "Sync started in background"
+   *
+   * // Poll status until complete
+   * while (true) {
+   *   const status = await client.integrations.getLinkedInSyncStatus('user@example.com')
+   *   if (!status.syncInProgress) break
+   *   await new Promise(resolve => setTimeout(resolve, 2000))
+   * }
+   * ```
+   */
+  async triggerLinkedInSync(userId: string): Promise<TriggerSyncResponse> {
+    const params = new URLSearchParams({ user_id: userId })
+    return this.http.post<TriggerSyncResponse>(
+      `/integrations/linkedin/sync?${params.toString()}`,
+      {},
+    )
+  }
+
+  /**
+   * Delete all stored LinkedIn connections for user
+   *
+   * Keeps contacts that have been messaged (contact_count > 0).
+   * Only removes connection-only entries.
+   *
+   * Use this to:
+   * - Reset connections before re-syncing
+   * - Clear stale connection data
+   * - Handle user privacy requests
+   *
+   * @param userId - User ID or email
+   * @returns Number of connections deleted
+   *
+   * @example
+   * ```typescript
+   * const response = await client.integrations.deleteLinkedInConnections('user@example.com')
+   * console.log(`Deleted ${response.deletedCount} connections`)
+   * ```
+   */
+  async deleteLinkedInConnections(userId: string): Promise<DeleteConnectionsResponse> {
+    const params = new URLSearchParams({ user_id: userId })
+    return this.http.delete<DeleteConnectionsResponse>(
+      `/integrations/linkedin/connections?${params.toString()}`,
+    )
   }
 }

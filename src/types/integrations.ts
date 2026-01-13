@@ -180,3 +180,81 @@ export interface BatchConnectionResponse {
   totalChecked: number
   activeCount: number
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// LinkedIn Connections Sync Types
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Status for a sync phase (contact history or connections)
+ */
+export enum SyncPhaseStatus {
+  NOT_STARTED = 'not_started',
+  IN_PROGRESS = 'in_progress',
+  COMPLETE = 'complete',
+}
+
+/**
+ * Contact history (messages) sync status
+ */
+export interface ContactHistorySyncStatus {
+  status: SyncPhaseStatus
+  contactsMessaged: number
+  progressPercent: number
+  currentPage?: number | null
+}
+
+/**
+ * Connections (network) sync status
+ */
+export interface ConnectionsSyncStatus {
+  status: SyncPhaseStatus
+  connectionsStored: number
+  progressPercent: number
+  lastSyncedAt?: string | null
+}
+
+/**
+ * Detailed sync status for frontend progress tracking
+ *
+ * Example response:
+ * {
+ *   "connected": true,
+ *   "syncInProgress": false,
+ *   "lastSyncedAt": "2026-01-11T10:30:00Z",
+ *   "contactHistory": {
+ *     "status": "complete",
+ *     "contactsMessaged": 21580,
+ *     "progressPercent": 100
+ *   },
+ *   "connections": {
+ *     "status": "complete",
+ *     "connectionsStored": 6884,
+ *     "progressPercent": 100,
+ *     "lastSyncedAt": "2026-01-11T10:30:00Z"
+ *   }
+ * }
+ */
+export interface LinkedInSyncStatusResponse {
+  connected: boolean
+  syncInProgress: boolean
+  lastSyncedAt?: string | null
+  contactHistory?: ContactHistorySyncStatus | null
+  connections?: ConnectionsSyncStatus | null
+}
+
+/**
+ * Response after triggering a manual sync
+ */
+export interface TriggerSyncResponse {
+  status: 'started' | 'already_running' | 'no_account'
+  message: string
+}
+
+/**
+ * Response after deleting connections
+ */
+export interface DeleteConnectionsResponse {
+  deletedCount: number
+  message: string
+}
