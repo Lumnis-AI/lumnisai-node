@@ -308,3 +308,225 @@ None - all new functionality is additive.
 
 - `src/index.ts` - Already exports all types from integrations.ts via wildcard
 
+---
+
+# LinkedIn Post Preview Integration
+
+**Date:** 2026-01-14
+**Endpoint:** `POST /people/posts/preview`
+
+## Overview
+
+Added support for previewing LinkedIn post metadata without fetching full reactor lists. This enables cost-effective estimation of post engagement scope before running expensive full deep searches.
+
+## Changes Made
+
+### 1. New Types: `src/types/people.ts`
+
+Added 3 new types for LinkedIn post preview:
+
+#### Interfaces:
+
+- **`PostPreviewRequest`** - Request model for post preview
+  ```typescript
+  {
+    postUrls: string[]  // LinkedIn post URLs (max 50)
+  }
+  ```
+
+- **`PostPreviewResult`** - Result for a single post preview
+  ```typescript
+  {
+    url: string
+    status: 'success' | 'error'
+    error?: string | null
+    authorName?: string | null
+    textPreview?: string | null  // First 300 chars
+    totalReactions?: number | null
+    totalComments?: number | null
+    numShares?: number | null
+    reactionsByType?: Record<string, number> | null
+    datePosted?: string | null
+    shareUrl?: string | null
+  }
+  ```
+
+- **`PostPreviewResponse`** - Response model for post preview
+  ```typescript
+  {
+    posts: PostPreviewResult[]  // Same order as request
+  }
+  ```
+
+### 2. New Method: `src/resources/people.ts`
+
+Added `previewPosts` method to `PeopleResource`:
+
+#### `previewPosts(params: PostPreviewRequest)`
+
+Preview LinkedIn posts metadata without fetching reactors.
+
+**Usage:**
+```typescript
+const response = await client.people.previewPosts({
+  postUrls: [
+    'https://www.linkedin.com/posts/username_topic-activity-123456-hash',
+    'https://www.linkedin.com/posts/another_post-activity-789012-hash'
+  ]
+})
+
+for (const post of response.posts) {
+  if (post.status === 'success') {
+    console.log(`${post.authorName}: ${post.totalReactions} reactions`)
+  }
+}
+```
+
+## Backend Changes (Reference)
+
+### New API Endpoint
+
+- `POST /people/posts/preview` - Preview LinkedIn post metadata
+
+### Cost
+
+- **1 CrustData credit per post** (no reactors fetched)
+- Much cheaper than full post extraction with reactors
+
+### Use Cases
+
+1. **Estimate Search Scope**: Check engagement counts before running expensive deep searches
+2. **Cost Planning**: Calculate expected costs based on reactor counts
+3. **Post Filtering**: Filter out low-engagement posts before extraction
+4. **Batch Preview**: Preview up to 50 posts in parallel to assess multiple candidates
+
+## Testing Recommendations
+
+1. **Type Safety**: Verify TypeScript compilation
+   ```bash
+   npm run build
+   ```
+
+2. **Preview Posts**: Test the endpoint
+   ```typescript
+   const response = await client.people.previewPosts({
+     postUrls: ['https://www.linkedin.com/posts/...']
+   })
+   expect(response.posts).toHaveLength(1)
+   expect(response.posts[0].status).toMatch(/success|error/)
+   ```
+
+3. **Error Handling**: Test with invalid URLs
+   ```typescript
+   try {
+     await client.people.previewPosts({ postUrls: [] })
+   } catch (error) {
+     expect(error).toBeInstanceOf(ValidationError)
+     expect(error.details.code).toBe('INVALID_POST_URLS')
+   }
+   ```
+
+4. **Max Limit**: Test 50 URL limit
+   ```typescript
+   const urls = Array(51).fill('https://linkedin.com/posts/...')
+   try {
+     await client.people.previewPosts({ postUrls: urls })
+   } catch (error) {
+     expect(error.details.code).toBe('TOO_MANY_URLS')
+   }
+   ```
+
+## Example Use Cases
+
+### 1. Estimate Extraction Cost
+
+```typescript
+// Preview posts to estimate cost before full extraction
+const preview = await client.people.previewPosts({
+  postUrls: candidatePostUrls
+})
+
+let estimatedCost = 0
+const worthExtractingUrls = []
+
+for (const post of preview.posts) {
+  if (post.status === 'success') {
+    const reactorCount = post.totalReactions || 0
+    const commentCount = post.totalComments || 0
+    const estimatedCredits = 11 + reactorCount + commentCount
+    
+    // Only extract posts with reasonable engagement
+    if (reactorCount > 50 && reactorCount < 5000) {
+      worthExtractingUrls.push(post.url)
+      estimatedCost += estimatedCredits
+    }
+  }
+}
+
+console.log(`Will extract ${worthExtractingUrls.length} posts`)
+console.log(`Estimated cost: ${estimatedCost} credits`)
+```
+
+### 2. Filter Posts by Engagement
+
+```typescript
+// Find posts with high engagement
+const preview = await client.people.previewPosts({ postUrls })
+
+const highEngagementPosts = preview.posts
+  .filter(p => p.status === 'success')
+  .filter(p => (p.totalReactions || 0) > 100)
+  .filter(p => (p.totalComments || 0) > 10)
+
+console.log(`Found ${highEngagementPosts.length} high-engagement posts`)
+```
+
+### 3. Batch Analysis
+
+```typescript
+// Preview multiple posts in parallel (up to 50)
+const response = await client.people.previewPosts({
+  postUrls: allPostUrls.slice(0, 50)  // Max 50
+})
+
+const stats = {
+  successful: 0,
+  errors: 0,
+  totalReactions: 0,
+  totalComments: 0
+}
+
+for (const post of response.posts) {
+  if (post.status === 'success') {
+    stats.successful++
+    stats.totalReactions += post.totalReactions || 0
+    stats.totalComments += post.totalComments || 0
+  } else {
+    stats.errors++
+  }
+}
+
+console.log(`Preview stats:`, stats)
+```
+
+## Migration Notes
+
+### For SDK Users
+
+✅ **Fully backward compatible** - new optional method added to `PeopleResource`:
+- Existing code continues to work without modification
+- New post preview feature is opt-in
+
+### Breaking Changes
+
+None - all new functionality is additive.
+
+## Files Modified
+
+- `src/types/people.ts` - Added 3 new types for post preview
+- `src/resources/people.ts` - Added `previewPosts` method to PeopleResource
+
+## Files Reviewed (No Changes Needed)
+
+- `src/index.ts` - Already exports all types from people.ts via wildcard
+

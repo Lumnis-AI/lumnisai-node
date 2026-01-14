@@ -172,3 +172,54 @@ export interface PeopleSearchResponse {
   /** List of data sources that were actually used */
   dataSourcesUsed: string[]
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// LinkedIn Posts Preview Types
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Request model for LinkedIn post preview.
+ */
+export interface PostPreviewRequest {
+  /**
+   * LinkedIn post URLs to preview (max 50).
+   * Format: https://www.linkedin.com/posts/username_topic-activity-123456-hash
+   */
+  postUrls: string[]
+}
+
+/**
+ * Result for a single LinkedIn post preview.
+ */
+export interface PostPreviewResult {
+  /** The post URL that was requested */
+  url: string
+  /** Status of the preview: 'success' or 'error' */
+  status: 'success' | 'error'
+  /** Error message if status is 'error' */
+  error?: string | null
+  /** Post author's name */
+  authorName?: string | null
+  /** First 300 characters of post text */
+  textPreview?: string | null
+  /** Total number of reactions on the post */
+  totalReactions?: number | null
+  /** Total number of comments on the post */
+  totalComments?: number | null
+  /** Number of shares */
+  numShares?: number | null
+  /** Breakdown of reactions by type (like, praise, empathy, etc.) */
+  reactionsByType?: Record<string, number> | null
+  /** When the post was published (ISO string) */
+  datePosted?: string | null
+  /** LinkedIn share URL */
+  shareUrl?: string | null
+}
+
+/**
+ * Response model for LinkedIn post preview endpoint.
+ */
+export interface PostPreviewResponse {
+  /** List of post preview results (same order as request) */
+  posts: PostPreviewResult[]
+}

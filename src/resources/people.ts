@@ -3,6 +3,8 @@ import type { Http } from '../core/http'
 import type {
   PeopleSearchRequest,
   PeopleSearchResponse,
+  PostPreviewRequest,
+  PostPreviewResponse,
 } from '../types/people'
 import {
   NoDataSourcesError,
@@ -105,6 +107,78 @@ export class PeopleResource {
           throw new SourcesNotAvailableError(
             errorDetail.message || 'Requested data sources not available',
             availableSources,
+          )
+        }
+      }
+
+      // Re-throw other errors
+      throw error
+    }
+  }
+
+  /**
+   * Preview LinkedIn posts metadata without fetching full reactor lists.
+   *
+   * Returns engagement counts (reactions, comments) for each post URL.
+   * Useful for estimating search scope before running a full deep search.
+   *
+   * Cost: 1 CrustData credit per post.
+   *
+   * @param params - Post preview request parameters
+   * @param params.postUrls - LinkedIn post URLs to preview (max 50)
+   * @returns Promise resolving to post preview results
+   * @throws {ValidationError} For invalid request parameters
+   *
+   * @example
+   * ```typescript
+   * const response = await client.people.previewPosts({
+   *   postUrls: [
+   *     'https://www.linkedin.com/posts/username_topic-activity-123456-hash',
+   *     'https://www.linkedin.com/posts/another_post-activity-789012-hash'
+   *   ]
+   * });
+   *
+   * for (const post of response.posts) {
+   *   if (post.status === 'success') {
+   *     console.log(`${post.authorName}: ${post.totalReactions} reactions`);
+   *   }
+   * }
+   * ```
+   */
+  async previewPosts(params: PostPreviewRequest): Promise<PostPreviewResponse> {
+    const { postUrls } = params
+
+    // Validate post URLs
+    if (!postUrls || postUrls.length === 0) {
+      throw new ValidationError('At least one post URL is required', {
+        code: 'INVALID_POST_URLS',
+      })
+    }
+
+    if (postUrls.length > 50) {
+      throw new ValidationError('Maximum 50 post URLs allowed', {
+        code: 'TOO_MANY_URLS',
+      })
+    }
+
+    try {
+      const response = await this.http.post<PostPreviewResponse>(
+        '/people/posts/preview',
+        { postUrls },
+      )
+
+      return response
+    }
+    catch (error: any) {
+      // Handle specific error codes
+      if (error instanceof ValidationError) {
+        const details = error.details || {}
+        const errorDetail = details.detail?.error || details.error
+
+        if (errorDetail?.code === 'NO_CRUSTDATA_KEY') {
+          throw new ValidationError(
+            errorDetail.message || 'CrustData API key not configured. Required for posts preview.',
+            { code: 'NO_CRUSTDATA_KEY' },
           )
         }
       }
