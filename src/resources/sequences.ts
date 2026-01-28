@@ -26,6 +26,7 @@ import type {
   LifecycleOperationResponse,
   ListApprovalsOptions,
   ListExecutionsOptions,
+  ListStepExecutionsOptions,
   ListTemplatesOptions,
   RateLimitStatusResponse,
   RejectStepRequest,
@@ -36,8 +37,11 @@ import type {
   SkipStepResponse,
   StartExecutionRequest,
   StartExecutionResponse,
+  StepExecutionListResponse,
   TemplateShareRequest,
   TemplateSharesResponse,
+  UpdateStepExecutionRequest,
+  UpdateStepExecutionResponse,
   ValidationResponse,
 } from '../types/sequences'
 
@@ -602,6 +606,82 @@ export class SequencesResource {
     userId: string,
   ): Promise<BulkApprovalResponse> {
     return this.bulkApprovalAction({ ...request, action: 'approve' }, userId)
+  }
+
+  // ==================== Step Executions Query ====================
+
+  /**
+   * List step executions with flexible filtering.
+   *
+   * Query step executions by status, template, project, user, channel, action,
+   * and scheduled time range.
+   *
+   * Common use cases:
+   * - Get scheduled messages: `{ status: 'scheduled' }`
+   * - Get pending approvals: `{ status: 'waiting_approval' }`
+   * - Get sent messages: `{ status: 'sent' }`
+   * - Get multiple statuses: `{ status: ['scheduled', 'approved'] }`
+   * - Get scheduled today: `{ status: 'scheduled', scheduledAfter: '2026-01-29T00:00:00Z', scheduledBefore: '2026-01-30T00:00:00Z' }`
+   *
+   * @param options - Filter options for querying step executions
+   */
+  async listStepExecutions(
+    options?: ListStepExecutionsOptions,
+  ): Promise<StepExecutionListResponse> {
+    const params: Record<string, unknown> = {}
+    if (options?.status) {
+      params.status = Array.isArray(options.status)
+        ? options.status
+        : [options.status]
+    }
+    if (options?.templateId)
+      params.template_id = options.templateId
+    if (options?.projectId)
+      params.project_id = options.projectId
+    if (options?.userId)
+      params.user_id = options.userId
+    if (options?.channel)
+      params.channel = options.channel
+    if (options?.action)
+      params.action = options.action
+    if (options?.scheduledAfter)
+      params.scheduled_after = options.scheduledAfter
+    if (options?.scheduledBefore)
+      params.scheduled_before = options.scheduledBefore
+    if (options?.limit !== undefined)
+      params.limit = options.limit
+    if (options?.offset !== undefined)
+      params.offset = options.offset
+
+    return this.http.get<StepExecutionListResponse>(
+      '/sequences/step-executions',
+      { params },
+    )
+  }
+
+  /**
+   * Update a scheduled step execution's content or scheduled time.
+   *
+   * Only works for step executions in 'scheduled', 'approved', or 'waiting_approval' status.
+   *
+   * Use cases:
+   * - Edit message content before sending
+   * - Reschedule when a message will be sent
+   *
+   * @param stepExecutionId - The step execution ID to update
+   * @param request - The update request with optional content and/or scheduledAt
+   * @param userId - User ID or email making the update
+   */
+  async updateStepExecution(
+    stepExecutionId: string,
+    request: UpdateStepExecutionRequest,
+    userId: string,
+  ): Promise<UpdateStepExecutionResponse> {
+    return this.http.patch<UpdateStepExecutionResponse>(
+      `/sequences/step-executions/${encodeURIComponent(stepExecutionId)}`,
+      request,
+      { params: { user_id: userId } },
+    )
   }
 
   // ==================== Batch Polling ====================

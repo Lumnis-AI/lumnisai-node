@@ -458,6 +458,68 @@ export interface BulkApprovalResponse {
   totalFailed: number
 }
 
+// ==================== Step Execution Query Types ====================
+
+export interface StepExecutionItem {
+  stepExecutionId: string
+  executionId: string
+  templateId: string
+  templateName?: string
+  projectId?: string
+  prospectId?: string
+  prospectExternalId?: string
+  prospectName?: string
+  prospectTitle?: string
+  prospectCompany?: string
+  stepKey?: string
+  stepName?: string
+  channel: string
+  action: string
+  status: string
+  content?: string
+  subject?: string
+  aiPrecheckResult?: string
+  aiPrecheckReason?: string
+  scheduledAt?: string
+  sentAt?: string
+  errorMessage?: string
+  createdAt: string
+}
+
+export interface StepExecutionListResponse {
+  items: StepExecutionItem[]
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+export interface UpdateStepExecutionRequest {
+  content?: string
+  scheduledAt?: string
+}
+
+export interface UpdateStepExecutionResponse {
+  stepExecutionId: string
+  status: string
+  content?: string
+  scheduledAt?: string
+  updated: boolean
+}
+
+export interface ListStepExecutionsOptions {
+  status?: StepExecutionStatus | StepExecutionStatus[]
+  templateId?: string
+  projectId?: string
+  userId?: string
+  channel?: SequenceChannel
+  action?: SequenceAction
+  scheduledAfter?: string
+  scheduledBefore?: string
+  limit?: number
+  offset?: number
+}
+
 // ==================== Outcome Recording ====================
 
 export type OutcomeType =

@@ -76,8 +76,187 @@ export interface CriteriaMetadata {
   criteriaClassification: CriteriaClassification
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Deep People Search Output Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Preview metadata for progressive surfacing during deep search.
+ * Shows partial results as batches complete.
+ */
+export interface DeepSearchPreview {
+  /** True if results are still being processed */
+  isPartial: boolean
+  /** Current processing phase */
+  phase: 'fast_filter_in_progress' | 'fast_filter_complete' | 'validation_complete' | string
+  /** Number of batches completed so far */
+  batchesComplete?: number
+  /** Total number of batches to process */
+  batchesTotal?: number
+  /** Total candidates that have passed filtering so far */
+  totalPassed?: number
+  /** Number of candidates shown in this preview (capped at 50) */
+  candidatesShown?: number
+  /** Total candidates excluded so far */
+  totalExcluded?: number
+  /** Candidates pending deep validation */
+  pendingDeepValidation?: number
+  /** ISO timestamp of last update */
+  lastUpdate?: string
+}
+
+/**
+ * Source of evidence for a criterion evaluation.
+ */
+export interface EvidenceSource {
+  /** Type of source: profile data or web search */
+  sourceType: 'profile' | 'web_search'
+  /** Field name (for profile) or search query (for web) */
+  fieldOrQuery: string
+  /** URL if from web search */
+  url?: string | null
+}
+
+/**
+ * Result of evaluating a single criterion for a candidate.
+ * Contains scoring, evidence, and reasoning.
+ */
+export interface CriterionResult {
+  /** Unique identifier matching criteria definition */
+  criterionId: string
+  /** Type: universal, varying, or validation_only */
+  criterionType: CriterionType
+  /** Column name for display */
+  columnName: string
+  /** User-friendly display text for the criterion */
+  criterionText: string
+  /** Weight used in score calculation (0.0-1.0) */
+  weight: number
+
+  // Evaluation results
+  /** Whether the criterion was met */
+  criterionMet: boolean
+  /** Score for this criterion (0-10) */
+  score: number
+  /** Confidence in the evaluation (0.0-1.0) */
+  confidence: number
+
+  // Evidence and reasoning
+  /** User-facing explanation of what was checked and found (min 2 sentences) */
+  reasoning: string
+  /** Concrete evidence with sources */
+  evidence: string
+  /** List of sources where evidence was found */
+  evidenceSources: EvidenceSource[]
+
+  // Sufficient information assessment
+  /** Whether sufficient data was available */
+  sufficientInformation: boolean
+  /** Explanation of why data was/wasn't sufficient */
+  sufficientInformationReasoning: string
+
+  // Inference fields (when direct evidence is missing)
+  /** Explanation of what's missing and whether inference is possible */
+  inferenceReasoning?: string | null
+  /** Specific signals used for inference (career progression, company selectivity, etc.) */
+  inferenceSignalsUsed?: string | null
+  /** One-sentence summary connecting signals to criterion */
+  inferenceSummary?: string | null
+  /** True if evaluation relies on inference rather than direct evidence */
+  inferenceApplied: boolean
+
+  // Reasoning chain
+  /** Why criterion was/wasn't met */
+  criterionMetReasoning: string
+  /** Why this specific score was given */
+  scoreReasoning: string
+  /** Why this confidence level */
+  confidenceReasoning: string
+}
+
+/**
+ * Validated candidate with scoring and criterion results.
+ * Returned from deep_people_search after validation.
+ */
+export interface ValidatedCandidate {
+  /** Unique identifier for the candidate */
+  candidateId: string
+  /** Full name */
+  name: string
+  /** LinkedIn profile URL */
+  linkedinUrl?: string
+  /** Current job title */
+  currentTitle?: string
+  /** Current company */
+  currentCompany?: string
+  /** Location */
+  location?: string
+  /** Profile picture URL */
+  profilePictureUrl?: string
+
+  // Scoring
+  /** Overall match score (0-10) */
+  overallScore: number
+  /** Weighted average of criterion confidences */
+  overallConfidence: number
+  /** User-facing summary (3-5 sentences with highlights) */
+  summary: string
+
+  // Criterion results
+  /** Results for each evaluated criterion */
+  criterionResults: CriterionResult[]
+
+  // Metadata
+  /** Warnings about criteria that couldn't be fully verified */
+  criteriaQualityWarnings?: string[]
+  /** Explanation of LinkedIn engagement relevance (if applicable) */
+  engagementReasoning?: string | null
+  /** Source of candidate data */
+  source?: string
+  /** Raw profile data */
+  [key: string]: any
+}
+
+/**
+ * Search statistics from deep people search.
+ */
+export interface DeepSearchStats {
+  /** Candidates that passed fast filter */
+  fastFilterPassed?: number
+  /** Candidates excluded by fast filter */
+  fastFilterExcluded?: number
+  /** Candidates pending deep validation */
+  pendingDeepValidation?: number
+  /** Batches completed */
+  batchesComplete?: number
+  /** Total batches */
+  batchesTotal?: number
+}
+
+/**
+ * Structured output from deep_people_search specialized agent.
+ * Available in ResponseObject.structuredResponse.
+ */
+export interface DeepPeopleSearchOutput {
+  /** Preview metadata for progressive surfacing */
+  preview?: DeepSearchPreview
+  /** Validated candidates (sorted by score descending) */
+  candidates: ValidatedCandidate[]
+  /** Candidates that were excluded (limited to 100) */
+  excludedCandidates?: ValidatedCandidate[]
+  /** Total candidates found before filtering */
+  totalFound?: number
+  /** Search statistics */
+  searchStats?: DeepSearchStats
+  /** Criteria metadata */
+  criteria?: CriteriaMetadata
+}
+
 export interface StructuredResponse extends Record<string, any> {
   criteria?: CriteriaMetadata
+  /** Deep people search output (when using deep_people_search agent) */
+  preview?: DeepSearchPreview
+  candidates?: ValidatedCandidate[]
 }
 
 /**
