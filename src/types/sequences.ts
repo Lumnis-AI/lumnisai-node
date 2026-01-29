@@ -336,6 +336,10 @@ export interface StepMetric {
   delivered: number
   replied: number
   accepted: number
+  pending: number
+  failed: number
+  alreadyConnected: number
+  notConnected: number
 }
 
 export interface ExecutionMetricsResponse {
@@ -744,6 +748,7 @@ export interface BatchStepMetric {
   replied: number
   accepted: number
   pending: number
+  failed: number
   alreadyConnected: number
   notConnected: number
 }
