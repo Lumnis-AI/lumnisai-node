@@ -896,3 +896,44 @@ export interface EngagementStatusResponse {
   errors: Record<string, string>
   computedAt: string
 }
+
+// ==================== LinkedIn Account Rate Limits ====================
+
+/**
+ * Rate limits for a LinkedIn account.
+ * All fields are optional - only provide values you want to set.
+ * Values of 0 disable the action (e.g., inmail=0 for basic accounts).
+ */
+export interface LinkedInAccountRateLimits {
+  /** Daily connection request limit (0 to disable, max 500) */
+  connectionRequest?: number
+  /** Daily direct message limit (0 to disable, max 150) */
+  message?: number
+  /** Daily InMail limit (0 to disable, max 1000) */
+  inmail?: number
+  /** Daily profile view limit (0 to disable, max 200) */
+  viewProfile?: number
+  /** Daily post like limit (0 to disable, max 100) */
+  likePost?: number
+  /** Daily post comment limit (0 to disable, max 50) */
+  commentPost?: number
+}
+
+/**
+ * Request to update rate limits for a LinkedIn account.
+ */
+export interface LinkedInAccountRateLimitsUpdate {
+  /** Daily limits to update. Omit fields to keep current values. */
+  dailyLimits: LinkedInAccountRateLimits
+}
+
+/**
+ * Response containing rate limits for a LinkedIn account.
+ */
+export interface LinkedInAccountRateLimitsResponse {
+  accountId: string
+  dailyLimits: Record<string, number>
+  dailyActionCounts: Record<string, number>
+  lastResetDate?: string | null
+  updatedAt: string
+}

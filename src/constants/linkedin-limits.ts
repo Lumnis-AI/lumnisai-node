@@ -202,6 +202,7 @@ export const LINKEDIN_LIMITS: Record<LinkedInLimitSubscriptionType, LinkedInLimi
 /**
  * Safe limits when using automation (more conservative than LinkedIn's limits)
  * These are Unipile-recommended limits for automation
+ * @deprecated Use SEQUENCE_RATE_LIMITS instead for the single source of truth
  */
 export const UNIPILE_SAFE_LIMITS = {
   // Connection requests per day (Unipile recommends 80-100 for paid)
@@ -235,6 +236,249 @@ export const UNIPILE_SAFE_LIMITS = {
     recruiter_corporate: 500,
   },
 } as const
+
+// =============================================================================
+// Sequence Rate Limits (SINGLE SOURCE OF TRUTH)
+// =============================================================================
+// These limits are used by the sequence processor, rate limiter, messaging service,
+// and queue processor. All rate limit checks should use these values.
+//
+// Structure:
+//   SEQUENCE_RATE_LIMITS[channel][action] = {
+//       perDay: {subscription_type: limit, ...},
+//       per5Min: burst_limit,
+//       delaySeconds: [min, max],
+//   }
+
+/** Default subscription type when account type is unknown */
+export const DEFAULT_SUBSCRIPTION_TYPE: LinkedInLimitSubscriptionType = 'basic'
+
+/** Rate limit configuration for a single action */
+export interface SequenceRateLimitAction {
+  perDay: Record<LinkedInLimitSubscriptionType, number> | number
+  per5Min: number
+  delaySeconds: [number, number]
+}
+
+/** Email rate limits (same for all email providers) */
+const EMAIL_RATE_LIMITS: Record<string, SequenceRateLimitAction> = {
+  email: {
+    perDay: 150,
+    per5Min: 20,
+    delaySeconds: [30, 60],
+  },
+}
+
+/**
+ * Sequence rate limits - SINGLE SOURCE OF TRUTH
+ * Used by the sequence processor, rate limiter, messaging service, and queue processor.
+ */
+export const SEQUENCE_RATE_LIMITS: Record<string, Record<string, SequenceRateLimitAction>> = {
+  linkedin: {
+    connection_request: {
+      perDay: {
+        basic: 25,
+        premium: 40,
+        premium_career: 40,
+        premium_business: 40,
+        sales_navigator: 50,
+        recruiter_lite: 100,
+        recruiter_corporate: 150,
+      },
+      per5Min: 8,
+      delaySeconds: [60, 120],
+    },
+    message: {
+      perDay: {
+        // NOTE: basic=40 aligns with DB default from migration 0028
+        // Higher-tier accounts can be customized via linkedin_accounts.daily_limits
+        basic: 40,
+        premium: 40,
+        premium_career: 40,
+        premium_business: 40,
+        sales_navigator: 50,
+        recruiter_lite: 60,
+        recruiter_corporate: 80,
+      },
+      per5Min: 10,
+      delaySeconds: [60, 120],
+    },
+    inmail: {
+      perDay: {
+        // NOTE: basic=40 aligns with DB default from migration 0028
+        // In practice, basic accounts don't have InMail, but DB allows
+        // configuration for accounts that upgrade or have special access
+        basic: 40,
+        premium: 40,
+        premium_career: 40,
+        premium_business: 40,
+        sales_navigator: 50,
+        recruiter_lite: 130,
+        recruiter_corporate: 1000,
+      },
+      per5Min: 10,
+      delaySeconds: [60, 120],
+    },
+    view_profile: {
+      perDay: {
+        basic: 80,
+        premium: 100,
+        premium_career: 100,
+        premium_business: 100,
+        sales_navigator: 150,
+        recruiter_lite: 200,
+        recruiter_corporate: 200,
+      },
+      per5Min: 15,
+      delaySeconds: [30, 60],
+    },
+    like_post: {
+      perDay: {
+        basic: 50,
+        premium: 50,
+        premium_career: 50,
+        premium_business: 50,
+        sales_navigator: 50,
+        recruiter_lite: 50,
+        recruiter_corporate: 50,
+      },
+      per5Min: 12,
+      delaySeconds: [30, 60],
+    },
+    comment_post: {
+      perDay: {
+        basic: 25,
+        premium: 25,
+        premium_career: 25,
+        premium_business: 25,
+        sales_navigator: 25,
+        recruiter_lite: 25,
+        recruiter_corporate: 25,
+      },
+      per5Min: 6,
+      delaySeconds: [90, 180],
+    },
+  },
+  email: EMAIL_RATE_LIMITS,
+  gmail: EMAIL_RATE_LIMITS,
+  outlook: EMAIL_RATE_LIMITS,
+}
+
+/**
+ * Mapping of outreach_method aliases to base action names in SEQUENCE_RATE_LIMITS.
+ * This ensures consistent rate limit lookups regardless of the variant used.
+ */
+const ACTION_ALIASES: Record<string, string> = {
+  // Message variants
+  direct_message: 'message',
+  dm: 'message',
+  // Connection request variants
+  connection_request_with_note: 'connection_request',
+  connection_request_no_note: 'connection_request',
+  connect: 'connection_request',
+  // InMail variants
+  in_mail: 'inmail',
+  // Profile view variants
+  profile_view: 'view_profile',
+  // Post engagement variants
+  like: 'like_post',
+  comment: 'comment_post',
+}
+
+/**
+ * Normalize outreach_method/action to base action name used in SEQUENCE_RATE_LIMITS.
+ *
+ * This handles aliases like:
+ * - direct_message -> message
+ * - connection_request_with_note -> connection_request
+ * - connection_request_no_note -> connection_request
+ *
+ * @param action - The action or outreach_method string
+ * @returns Normalized base action name
+ */
+export function normalizeAction(action: string | null | undefined): string {
+  if (!action)
+    return action ?? ''
+  const actionLower = action.toLowerCase()
+  return ACTION_ALIASES[actionLower] ?? actionLower
+}
+
+/** Result from getRateLimit */
+export interface RateLimitInfo {
+  perDay: number
+  per5Min: number
+  delaySeconds: [number, number]
+}
+
+/**
+ * Get rate limits for a specific channel/action/subscription combination.
+ *
+ * @param channel - Channel (linkedin, email, gmail, outlook)
+ * @param action - Action (connection_request, message, inmail, etc.) - aliases are normalized
+ * @param subscriptionType - LinkedIn subscription type (basic, premium, sales_navigator, etc.)
+ * @returns Rate limit configuration
+ */
+export function getRateLimit(
+  channel: string,
+  action: string,
+  subscriptionType: LinkedInLimitSubscriptionType | string = DEFAULT_SUBSCRIPTION_TYPE,
+): RateLimitInfo {
+  // Normalize action to handle aliases (direct_message -> message, etc.)
+  const normalizedAction = normalizeAction(action)
+
+  const channelLimits = SEQUENCE_RATE_LIMITS[channel] ?? {}
+  const actionLimits = channelLimits[normalizedAction]
+
+  if (!actionLimits) {
+    return { perDay: 50, per5Min: 10, delaySeconds: [60, 120] }
+  }
+
+  const perDayLimits = actionLimits.perDay
+
+  // Handle perDay as dict (subscription-based) or number (flat)
+  let perDay: number
+  if (typeof perDayLimits === 'object') {
+    perDay = (perDayLimits as Record<string, number>)[subscriptionType]
+      ?? (perDayLimits as Record<string, number>).basic
+      ?? 40
+  }
+  else {
+    perDay = perDayLimits
+  }
+
+  return {
+    perDay,
+    per5Min: actionLimits.per5Min ?? 10,
+    delaySeconds: actionLimits.delaySeconds ?? [60, 120],
+  }
+}
+
+/**
+ * Get default daily limits for initializing a new LinkedIn account.
+ *
+ * @param subscriptionType - LinkedIn subscription type
+ * @returns Dict mapping action to daily limit
+ */
+export function getDefaultDailyLimits(
+  subscriptionType: LinkedInLimitSubscriptionType | string = DEFAULT_SUBSCRIPTION_TYPE,
+): Record<string, number> {
+  const linkedinLimits = SEQUENCE_RATE_LIMITS.linkedin ?? {}
+  const result: Record<string, number> = {}
+
+  for (const [action, limits] of Object.entries(linkedinLimits)) {
+    const perDayLimits = limits.perDay
+    if (typeof perDayLimits === 'object') {
+      result[action] = (perDayLimits as Record<string, number>)[subscriptionType]
+        ?? (perDayLimits as Record<string, number>).basic
+        ?? 25
+    }
+    else {
+      result[action] = perDayLimits
+    }
+  }
+
+  return result
+}
 
 /**
  * Cooldown periods (in seconds) after hitting limits

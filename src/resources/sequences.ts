@@ -24,6 +24,8 @@ import type {
   ExecutionMetricsResponse,
   LifecycleOperationRequest,
   LifecycleOperationResponse,
+  LinkedInAccountRateLimitsResponse,
+  LinkedInAccountRateLimitsUpdate,
   ListApprovalsOptions,
   ListExecutionsOptions,
   ListStepExecutionsOptions,
@@ -505,6 +507,42 @@ export class SequencesResource {
   async getRateLimitStatus(userId: string): Promise<RateLimitStatusResponse> {
     return this.http.get<RateLimitStatusResponse>(
       '/sequences/rate-limits/status',
+      { params: { user_id: userId } },
+    )
+  }
+
+  // ==================== LinkedIn Account Rate Limits ====================
+
+  /**
+   * Get rate limits configuration for a specific LinkedIn account.
+   * @param accountId - The LinkedIn account ID (UUID)
+   * @param userId - User ID or email that owns the account
+   */
+  async getLinkedInAccountRateLimits(
+    accountId: string,
+    userId: string,
+  ): Promise<LinkedInAccountRateLimitsResponse> {
+    return this.http.get<LinkedInAccountRateLimitsResponse>(
+      `/sequences/linkedin-accounts/${encodeURIComponent(accountId)}/rate-limits`,
+      { params: { user_id: userId } },
+    )
+  }
+
+  /**
+   * Update rate limits configuration for a specific LinkedIn account.
+   * Only provided fields will be updated. Omit fields to keep current values.
+   * @param accountId - The LinkedIn account ID (UUID)
+   * @param request - The rate limits to update
+   * @param userId - User ID or email that owns the account
+   */
+  async updateLinkedInAccountRateLimits(
+    accountId: string,
+    request: LinkedInAccountRateLimitsUpdate,
+    userId: string,
+  ): Promise<LinkedInAccountRateLimitsResponse> {
+    return this.http.patch<LinkedInAccountRateLimitsResponse>(
+      `/sequences/linkedin-accounts/${encodeURIComponent(accountId)}/rate-limits`,
+      request,
       { params: { user_id: userId } },
     )
   }
