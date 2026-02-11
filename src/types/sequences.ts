@@ -401,6 +401,10 @@ export interface ApprovalItem {
   content?: string
   aiPrecheckResult?: string
   aiPrecheckReason?: string
+  /** Notes explaining why this approval was created (e.g., auto-CR after InMail) */
+  approvalNotes?: string
+  /** Additional metadata (e.g., system_generated flag, triggered_by context) */
+  metadata?: Record<string, unknown>
   createdAt: string
 }
 
@@ -777,6 +781,10 @@ export interface PendingApprovalExtended {
   content?: string
   aiPrecheckResult?: string
   aiPrecheckReason?: string
+  /** Notes explaining why this approval was created (e.g., auto-CR after InMail) */
+  approvalNotes?: string
+  /** Additional metadata (e.g., system_generated flag, triggered_by context) */
+  metadata?: Record<string, unknown>
   createdAt: string
 }
 
