@@ -45,6 +45,7 @@ export type { LumnisClientOptions } from './core/client'
 export * from './errors'
 
 // Export resources
+export type { CampaignsResource } from './resources/campaigns'
 export type { ExternalAPIKeysResource } from './resources/external-api-keys'
 export type { FilesResource } from './resources/files'
 export type { IntegrationsResource } from './resources/integrations'
@@ -60,6 +61,7 @@ export type { ThreadsResource } from './resources/threads'
 export type { UsersResource } from './resources/users'
 
 // Export types
+export * from './types/campaigns'
 export * from './types/common'
 export * from './types/external-api-keys'
 export * from './types/files'

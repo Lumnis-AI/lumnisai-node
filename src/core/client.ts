@@ -16,6 +16,7 @@ import { MessagingResource } from '../resources/messaging'
 import { ModelPreferencesResource } from '../resources/model-preferences'
 import { PeopleResource } from '../resources/people'
 import { ResponsesResource } from '../resources/responses'
+import { CampaignsResource } from '../resources/campaigns'
 import { SequencesResource } from '../resources/sequences'
 import { SkillsResource } from '../resources/skills'
 import { TenantInfoResource } from '../resources/tenant-info'
@@ -65,6 +66,7 @@ export class LumnisClient {
   public readonly people: PeopleResource
   public readonly messaging: MessagingResource
   public readonly sequences: SequencesResource
+  public readonly campaigns: CampaignsResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -109,6 +111,7 @@ export class LumnisClient {
     this.people = new PeopleResource(this.http)
     this.messaging = new MessagingResource(this.http)
     this.sequences = new SequencesResource(this.http)
+    this.campaigns = new CampaignsResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {
