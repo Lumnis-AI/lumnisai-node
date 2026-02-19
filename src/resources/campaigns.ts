@@ -3,9 +3,9 @@ import type {
   AddProspectsRequest,
   AddProspectsResponse,
   ApprovalActionRequest,
+  CampaignActionListResponse,
   CampaignBulkApprovalRequest,
   CampaignBulkApprovalResponse,
-  CampaignActionListResponse,
   CampaignCreate,
   CampaignListResponse,
   CampaignMetricsResponse,
@@ -58,6 +58,8 @@ export class CampaignsResource {
     options?: ListPlaybooksOptions,
   ): Promise<PlaybookResponse[]> {
     const params: Record<string, unknown> = {}
+    if (options?.userId)
+      params.user_id = options.userId
     if (options?.activeOnly !== undefined)
       params.active_only = options.activeOnly
     return this.http.get<PlaybookResponse[]>('/campaigns/playbooks', { params })
@@ -91,8 +93,8 @@ export class CampaignsResource {
    */
   async archivePlaybook(
     playbookId: string,
-  ): Promise<{ success: boolean; playbook: PlaybookResponse }> {
-    return this.http.delete<{ success: boolean; playbook: PlaybookResponse }>(
+  ): Promise<{ success: boolean, playbook: PlaybookResponse }> {
+    return this.http.delete<{ success: boolean, playbook: PlaybookResponse }>(
       `/campaigns/playbooks/${encodeURIComponent(playbookId)}`,
     )
   }

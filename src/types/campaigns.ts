@@ -384,6 +384,7 @@ export interface LinkedAssetsResponse {
 // ==================== List/Filter Options ====================
 
 export interface ListPlaybooksOptions {
+  userId?: string
   activeOnly?: boolean
 }
 
