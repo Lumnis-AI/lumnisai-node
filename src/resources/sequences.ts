@@ -514,36 +514,44 @@ export class SequencesResource {
   // ==================== LinkedIn Account Rate Limits ====================
 
   /**
-   * Get rate limits configuration for a specific LinkedIn account.
-   * @param accountId - The LinkedIn account ID (UUID)
+   * Get rate limits configuration for a LinkedIn account.
+   * When accountId is omitted, returns limits for the user's most recent active account.
    * @param userId - User ID or email that owns the account
+   * @param accountId - Optional LinkedIn account ID (UUID). If omitted, uses the most recent active account.
    */
   async getLinkedInAccountRateLimits(
-    accountId: string,
     userId: string,
+    accountId?: string,
   ): Promise<LinkedInAccountRateLimitsResponse> {
+    const params: Record<string, string> = { user_id: userId }
+    if (accountId)
+      params.account_id = accountId
     return this.http.get<LinkedInAccountRateLimitsResponse>(
-      `/sequences/linkedin-accounts/${encodeURIComponent(accountId)}/rate-limits`,
-      { params: { user_id: userId } },
+      '/sequences/linkedin-accounts/rate-limits',
+      { params },
     )
   }
 
   /**
-   * Update rate limits configuration for a specific LinkedIn account.
+   * Update rate limits configuration for a LinkedIn account.
    * Only provided fields will be updated. Omit fields to keep current values.
-   * @param accountId - The LinkedIn account ID (UUID)
+   * When accountId is omitted, updates limits for the user's most recent active account.
    * @param request - The rate limits to update
    * @param userId - User ID or email that owns the account
+   * @param accountId - Optional LinkedIn account ID (UUID). If omitted, uses the most recent active account.
    */
   async updateLinkedInAccountRateLimits(
-    accountId: string,
     request: LinkedInAccountRateLimitsUpdate,
     userId: string,
+    accountId?: string,
   ): Promise<LinkedInAccountRateLimitsResponse> {
+    const params: Record<string, string> = { user_id: userId }
+    if (accountId)
+      params.account_id = accountId
     return this.http.patch<LinkedInAccountRateLimitsResponse>(
-      `/sequences/linkedin-accounts/${encodeURIComponent(accountId)}/rate-limits`,
+      '/sequences/linkedin-accounts/rate-limits',
       request,
-      { params: { user_id: userId } },
+      { params },
     )
   }
 
