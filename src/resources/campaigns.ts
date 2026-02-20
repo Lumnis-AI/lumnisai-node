@@ -441,7 +441,7 @@ export class CampaignsResource {
   }
 
   /**
-   * List all outreach assets for the tenant.
+   * List outreach assets, optionally filtered by user or campaign.
    */
   async listAssets(
     options?: ListAssetsOptions,
@@ -449,6 +449,10 @@ export class CampaignsResource {
     const params: Record<string, unknown> = {}
     if (options?.activeOnly !== undefined)
       params.active_only = options.activeOnly
+    if (options?.userId)
+      params.user_id = options.userId
+    if (options?.campaignId)
+      params.campaign_id = options.campaignId
     return this.http.get<OutreachAssetResponse[]>('/assets', { params })
   }
 

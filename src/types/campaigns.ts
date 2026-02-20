@@ -416,4 +416,6 @@ export interface ListPendingApprovalsOptions {
 
 export interface ListAssetsOptions {
   activeOnly?: boolean
+  userId?: string
+  campaignId?: string
 }
