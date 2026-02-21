@@ -218,6 +218,32 @@ export interface ValidatedCandidate {
 }
 
 /**
+ * Statistics from posts search (when posts search was used).
+ */
+export interface PostsSearchStats {
+  /** Posts search phase */
+  phase?: string
+  /** Credits used for posts search */
+  creditsUsed?: number
+  /** Total posts fetched */
+  postsFetched?: number
+  /** Posts committed for candidate extraction */
+  postsCommitted?: number
+  /** Duration of posts search in milliseconds */
+  durationMs?: number
+  /** Summary of exploration results */
+  explorationSummary?: string
+  /** Search strategies used */
+  searchStrategies?: any[]
+  /** Estimated ICP-matching candidates found */
+  estimatedIcpCandidates?: number
+  /** Metadata about committed posts */
+  committedPosts?: any[]
+  /** Suggested keywords for future searches */
+  suggestedKeywordsForFuture?: string[]
+}
+
+/**
  * Search statistics from deep people search.
  */
 export interface DeepSearchStats {
@@ -231,6 +257,8 @@ export interface DeepSearchStats {
   batchesComplete?: number
   /** Total batches */
   batchesTotal?: number
+  /** Posts search statistics (when posts search was used) */
+  postsSearch?: PostsSearchStats | null
 }
 
 /**
@@ -436,6 +464,16 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search when includeEngagementInScore is true.
    */
   engagementScoreWeight?: number
+
+  /**
+   * Whether to extract post authors as candidates from posts search.
+   * When true with directPostsExtractReactors=false and directPostsExtractCommenters=false,
+   * enables author-only mode at 1 credit/post (vs 5-10 credits/post with engagement).
+   * Finds content creators talking about relevant topics.
+   * @default true
+   * Used by deep_people_search.
+   */
+  postsExtractAuthor?: boolean
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Direct LinkedIn Post URLs (deep_people_search)

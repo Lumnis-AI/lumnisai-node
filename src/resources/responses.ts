@@ -458,6 +458,7 @@ export class ResponsesResource {
       postsEnableEnrichment?: boolean
       postsEnableFiltering?: boolean
       engagementScoreWeight?: number
+      postsExtractAuthor?: boolean
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -514,6 +515,8 @@ export class ResponsesResource {
         params.postsEnableFiltering = options.postsEnableFiltering
       if (options.engagementScoreWeight !== undefined)
         params.engagementScoreWeight = options.engagementScoreWeight
+      if (options.postsExtractAuthor !== undefined)
+        params.postsExtractAuthor = options.postsExtractAuthor
 
       if (Object.keys(params).length > 0)
         request.specializedAgentParams = params
