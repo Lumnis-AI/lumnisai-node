@@ -22,6 +22,7 @@ export interface CampaignGuardrails {
   daysOfWeek?: number[]
   minHoursBetweenActions?: number
   connectionIgnoredDays?: number
+  maxWarmupActions?: number
 }
 
 export type ApprovalMode = 'auto' | 'require'
@@ -355,6 +356,7 @@ export interface OutreachAssetCreate {
 }
 
 export interface OutreachAssetUpdate {
+  userId: string
   name?: string
   value?: string
   isActive?: boolean
@@ -363,6 +365,7 @@ export interface OutreachAssetUpdate {
 export interface OutreachAssetResponse {
   id: string
   tenantId: string
+  userId: string
   createdBy?: string | null
   name: string
   key: string
@@ -416,6 +419,6 @@ export interface ListPendingApprovalsOptions {
 
 export interface ListAssetsOptions {
   activeOnly?: boolean
-  userId?: string
+  userId: string
   campaignId?: string
 }

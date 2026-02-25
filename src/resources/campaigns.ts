@@ -441,27 +441,28 @@ export class CampaignsResource {
   }
 
   /**
-   * List outreach assets, optionally filtered by user or campaign.
+   * List outreach assets for a specific user.
    */
   async listAssets(
-    options?: ListAssetsOptions,
+    options: ListAssetsOptions,
   ): Promise<OutreachAssetResponse[]> {
-    const params: Record<string, unknown> = {}
-    if (options?.activeOnly !== undefined)
+    const params: Record<string, unknown> = {
+      user_id: options.userId,
+    }
+    if (options.activeOnly !== undefined)
       params.active_only = options.activeOnly
-    if (options?.userId)
-      params.user_id = options.userId
-    if (options?.campaignId)
+    if (options.campaignId)
       params.campaign_id = options.campaignId
     return this.http.get<OutreachAssetResponse[]>('/assets', { params })
   }
 
   /**
-   * Get an outreach asset by ID.
+   * Get an outreach asset by ID, scoped to user.
    */
-  async getAsset(assetId: string): Promise<OutreachAssetResponse> {
+  async getAsset(assetId: string, userId: string): Promise<OutreachAssetResponse> {
     return this.http.get<OutreachAssetResponse>(
       `/assets/${encodeURIComponent(assetId)}`,
+      { params: { user_id: userId } },
     )
   }
 
@@ -479,11 +480,12 @@ export class CampaignsResource {
   }
 
   /**
-   * Deactivate an outreach asset (soft delete).
+   * Deactivate an outreach asset (soft delete), scoped to user.
    */
-  async deactivateAsset(assetId: string): Promise<OutreachAssetResponse> {
+  async deactivateAsset(assetId: string, userId: string): Promise<OutreachAssetResponse> {
     return this.http.delete<OutreachAssetResponse>(
       `/assets/${encodeURIComponent(assetId)}`,
+      { params: { user_id: userId } },
     )
   }
 }
