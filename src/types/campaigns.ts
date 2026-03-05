@@ -288,6 +288,7 @@ export interface ApprovalActionRequest {
   userId: string
   notes?: string
   modifiedContent?: string
+  modifiedSubject?: string
 }
 
 export interface RejectActionRequest {
@@ -308,6 +309,7 @@ export interface CampaignBulkApprovalItem {
   notes?: string
   reason?: string
   modifiedContent?: string
+  modifiedSubject?: string
 }
 
 export interface CampaignBulkApprovalRequest {
