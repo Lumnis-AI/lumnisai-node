@@ -36,6 +36,7 @@ export interface ApprovalSettings {
   sendConnectionNoteLinkedin?: ApprovalMode
   sendInitialMessageLinkedin?: ApprovalMode
   sendFollowUpLinkedin?: ApprovalMode
+  sendInmailLinkedin?: ApprovalMode
   replyLinkedin?: ApprovalMode
   stop?: ApprovalMode
 }
@@ -220,6 +221,7 @@ export type CampaignActionType =
   | 'send_connection_note_linkedin'
   | 'send_initial_message_linkedin'
   | 'send_follow_up_linkedin'
+  | 'send_inmail_linkedin'
   | 'reply_linkedin'
   | 'meeting_booked'
   | 'wait'
