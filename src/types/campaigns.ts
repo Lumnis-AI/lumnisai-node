@@ -238,6 +238,7 @@ export type CampaignActionStatus =
   | 'failed'
   | 'cancelled'
   | 'cancelled_by_pause'
+  | 'paused'
 
 export interface CampaignActionResponse {
   id: string
@@ -325,6 +326,23 @@ export interface CampaignBulkApprovalResult {
 
 export interface CampaignBulkApprovalResponse {
   results: CampaignBulkApprovalResult[]
+}
+
+// ==================== Queued Action Management ====================
+
+export interface CancelQueuedRequest {
+  userId: string
+  reason?: string
+}
+
+export interface EditQueuedRequest {
+  userId: string
+  content: string
+  subject?: string
+}
+
+export interface PauseResumeQueuedRequest {
+  userId: string
 }
 
 // ==================== Outcome Recording ====================

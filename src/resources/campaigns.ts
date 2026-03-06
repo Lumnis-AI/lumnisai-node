@@ -13,6 +13,8 @@ import type {
   CampaignProspectResponse,
   CampaignResponse,
   CampaignUpdate,
+  CancelQueuedRequest,
+  EditQueuedRequest,
   LinkAssetsRequest,
   LinkedAssetsResponse,
   ListAssetsOptions,
@@ -24,6 +26,7 @@ import type {
   OutreachAssetCreate,
   OutreachAssetResponse,
   OutreachAssetUpdate,
+  PauseResumeQueuedRequest,
   PlaybookCreate,
   PlaybookResponse,
   PlaybookUpdate,
@@ -389,6 +392,60 @@ export class CampaignsResource {
   ): Promise<CampaignBulkApprovalResponse> {
     return this.http.post<CampaignBulkApprovalResponse>(
       '/campaigns/approvals/bulk',
+      request,
+    )
+  }
+
+  // ==================== Queued Action Management ====================
+
+  /**
+   * Cancel an approved/queued action before it is sent.
+   */
+  async cancelQueuedAction(
+    actionId: string,
+    request: CancelQueuedRequest,
+  ): Promise<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(
+      `/campaigns/actions/${encodeURIComponent(actionId)}/cancel-queued`,
+      request,
+    )
+  }
+
+  /**
+   * Edit content of an approved/queued action before it is sent.
+   */
+  async editQueuedAction(
+    actionId: string,
+    request: EditQueuedRequest,
+  ): Promise<Record<string, unknown>> {
+    return this.http.put<Record<string, unknown>>(
+      `/campaigns/actions/${encodeURIComponent(actionId)}/edit-queued`,
+      request,
+    )
+  }
+
+  /**
+   * Pause an approved/queued action — hold it from being sent.
+   */
+  async pauseQueuedAction(
+    actionId: string,
+    request: PauseResumeQueuedRequest,
+  ): Promise<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(
+      `/campaigns/actions/${encodeURIComponent(actionId)}/pause-queued`,
+      request,
+    )
+  }
+
+  /**
+   * Resume a paused action for sending.
+   */
+  async resumeQueuedAction(
+    actionId: string,
+    request: PauseResumeQueuedRequest,
+  ): Promise<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(
+      `/campaigns/actions/${encodeURIComponent(actionId)}/resume-queued`,
       request,
     )
   }
