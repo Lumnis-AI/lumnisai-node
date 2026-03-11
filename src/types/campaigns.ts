@@ -161,6 +161,7 @@ export type CampaignProspectState =
   | 'followed_up'
   | 'replied'
   | 'meeting_booked'
+  | 'intro_accepted'
   | 'stopped'
   | 'snoozed'
 
@@ -224,6 +225,7 @@ export type CampaignActionType =
   | 'send_inmail_linkedin'
   | 'reply_linkedin'
   | 'meeting_booked'
+  | 'intro_accepted'
   | 'wait'
   | 'stop'
 
@@ -347,7 +349,7 @@ export interface PauseResumeQueuedRequest {
 
 // ==================== Outcome Recording ====================
 
-export type CampaignOutcomeType = 'meeting_booked' | 'not_interested' | 'other'
+export type CampaignOutcomeType = 'meeting_booked' | 'intro_accepted' | 'not_interested' | 'other'
 
 export interface RecordOutcomeRequest {
   userId: string

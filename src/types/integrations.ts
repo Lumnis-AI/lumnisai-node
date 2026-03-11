@@ -239,6 +239,7 @@ export interface LinkedInSyncStatusResponse {
   connected: boolean
   syncInProgress: boolean
   lastSyncedAt?: string | null
+  linkedinProfileUrl?: string | null
   contactHistory?: ContactHistorySyncStatus | null
   connections?: ConnectionsSyncStatus | null
 }
