@@ -25,6 +25,8 @@ export type ApiProvider =
   | 'E2B_API_KEY'
   | 'AWS_ACCESS_KEY_ID'
   | 'AWS_SECRET_ACCESS_KEY'
+  | 'OPENROUTER_API_KEY'
+  | 'PROSPEO_API_KEY'
 
 export interface StoreApiKeyRequest {
   provider: ApiProvider

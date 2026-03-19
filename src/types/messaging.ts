@@ -185,6 +185,9 @@ export interface SendMessageRequest {
   projectId?: string | null
   prospectExternalId?: string | null
   organizationId?: string | null // Frontend organization ID for multi-org support
+  isHtml?: boolean
+  cc?: string[] | null
+  bcc?: string[] | null
 }
 
 /**

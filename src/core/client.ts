@@ -8,6 +8,9 @@ import type { SkillGuidelineCreate, SkillGuidelineListResponse, SkillGuidelineRe
 import type { ThreadListResponse, ThreadObject } from '../types/threads'
 import type { UserDeleteResponse, UserListResponse, UserResponse } from '../types/users'
 import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, LONG_POLL_TIMEOUT_S } from '../constants'
+import { CampaignsResource } from '../resources/campaigns'
+import { ContactRelationshipsResource } from '../resources/contact-relationships'
+import { EnrichmentResource } from '../resources/enrichment'
 import { ExternalAPIKeysResource } from '../resources/external-api-keys'
 import { FilesResource } from '../resources/files'
 import { IntegrationsResource } from '../resources/integrations'
@@ -16,7 +19,6 @@ import { MessagingResource } from '../resources/messaging'
 import { ModelPreferencesResource } from '../resources/model-preferences'
 import { PeopleResource } from '../resources/people'
 import { ResponsesResource } from '../resources/responses'
-import { CampaignsResource } from '../resources/campaigns'
 import { SequencesResource } from '../resources/sequences'
 import { SkillsResource } from '../resources/skills'
 import { TenantInfoResource } from '../resources/tenant-info'
@@ -67,6 +69,8 @@ export class LumnisClient {
   public readonly messaging: MessagingResource
   public readonly sequences: SequencesResource
   public readonly campaigns: CampaignsResource
+  public readonly contactRelationships: ContactRelationshipsResource
+  public readonly enrichment: EnrichmentResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -112,6 +116,8 @@ export class LumnisClient {
     this.messaging = new MessagingResource(this.http)
     this.sequences = new SequencesResource(this.http)
     this.campaigns = new CampaignsResource(this.http)
+    this.contactRelationships = new ContactRelationshipsResource(this.http)
+    this.enrichment = new EnrichmentResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {

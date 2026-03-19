@@ -46,6 +46,8 @@ export * from './errors'
 
 // Export resources
 export type { CampaignsResource } from './resources/campaigns'
+export type { ContactRelationshipsResource } from './resources/contact-relationships'
+export type { EnrichmentResource } from './resources/enrichment'
 export type { ExternalAPIKeysResource } from './resources/external-api-keys'
 export type { FilesResource } from './resources/files'
 export type { IntegrationsResource } from './resources/integrations'
@@ -63,6 +65,8 @@ export type { UsersResource } from './resources/users'
 // Export types
 export * from './types/campaigns'
 export * from './types/common'
+export * from './types/contact-relationships'
+export * from './types/enrichment'
 export * from './types/external-api-keys'
 export * from './types/files'
 export * from './types/integrations'
