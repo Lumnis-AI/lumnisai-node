@@ -28,6 +28,9 @@ import type {
   OutreachAssetUpdate,
   PauseResumeQueuedRequest,
   PlaybookCreate,
+  PlaybookGenerateJobResponse,
+  PlaybookGenerateJobStatusResponse,
+  PlaybookGenerateRequest,
   PlaybookResponse,
   PlaybookUpdate,
   PlaybookVersionResponse,
@@ -110,6 +113,33 @@ export class CampaignsResource {
   ): Promise<PlaybookVersionResponse[]> {
     return this.http.get<PlaybookVersionResponse[]>(
       `/campaigns/playbooks/${encodeURIComponent(playbookId)}/versions`,
+    )
+  }
+
+  // ==================== Playbook Generation ====================
+
+  /**
+   * Generate a personalized playbook from LinkedIn conversation history.
+   * Returns a job ID for polling — the generation runs asynchronously.
+   */
+  async generatePlaybook(
+    request: PlaybookGenerateRequest,
+  ): Promise<PlaybookGenerateJobResponse> {
+    return this.http.post<PlaybookGenerateJobResponse>(
+      '/campaigns/playbooks/generate',
+      request,
+    )
+  }
+
+  /**
+   * Poll the status of an async playbook generation job.
+   * When status is 'completed', the response includes the full playbook.
+   */
+  async getPlaybookGenerationStatus(
+    jobId: string,
+  ): Promise<PlaybookGenerateJobStatusResponse> {
+    return this.http.get<PlaybookGenerateJobStatusResponse>(
+      `/campaigns/playbooks/generate/${encodeURIComponent(jobId)}`,
     )
   }
 

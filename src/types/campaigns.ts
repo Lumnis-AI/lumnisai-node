@@ -18,6 +18,8 @@ export interface CampaignGuardrails {
   maxLikesPerDay?: number
   maxCommentsPerDay?: number
   enableReactionEngagement?: boolean
+  disableLikes?: boolean
+  disableComments?: boolean
   activeHours?: ActiveHours
   daysOfWeek?: number[]
   minHoursBetweenActions?: number
@@ -457,4 +459,36 @@ export interface ListAssetsOptions {
   activeOnly?: boolean
   userId: string
   campaignId?: string
+}
+
+// ==================== Playbook Generation ====================
+
+export interface PlaybookGenerateRequest {
+  userId: string
+  playbookId?: string
+  companyContext?: string
+  context?: string
+  historyMonths?: number
+  modelName?: string
+  maxChats?: number
+  playbookName?: string
+}
+
+export interface PlaybookGenerateJobResponse {
+  jobId: string
+  status: string
+  pollUrl: string
+  message: string
+}
+
+export interface PlaybookGenerateJobStatusResponse {
+  jobId: string
+  status: string
+  stage?: string | null
+  progress?: Record<string, unknown> | null
+  playbookId?: string | null
+  playbook?: PlaybookResponse | null
+  errorMessage?: string | null
+  createdAt: string
+  completedAt?: string | null
 }
