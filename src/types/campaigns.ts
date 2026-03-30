@@ -359,10 +359,22 @@ export interface RecordOutcomeRequest {
 
 // ==================== Metrics ====================
 
+export interface FunnelStage {
+  count: number
+  /** count / total_prospects as a ratio (0.0 – 1.0) */
+  rate: number
+}
+
+export interface StoppedBreakdown {
+  total: number
+  byReason: Record<string, number>
+}
+
 export interface CampaignMetricsResponse {
-  prospectStates: Record<string, number>
   totalProspects: number
-  conversionRates: Record<string, number>
+  funnel: Record<string, FunnelStage>
+  stopped: StoppedBreakdown
+  pendingApproval: number
   actionSummary: Record<string, number>
   actionTypes: Record<string, Record<string, number>>
 }
