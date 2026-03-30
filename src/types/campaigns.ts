@@ -487,6 +487,7 @@ export interface PlaybookGenerateJobStatusResponse {
   stage?: string | null
   progress?: Record<string, unknown> | null
   playbookId?: string | null
+  sourcePlaybookId?: string | null
   playbook?: PlaybookResponse | null
   errorMessage?: string | null
   createdAt: string
