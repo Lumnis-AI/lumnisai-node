@@ -374,9 +374,11 @@ export interface StoppedBreakdown {
 
 export interface CampaignMetricsResponse {
   totalProspects: number
+  activeProspects: number
   funnel: Record<string, FunnelStage>
   stopped: StoppedBreakdown
   pendingApproval: number
+  rateLimited: Record<string, number>
   actionSummary: Record<string, number>
   actionTypes: Record<string, Record<string, number>>
 }
