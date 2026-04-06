@@ -40,6 +40,9 @@ export interface ApprovalSettings {
   sendFollowUpLinkedin?: ApprovalMode
   sendInmailLinkedin?: ApprovalMode
   replyLinkedin?: ApprovalMode
+  sendInitialEmail?: ApprovalMode
+  sendFollowUpEmail?: ApprovalMode
+  replyEmail?: ApprovalMode
   stop?: ApprovalMode
 }
 
@@ -110,6 +113,7 @@ export interface CampaignCreate {
   guardrails?: CampaignGuardrails
   approvalSettings?: ApprovalSettings
   maxProspects?: number
+  emailPersonaId?: string
 }
 
 export interface CampaignUpdate {
@@ -121,6 +125,7 @@ export interface CampaignUpdate {
   guardrails?: CampaignGuardrails
   approvalSettings?: ApprovalSettings
   maxProspects?: number
+  emailPersonaId?: string
 }
 
 export interface CampaignResponse {
@@ -138,6 +143,7 @@ export interface CampaignResponse {
   status: CampaignStatus
   approvalSettings: ApprovalSettings
   maxProspects?: number | null
+  emailPersonaId?: string | null
   startedAt?: string | null
   pausedAt?: string | null
   terminalProspectCount: number
@@ -201,6 +207,7 @@ export interface CampaignProspectResponse {
   lastActionType?: string | null
   followUpCount: number
   senderAccountId?: string | null
+  senderMailboxId?: string | null
   pendingActionId?: string | null
   previousState?: string | null
   snoozedUntil?: string | null
@@ -226,6 +233,9 @@ export type CampaignActionType =
   | 'send_follow_up_linkedin'
   | 'send_inmail_linkedin'
   | 'reply_linkedin'
+  | 'send_initial_email'
+  | 'send_follow_up_email'
+  | 'reply_email'
   | 'meeting_booked'
   | 'intro_accepted'
   | 'wait'
