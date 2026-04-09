@@ -421,6 +421,7 @@ export class ResponsesResource {
    * @param options.excludeProfiles - LinkedIn URLs to exclude from results
    * @param options.excludePreviouslyContacted - Exclude previously contacted people
    * @param options.excludeNames - Names to exclude from results
+   * @param options.searchJobSignal - CrustData job-listing signal search (decision makers at hiring companies); true | false | 'auto'
    * @returns Response with structured_response containing:
    *   - candidates: Validated and scored candidates
    *   - criteria: Generated/reused criteria definitions and classification
@@ -459,6 +460,7 @@ export class ResponsesResource {
       postsEnableFiltering?: boolean
       engagementScoreWeight?: number
       postsExtractAuthor?: boolean
+      searchJobSignal?: boolean | 'auto'
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -517,6 +519,8 @@ export class ResponsesResource {
         params.engagementScoreWeight = options.engagementScoreWeight
       if (options.postsExtractAuthor !== undefined)
         params.postsExtractAuthor = options.postsExtractAuthor
+      if (options.searchJobSignal !== undefined)
+        params.searchJobSignal = options.searchJobSignal
 
       if (Object.keys(params).length > 0)
         request.specializedAgentParams = params

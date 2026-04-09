@@ -213,6 +213,11 @@ export interface ValidatedCandidate {
   engagementReasoning?: string | null
   /** Source of candidate data */
   source?: string
+  /** When source is job_signal: hiring-company context from CrustData job listings */
+  jobSignalMetadata?: {
+    companyId?: number | null
+    jobCount?: number
+  }
   /** Raw profile data */
   [key: string]: any
 }
@@ -259,6 +264,8 @@ export interface DeepSearchStats {
   batchesTotal?: number
   /** Posts search statistics (when posts search was used) */
   postsSearch?: PostsSearchStats | null
+  /** Job signal pipeline stats (companies found, confirmed, decision makers), when job signal search ran */
+  jobSignalPrefilterStats?: Record<string, unknown> | null
 }
 
 /**
@@ -543,6 +550,15 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search.
    */
   searchConnections?: boolean
+
+  /**
+   * Search for decision makers at companies with active hiring signals (CrustData job listings).
+   * Options: true (always), false (never), 'auto' (enable when profile search is classified as needed).
+   * Requires CrustData API access; uses additional credits (~15–50 per run).
+   * @default false
+   * Used by deep_people_search.
+   */
+  searchJobSignal?: boolean | 'auto'
 
   /**
    * Additional parameters for any specialized agent
