@@ -216,7 +216,17 @@ export interface ValidatedCandidate {
   /** When source is job_signal: hiring-company context from CrustData job listings */
   jobSignalMetadata?: {
     companyId?: number | null
+    companyName?: string
+    companyLinkedinUrl?: string
     jobCount?: number
+    signalSource?: string
+    sampleJobListings?: Array<{
+      title?: string
+      description?: string
+      workplaceType?: string
+      country?: string
+      dateAdded?: string
+    }>
   }
   /** Raw profile data */
   [key: string]: any
@@ -559,6 +569,17 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search.
    */
   searchJobSignal?: boolean | 'auto'
+
+  /**
+   * Maximum candidates to return per company. Prevents results
+   * dominated by a single large company. Applied after validation,
+   * keeps highest-scored per company.
+   * @default 3
+   * @minimum 1
+   * @maximum 1000
+   * Used by deep_people_search.
+   */
+  maxCandidatesPerCompany?: number
 
   /**
    * Additional parameters for any specialized agent
