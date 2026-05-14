@@ -10,6 +10,7 @@ import type { UserDeleteResponse, UserListResponse, UserResponse } from '../type
 import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, LONG_POLL_TIMEOUT_S } from '../constants'
 import { CampaignsResource } from '../resources/campaigns'
 import { ContactRelationshipsResource } from '../resources/contact-relationships'
+import { CrmResource } from '../resources/crm'
 import { EmailResource } from '../resources/email'
 import { EnrichmentResource } from '../resources/enrichment'
 import { ExternalAPIKeysResource } from '../resources/external-api-keys'
@@ -73,6 +74,7 @@ export class LumnisClient {
   public readonly contactRelationships: ContactRelationshipsResource
   public readonly enrichment: EnrichmentResource
   public readonly email: EmailResource
+  public readonly crm: CrmResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -121,6 +123,7 @@ export class LumnisClient {
     this.contactRelationships = new ContactRelationshipsResource(this.http)
     this.enrichment = new EnrichmentResource(this.http)
     this.email = new EmailResource(this.http)
+    this.crm = new CrmResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {

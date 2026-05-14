@@ -214,6 +214,13 @@ export interface CampaignProspectResponse {
   nextEvaluateAt?: string | null
   stopReason?: string | null
   stopReasoning?: string | null
+  /**
+   * CRM provider this prospect is linked to via the CRM Sync API.
+   * Populated by `client.crm.syncProspect` and `client.crm.matchBatch`.
+   */
+  crmProvider?: 'attio' | 'hubspot' | null
+  /** External CRM record id (Attio record_id, HubSpot contact id). */
+  crmRecordId?: string | null
   metadata: Record<string, unknown>
   version: number
   createdAt: string
