@@ -10,6 +10,7 @@ export interface SenderPersonaInput {
   firstName: string
   lastName: string
   title?: string
+  dailyVolumeCap?: number | null
 }
 
 export interface ContactDetailsInput {
@@ -46,6 +47,11 @@ export interface AddPersonaRequest {
   firstName: string
   lastName: string
   title?: string
+  dailyVolumeCap?: number | null
+}
+
+export interface UpdatePersonaRequest {
+  dailyVolumeCap?: number | null
 }
 
 export interface AddOrgMemberRequest {
@@ -76,8 +82,18 @@ export interface EmailOrgSettingsResponse {
   dailyVolume: number
   volumeMode: string
   physicalAddress?: string | null
-  senderPersonas: Array<Record<string, unknown>>
+  senderPersonas: EmailSenderPersona[]
   domainsActive: number
+  mailboxesReady: number
+}
+
+export interface EmailSenderPersona {
+  id: string
+  firstName: string
+  lastName: string
+  title?: string | null
+  dailyVolumeCap: number | null
+  mailboxCount: number
   mailboxesReady: number
 }
 
@@ -105,6 +121,16 @@ export interface EmailOrgListResponse {
 export interface AddPersonaResponse {
   personaId: string
   message: string
+}
+
+export interface UpdatePersonaResponse {
+  personaId: string
+  dailyVolumeCap: number | null
+  mailboxCount: number
+  requestedTargetMailboxes: number
+  mailboxesProvisioned: number
+  partial: boolean
+  shortfall: number
 }
 
 export interface AddOrgMemberResponse {

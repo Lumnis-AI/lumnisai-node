@@ -13,6 +13,8 @@ import type {
   EmailOrgSettingsUpdate,
   RemoveOrgMemberResponse,
   TeardownOrgResponse,
+  UpdatePersonaRequest,
+  UpdatePersonaResponse,
 } from '../types/email'
 
 /**
@@ -105,7 +107,8 @@ export class EmailResource {
 
   /**
    * Add a new sender persona to an organization.
-   * Provisions mailboxes on existing domains. Requires admin role.
+   * Provisions mailboxes on existing domains. Set `dailyVolumeCap` to `0`
+   * for a lazy persona with no mailbox provisioning. Requires admin role.
    */
   async addPersona(
     orgId: string,
@@ -115,6 +118,26 @@ export class EmailResource {
     return this.http.post<AddPersonaResponse>(
       `/email/organizations/${encodeURIComponent(orgId)}/personas`,
       persona,
+      { params: { user_id: userId } },
+    )
+  }
+
+  /**
+   * Update a sender persona's per-persona daily volume cap.
+   *
+   * Pass `{}` for a no-op read, `{ dailyVolumeCap: null }` to revert to the
+   * organization formula, or `{ dailyVolumeCap: number }` to set an explicit
+   * cap. Requires admin role.
+   */
+  async updatePersona(
+    orgId: string,
+    userId: string,
+    personaId: string,
+    update: UpdatePersonaRequest,
+  ): Promise<UpdatePersonaResponse> {
+    return this.http.patch<UpdatePersonaResponse>(
+      `/email/organizations/${encodeURIComponent(orgId)}/personas/${encodeURIComponent(personaId)}`,
+      update,
       { params: { user_id: userId } },
     )
   }
