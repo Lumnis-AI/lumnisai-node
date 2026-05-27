@@ -25,6 +25,14 @@ export interface CampaignGuardrails {
   minHoursBetweenActions?: number
   connectionIgnoredDays?: number
   maxWarmupActions?: number
+  /**
+   * Per-campaign toggle for operator-voice / customer-edit injection.
+   * Defaults to `true` server-side. Set `false` to opt a specific
+   * campaign out without flipping the global setting. The global
+   * `ENABLE_CUSTOMER_EDIT_INJECTION` server flag is ANDed with this
+   * as a kill-switch.
+   */
+  customerEditsEnabled?: boolean
 }
 
 export type ApprovalMode = 'auto' | 'require'
