@@ -1,6 +1,15 @@
 // Response API types
 import type { Message, UUID } from './common'
+import type {
+  AgentCostStats,
+  DiscoveryTrace,
+  PostEngagementData,
+  PostEngagementType,
+  ResolvedCompetitorTarget,
+} from './competitor-post-engagement'
 import type { PersonResult } from './people'
+
+export type { PostEngagementType } from './competitor-post-engagement'
 
 export type ResponseStatus = 'queued' | 'in_progress' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -211,6 +220,14 @@ export interface ValidatedCandidate {
   criteriaQualityWarnings?: string[]
   /** Explanation of LinkedIn engagement relevance (if applicable) */
   engagementReasoning?: string | null
+  /**
+   * LinkedIn posts this candidate engaged with (reacted or commented).
+   * One entry per post — if someone engaged with multiple competitor posts,
+   * this is a list with multiple entries (merged by merge_candidates_node).
+   * Populated by deep_people_search (posts / direct_posts) and
+   * competitor_post_engagement (with competitor provenance joined in).
+   */
+  engagementData?: PostEngagementData[]
   /** Source of candidate data */
   source?: string
   /** When source is job_signal: hiring-company context from CrustData job listings */
@@ -302,13 +319,35 @@ export interface StructuredResponse extends Record<string, any> {
   /** Deep people search output (when using deep_people_search agent) */
   preview?: DeepSearchPreview
   candidates?: ValidatedCandidate[]
+  /** Competitor post engagement output (when using competitor_post_engagement agent) */
+  competitorsResolved?: ResolvedCompetitorTarget[]
+  discoveredCompetitors?: string[]
+  discoveryTrace?: DiscoveryTrace
+  costStats?: AgentCostStats
+  provenanceAttached?: boolean
+  agentParams?: Record<string, any>
 }
 
 /**
  * Available specialized agents
  * Using a union type that can be extended with any string to support future agents
  */
-export type SpecializedAgentType = 'quick_people_search' | 'deep_people_search' | 'people_scoring' | (string & {})
+export type SpecializedAgentType =
+  | 'quick_people_search'
+  | 'deep_people_search'
+  | 'people_scoring'
+  | 'competitor_post_engagement'
+  | (string & {})
+
+/** Shared posts date-range enum (deep_people_search, competitor_post_engagement). */
+export type PostsDateRange =
+  | 'past-24h'
+  | 'past-week'
+  | 'past-month'
+  | 'past-quarter'
+  | 'past-year'
+
+/** @see {@link ./competitor-post-engagement.ts} for full agent reference (invocation, pipeline, output shape, costs). */
 
 /**
  * Parameters for specialized agent execution
@@ -316,8 +355,8 @@ export type SpecializedAgentType = 'quick_people_search' | 'deep_people_search' 
  */
 export interface SpecializedAgentParams {
   /**
-   * Maximum number of results (1-100)
-   * Agent-specific: For quick_people_search, limits the number of candidates returned
+   * Maximum number of results.
+   * Agent-specific ranges: quick_people_search (1-100), competitor_post_engagement (1-1000).
    */
   limit?: number
   /**
@@ -423,12 +462,12 @@ export interface SpecializedAgentParams {
   postsMaxKeywords?: number
 
   /**
-   * Date range for posts search.
-   * Options: 'past-24h', 'past-week', 'past-month', 'past-year'
+   * Date range for posts search / post selection.
+   * Options: 'past-24h', 'past-week', 'past-month', 'past-quarter', 'past-year'
    * @default 'past-month'
-   * Used by deep_people_search.
+   * Used by deep_people_search and competitor_post_engagement.
    */
-  postsDateRange?: 'past-24h' | 'past-week' | 'past-month' | 'past-year'
+  postsDateRange?: PostsDateRange
 
   /**
    * Engagement fields to fetch from posts.
@@ -581,6 +620,130 @@ export interface SpecializedAgentParams {
    */
   maxCandidatesPerCompany?: number
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Competitor Post Engagement (competitor_post_engagement)
+  //
+  // Scores people who reacted to / commented on competitor LinkedIn posts.
+  // Discovery mode (`company`): ReAct finds competitors via Exa + optional
+  // Firecrawl homepage fetch + Fiber kitchen-sink validation, then ranks by
+  // engagement. Explicit mode (`competitors`): skips discovery.
+  //
+  // Required API keys (BYO or platform):
+  //   - FIBER_API_KEY — company resolution + post listing (required)
+  //   - CRUSTDATA_API_KEY — reactor/commenter extraction + exec search
+  //   - FIRECRAWL_API_KEY — optional; improves discovery on ambiguous domains
+  //     (Exa-only fallback when absent; fetch_url_content returns {error})
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Single seed company (domain or name) for competitor discovery.
+   * The agent discovers competitors of this seed and analyzes their post engagement.
+   * Exactly one of `company` or `competitors` is required.
+   */
+  company?: string
+
+  /**
+   * Explicit list of competitor companies (domains or names). Skips discovery.
+   * Exactly one of `company` or `competitors` is required.
+   */
+  competitors?: string[]
+
+  /**
+   * Free-text summary of what the seed company does. Anchors competitor
+   * discovery so the ReAct doesn't misclassify ambiguous domains
+   * (e.g. "lumnis.ai" → academic AI vs sales automation).
+   * Used when `company` is provided (discovery mode).
+   *
+   * @example 'AI-powered outbound automation for B2B sales — books meetings via LinkedIn + email on autopilot'
+   */
+  companyContext?: string
+
+  /**
+   * Optional list of known-good example competitors. The discovery ReAct
+   * uses these as anchors and finds more in the same vertical.
+   * Used when `company` is provided (discovery mode).
+   *
+   * @example ['outreach.io', 'apollo.io']
+   */
+  companyExamples?: string[]
+
+  /**
+   * Which engagement types to extract from LinkedIn posts.
+   * Also drives post ranking (reactor-only ranks by reactions, not comments).
+   * @default ['reactor', 'commenter']
+   */
+  engagementTypes?: PostEngagementType[]
+
+  /**
+   * Include posts from competitor company pages.
+   * @default true
+   */
+  includeCompanyPosts?: boolean
+
+  /**
+   * Include posts from competitor executive personal pages.
+   * @default true
+   */
+  includeExecPosts?: boolean
+
+  /**
+   * Drop candidates whose current employer is one of the analyzed competitors.
+   * Competitor employees reacting to their own company's posts are noise.
+   * Set false for poaching / hiring use cases.
+   * @default true
+   */
+  excludeCompetitorEmployees?: boolean
+
+  /**
+   * Titles to count as 'executive' when searching exec posts via CrustData.
+   * OR-fanned as fuzzy title matches under the company LinkedIn URL.
+   * @default ['Founder', 'Co-Founder', 'CEO', 'CTO', 'COO', 'CFO', 'CRO', 'CMO', 'VP', 'Chief']
+   */
+  execTitles?: string[]
+
+  /**
+   * Max competitors to analyze after discovery (engagement-ranked).
+   * Only applied in discovery mode; explicit `competitors` lists are not capped.
+   * @default 10
+   * @minimum 1
+   * @maximum 50
+   */
+  maxCompetitors?: number
+
+  /**
+   * Max executives per competitor, ranked by total post engagement in window.
+   * @default 5
+   * @minimum 1
+   * @maximum 20
+   */
+  maxExecsPerTarget?: number
+
+  /**
+   * Max posts per competitor (union of company + exec posts), engagement-ranked.
+   * @default 5
+   * @minimum 1
+   * @maximum 20
+   */
+  maxPostsPerTarget?: number
+
+  /**
+   * Cap reactors extracted per post. Omit to use Crustdata API max (5000).
+   * Lower values speed up runs but reduce the candidate pool.
+   * Cost is unchanged — Crustdata bills per call regardless of count.
+   * @minimum 1
+   * @maximum 5000
+   */
+  maxReactorsPerPost?: number
+
+  /**
+   * Cap commenters extracted per post. Omit to use quality-cliff threshold (100).
+   * Hard-capped at 100: above 100 Crustdata returns thin profiles
+   * (name + headline only — no employer/skills/education), degrading scoring.
+   * @minimum 1
+   * @maximum 100
+   */
+  maxCommentsPerPost?: number
+
   /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates
@@ -600,7 +763,7 @@ export interface CreateResponseRequest {
   modelOverrides?: ModelOverrides
   /**
    * Route to a specialized agent instead of the main Lumnis agent
-   * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring'
+   * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring', 'competitor_post_engagement'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
@@ -745,4 +908,15 @@ export interface QuickPeopleSearchOutput {
  *
  * The SDK is designed to be flexible and accept any specialized agent
  * without requiring updates for each new agent type.
+ *
+ * For competitor_post_engagement, see {@link ./competitor-post-engagement.ts}.
  */
+
+export type {
+  AgentCostStats,
+  CompetitorPostEngagementOutput,
+  DiscoveryTrace,
+  PostEngagementData,
+  PostEngagementProvenance,
+  ResolvedCompetitorTarget,
+} from './competitor-post-engagement'

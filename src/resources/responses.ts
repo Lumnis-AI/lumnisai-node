@@ -1,4 +1,9 @@
 // Responses API resource
+//
+// Specialized agents:
+//   - quickPeopleSearch / deepPeopleSearch / peopleScoring — see method JSDoc below
+//   - competitorPostEngagement — full reference in src/types/competitor-post-engagement.ts
+//
 import type { Http } from '../core/http'
 import type { PaginationParams } from '../types/common'
 import type {
@@ -13,6 +18,8 @@ import type {
   CriterionDefinition,
   CriterionType,
   FeedbackListResponse,
+  PostEngagementType,
+  PostsDateRange,
   ResponseListResponse,
   ResponseObject,
   SpecializedAgentParams,
@@ -96,6 +103,84 @@ export class ResponsesResource {
       throw new ValidationError('criteria_classification missing or invalid varying_criteria')
     if (!Array.isArray(validationOnlyCriteria))
       throw new ValidationError('criteria_classification missing or invalid validation_only_criteria')
+  }
+
+  private _validateCompetitorPostEngagementParams(params: Record<string, any>): void {
+    const company = this._getParamValue<string>(params, 'company', 'company')
+    const competitors = this._getParamValue<string[]>(params, 'competitors', 'competitors')
+    const engagementTypes = this._getParamValue<PostEngagementType[]>(
+      params,
+      'engagementTypes',
+      'engagement_types',
+    )
+
+    const hasCompany = typeof company === 'string' && company.trim().length > 0
+    const hasCompetitors = Array.isArray(competitors) && competitors.length > 0
+    if (hasCompany === hasCompetitors) {
+      throw new ValidationError(
+        'Provide exactly one of `company` or `competitors` for competitor_post_engagement.',
+      )
+    }
+
+    if (engagementTypes !== undefined) {
+      if (!Array.isArray(engagementTypes) || engagementTypes.length === 0) {
+        throw new ValidationError('engagementTypes must contain at least one value')
+      }
+      const validTypes: PostEngagementType[] = ['reactor', 'commenter']
+      for (const type of engagementTypes) {
+        if (!validTypes.includes(type)) {
+          throw new ValidationError(
+            `Invalid engagementTypes value: ${String(type)}. Expected 'reactor' and/or 'commenter'.`,
+          )
+        }
+      }
+    }
+
+    const limit = this._getParamValue<number>(params, 'limit', 'limit')
+    if (limit !== undefined && (limit < 1 || limit > 1000)) {
+      throw new ValidationError('limit must be between 1 and 1000 for competitor_post_engagement')
+    }
+
+    const maxCompetitors = this._getParamValue<number>(params, 'maxCompetitors', 'max_competitors')
+    if (maxCompetitors !== undefined && (maxCompetitors < 1 || maxCompetitors > 50)) {
+      throw new ValidationError('maxCompetitors must be between 1 and 50')
+    }
+
+    const maxExecsPerTarget = this._getParamValue<number>(
+      params,
+      'maxExecsPerTarget',
+      'max_execs_per_target',
+    )
+    if (maxExecsPerTarget !== undefined && (maxExecsPerTarget < 1 || maxExecsPerTarget > 20)) {
+      throw new ValidationError('maxExecsPerTarget must be between 1 and 20')
+    }
+
+    const maxPostsPerTarget = this._getParamValue<number>(
+      params,
+      'maxPostsPerTarget',
+      'max_posts_per_target',
+    )
+    if (maxPostsPerTarget !== undefined && (maxPostsPerTarget < 1 || maxPostsPerTarget > 20)) {
+      throw new ValidationError('maxPostsPerTarget must be between 1 and 20')
+    }
+
+    const maxReactorsPerPost = this._getParamValue<number>(
+      params,
+      'maxReactorsPerPost',
+      'max_reactors_per_post',
+    )
+    if (maxReactorsPerPost !== undefined && (maxReactorsPerPost < 1 || maxReactorsPerPost > 5000)) {
+      throw new ValidationError('maxReactorsPerPost must be between 1 and 5000')
+    }
+
+    const maxCommentsPerPost = this._getParamValue<number>(
+      params,
+      'maxCommentsPerPost',
+      'max_comments_per_post',
+    )
+    if (maxCommentsPerPost !== undefined && (maxCommentsPerPost < 1 || maxCommentsPerPost > 100)) {
+      throw new ValidationError('maxCommentsPerPost must be between 1 and 100')
+    }
   }
 
   private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
@@ -211,6 +296,9 @@ export class ResponsesResource {
         )
       }
     }
+
+    if (specializedAgent === 'competitor_post_engagement')
+      this._validateCompetitorPostEngagementParams(rawParams)
   }
 
   private _validateFileReference(uri: string): void {
@@ -452,7 +540,7 @@ export class ResponsesResource {
       includeEngagementInScore?: boolean | 'auto'
       postsMaxResults?: number
       postsMaxKeywords?: number
-      postsDateRange?: 'past-24h' | 'past-week' | 'past-month' | 'past-year'
+      postsDateRange?: PostsDateRange
       postsFields?: 'reactors' | 'comments' | 'reactors,comments'
       postsMaxReactors?: number
       postsMaxComments?: number
@@ -587,6 +675,127 @@ export class ResponsesResource {
         request.specializedAgentParams!.addAndRunCriterion = options.addAndRunCriterion
     }
 
+    return this.create(request)
+  }
+
+  /**
+   * Score people who reacted to or commented on competitor LinkedIn posts.
+   *
+   * **Discovery mode** — pass `company`: ReAct discovers competitors (Exa +
+   * optional Firecrawl + Fiber validation), engagement-ranks them, extracts
+   * engagers from top posts, scores against the persona prompt.
+   *
+   * **Explicit mode** — pass `competitors`: skips discovery, uses your list.
+   *
+   * Requires `FIBER_API_KEY` + `CRUSTDATA_API_KEY`. `FIRECRAWL_API_KEY` is
+   * optional but improves discovery quality on ambiguous domains.
+   *
+   * @param query - Persona prompt in messages (e.g. "VP Sales at mid-market SaaS…")
+   * @param options - Exactly one of `company` or `competitors` is required
+   * @returns Response; poll with `get()` then read `structuredResponse` as
+   *   {@link CompetitorPostEngagementOutput}. See `src/types/competitor-post-engagement.ts`
+   *   for the full agent reference (pipeline, API keys, engagementData shape, costs).
+   */
+  async competitorPostEngagement(
+    query: string,
+    options: {
+      /** Seed company domain/name — triggers competitor discovery ReAct */
+      company?: string
+      /** Explicit competitor domains/names — skips discovery */
+      competitors?: string[]
+      /**
+       * What the seed company does — disambiguates ambiguous domains in discovery.
+       * @example 'AI-powered outbound automation for B2B sales'
+       */
+      companyContext?: string
+      /**
+       * Known-good competitors to anchor discovery vertical.
+       * @example ['outreach.io', 'apollo.io']
+       */
+      companyExamples?: string[]
+      /** Final scored candidate cap @default 100 @minimum 1 @maximum 1000 */
+      limit?: number
+      /** Post selection time window @default 'past-month' */
+      postsDateRange?: PostsDateRange
+      /** Which engagers to extract; also affects post ranking @default ['reactor', 'commenter'] */
+      engagementTypes?: PostEngagementType[]
+      /** Include competitor company page posts @default true */
+      includeCompanyPosts?: boolean
+      /** Include exec personal page posts @default true */
+      includeExecPosts?: boolean
+      /**
+       * Filter out people currently employed at analyzed competitors @default true.
+       * Set false for poaching / hiring use cases.
+       */
+      excludeCompetitorEmployees?: boolean
+      /** Exec title strings for CrustData exec search (OR-fanned fuzzy match) */
+      execTitles?: string[]
+      /** Cap after discovery engagement ranking @default 10 @maximum 50 */
+      maxCompetitors?: number
+      /** Top execs per competitor by engagement @default 5 @maximum 20 */
+      maxExecsPerTarget?: number
+      /** Top posts per competitor by engagement @default 5 @maximum 20 */
+      maxPostsPerTarget?: number
+      /**
+       * Reactors per post cap. Omit for API max (5000).
+       * Lower = faster runs, same Crustdata cost per call.
+       */
+      maxReactorsPerPost?: number
+      /**
+       * Commenters per post cap. Omit for default (100).
+       * Hard max 100 — above that Crustdata returns thin profiles.
+       */
+      maxCommentsPerPost?: number
+    },
+  ): Promise<CreateResponseResponse> {
+    const hasCompany = typeof options.company === 'string' && options.company.trim().length > 0
+    const hasCompetitors = Array.isArray(options.competitors) && options.competitors.length > 0
+    if (hasCompany === hasCompetitors) {
+      throw new ValidationError(
+        'Provide exactly one of `company` or `competitors` for competitorPostEngagement.',
+      )
+    }
+
+    const request: CreateResponseRequest = {
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'competitor_post_engagement',
+    }
+
+    const params: SpecializedAgentParams = {}
+    if (options.company)
+      params.company = options.company
+    if (options.competitors)
+      params.competitors = options.competitors
+    if (options.companyContext)
+      params.companyContext = options.companyContext
+    if (options.companyExamples)
+      params.companyExamples = options.companyExamples
+    if (options.limit !== undefined)
+      params.limit = options.limit
+    if (options.postsDateRange)
+      params.postsDateRange = options.postsDateRange
+    if (options.engagementTypes)
+      params.engagementTypes = options.engagementTypes
+    if (options.includeCompanyPosts !== undefined)
+      params.includeCompanyPosts = options.includeCompanyPosts
+    if (options.includeExecPosts !== undefined)
+      params.includeExecPosts = options.includeExecPosts
+    if (options.excludeCompetitorEmployees !== undefined)
+      params.excludeCompetitorEmployees = options.excludeCompetitorEmployees
+    if (options.execTitles)
+      params.execTitles = options.execTitles
+    if (options.maxCompetitors !== undefined)
+      params.maxCompetitors = options.maxCompetitors
+    if (options.maxExecsPerTarget !== undefined)
+      params.maxExecsPerTarget = options.maxExecsPerTarget
+    if (options.maxPostsPerTarget !== undefined)
+      params.maxPostsPerTarget = options.maxPostsPerTarget
+    if (options.maxReactorsPerPost !== undefined)
+      params.maxReactorsPerPost = options.maxReactorsPerPost
+    if (options.maxCommentsPerPost !== undefined)
+      params.maxCommentsPerPost = options.maxCommentsPerPost
+
+    request.specializedAgentParams = params
     return this.create(request)
   }
 }

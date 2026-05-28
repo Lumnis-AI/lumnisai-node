@@ -1,6 +1,16 @@
 // External API Keys types
 import type { ApiKeyMode } from './tenant-info'
 
+/**
+ * Supported BYO API key providers.
+ *
+ * Keys relevant to competitor_post_engagement:
+ * - `FIBER_API_KEY` — required; company resolution + post listing
+ * - `CRUSTDATA_API_KEY` — required; reactor/commenter extraction + exec search
+ * - `FIRECRAWL_API_KEY` — optional; homepage/comparison-page scraping during
+ *   competitor discovery (agent falls back to Exa-only when absent)
+ * - `EXA_API_KEY` — used by discovery ReAct web search
+ */
 export type ApiProvider =
   | 'OPENAI_API_KEY'
   | 'ANTHROPIC_API_KEY'
@@ -21,6 +31,8 @@ export type ApiProvider =
   | 'IBM_API_KEY'
   | 'PDL_API_KEY'
   | 'CRUSTDATA_API_KEY'
+  | 'FIBER_API_KEY'
+  | 'FIRECRAWL_API_KEY'
   | 'ENRICH_LAYER_API_KEY'
   | 'E2B_API_KEY'
   | 'AWS_ACCESS_KEY_ID'
