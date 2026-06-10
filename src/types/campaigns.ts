@@ -202,6 +202,28 @@ export interface AddProspectsResponse {
   warnings: ProspectWarning[]
 }
 
+export interface TransferProspectsRequest {
+  /** Campaign to move the prospects into. Must belong to the same user and not be stopped/completed. */
+  targetCampaignId: string
+  /**
+   * Campaign prospect ids (CampaignProspectResponse.id) to transfer.
+   * Omit to transfer every prospect in the source campaign.
+   */
+  prospectIds?: string[]
+}
+
+export type TransferSkipReason = 'not_found' | 'duplicate_in_target'
+
+export interface SkippedTransferProspect {
+  prospectId: string
+  reason: TransferSkipReason
+}
+
+export interface TransferProspectsResponse {
+  transferred: number
+  skipped: SkippedTransferProspect[]
+}
+
 export interface CampaignProspectResponse {
   id: string
   campaignId: string

@@ -37,6 +37,8 @@ import type {
   RecordOutcomeRequest,
   RejectActionRequest,
   SkipActionRequest,
+  TransferProspectsRequest,
+  TransferProspectsResponse,
 } from '../types/campaigns'
 
 /**
@@ -290,6 +292,25 @@ export class CampaignsResource {
   ): Promise<CampaignProspectDetailResponse> {
     return this.http.get<CampaignProspectDetailResponse>(
       `/campaigns/${encodeURIComponent(campaignId)}/prospects/${encodeURIComponent(prospectId)}`,
+    )
+  }
+
+  /**
+   * Transfer prospects from this campaign into another campaign owned by
+   * the same user. Omit prospectIds to transfer every prospect.
+   *
+   * In-flight actions are cancelled and the prospect is re-evaluated under
+   * the target campaign's playbook; its action history and email threads
+   * follow it. Prospects already present in the target are skipped and
+   * reported with a reason.
+   */
+  async transferProspects(
+    campaignId: string,
+    request: TransferProspectsRequest,
+  ): Promise<TransferProspectsResponse> {
+    return this.http.post<TransferProspectsResponse>(
+      `/campaigns/${encodeURIComponent(campaignId)}/prospects/transfer`,
+      request,
     )
   }
 
