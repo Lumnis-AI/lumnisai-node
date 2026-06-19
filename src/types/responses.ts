@@ -7,6 +7,7 @@ import type {
   PostEngagementType,
   ResolvedCompetitorTarget,
 } from './competitor-post-engagement'
+import type { RepEngagementStats } from './competitor-rep-engagement'
 import type { PersonResult } from './people'
 
 export type { PostEngagementType } from './competitor-post-engagement'
@@ -184,6 +185,38 @@ export interface CriterionResult {
 }
 
 /**
+ * One discrete buying-intent signal, broken out from the synthesized
+ * `intentScore`.
+ *
+ * ADDITIVE / OPTIONAL: the scalar `intentScore` + `intentReasoning` remain the
+ * source of truth for ranking. This list is an auditable, per-signal breakdown
+ * for the frontend.
+ */
+export interface IntentSignal {
+  /**
+   * Category of the signal, e.g. 'competitor_rep_engagement' (a competitor's rep
+   * engaged with this person's post), 'person_post_engagement' (they
+   * authored/reacted/commented), or 'company_hiring' (their employer is hiring
+   * for the initiative).
+   */
+  signalType: string
+  /** Concise who/what for this signal — e.g. 'AE @ Mercor commented on their post'. */
+  source: string
+  /** 0-10 strength of THIS signal alone (same rubric as intentScore). */
+  score: number
+  /**
+   * 0-1 — how much THIS signal should count toward overall intent (person-level
+   * > company-level). Used for analysis/aggregation, not ranking.
+   */
+  weight: number
+  /** Human recency of the signal, e.g. '3d ago', '6mo ago', 'unknown'. */
+  recency: string
+  /** One sentence on why THIS signal suggests they're in-market now. */
+  reasoning: string
+  [key: string]: any
+}
+
+/**
  * Validated candidate with scoring and criterion results.
  * Returned from deep_people_search after validation.
  */
@@ -220,6 +253,23 @@ export interface ValidatedCandidate {
   criteriaQualityWarnings?: string[]
   /** Explanation of LinkedIn engagement relevance (if applicable) */
   engagementReasoning?: string | null
+  /**
+   * Buying-intent score (0-10), SEPARATE from fit (`overallScore`). 0 when no
+   * intent signals are present. Synthesized from `intentSignals`.
+   */
+  intentScore?: number
+  /**
+   * User-facing buying-intent explanation (1-2 sentences per signal). Empty
+   * string when the candidate has no intent signals.
+   */
+  intentReasoning?: string
+  /**
+   * Per-signal buying-intent breakdown that `intentReasoning`/`intentScore`
+   * synthesize from. Empty/absent when no intent signals are present. Populated
+   * by deep_people_search validation, competitor_post_engagement, and
+   * competitor_rep_engagement.
+   */
+  intentSignals?: IntentSignal[]
   /**
    * LinkedIn posts this candidate engaged with (reacted or commented).
    * One entry per post — if someone engaged with multiple competitor posts,
@@ -326,6 +376,9 @@ export interface StructuredResponse extends Record<string, any> {
   costStats?: AgentCostStats
   provenanceAttached?: boolean
   agentParams?: Record<string, any>
+  /** Competitor rep engagement output (when using competitor_rep_engagement agent) */
+  resolutionWarnings?: string[]
+  repEngagementStats?: RepEngagementStats
 }
 
 /**
@@ -337,15 +390,30 @@ export type SpecializedAgentType =
   | 'deep_people_search'
   | 'people_scoring'
   | 'competitor_post_engagement'
+  | 'competitor_rep_engagement'
   | (string & {})
 
-/** Shared posts date-range enum (deep_people_search, competitor_post_engagement). */
+/**
+ * Shared posts date-range enum (deep_people_search, competitor_post_engagement,
+ * competitor_rep_engagement).
+ *
+ * The longer ranges (`past-6-months`, `past-2-years`, `past-3-years`) apply fully
+ * only to `competitor_rep_engagement` (engagement is sourced from Fiber profile
+ * history, ~3 years). For KEYWORD post search (deep_people_search posts +
+ * competitor_post_engagement), Crustdata's keyword-post API only supports up to
+ * `past-year`: `past-6-months` is honored window-exact via a client-side cutoff
+ * (may return fewer results), while `past-2-years`/`past-3-years` are CAPPED to
+ * `past-year`.
+ */
 export type PostsDateRange =
   | 'past-24h'
   | 'past-week'
   | 'past-month'
   | 'past-quarter'
+  | 'past-6-months'
   | 'past-year'
+  | 'past-2-years'
+  | 'past-3-years'
 
 /** @see {@link ./competitor-post-engagement.ts} for full agent reference (invocation, pipeline, output shape, costs). */
 
@@ -462,10 +530,21 @@ export interface SpecializedAgentParams {
   postsMaxKeywords?: number
 
   /**
-   * Date range for posts search / post selection.
-   * Options: 'past-24h', 'past-week', 'past-month', 'past-quarter', 'past-year'
+   * Date window for posts search / post selection / rep engagement lookback.
+   * Options: 'past-24h', 'past-week', 'past-month', 'past-quarter',
+   * 'past-6-months', 'past-year', 'past-2-years', 'past-3-years'.
    * @default 'past-month'
-   * Used by deep_people_search and competitor_post_engagement.
+   * Used by deep_people_search, competitor_post_engagement, and
+   * competitor_rep_engagement.
+   *
+   * For deep_people_search / competitor_post_engagement it bounds POST recency;
+   * for competitor_rep_engagement it bounds how far back each rep's OUTGOING
+   * engagement is considered (also bounded by `maxEngagementsPerRep`).
+   *
+   * NOTE on keyword post search: Crustdata's keyword-post API only supports up to
+   * 'past-year'. 'past-6-months' is honored window-exact via a client-side cutoff
+   * (may return fewer results); 'past-2-years'/'past-3-years' are capped to
+   * 'past-year'. The longer ranges apply fully only to competitor_rep_engagement.
    */
   postsDateRange?: PostsDateRange
 
@@ -668,9 +747,14 @@ export interface SpecializedAgentParams {
   companyExamples?: string[]
 
   /**
-   * Which engagement types to extract from LinkedIn posts.
-   * Also drives post ranking (reactor-only ranks by reactions, not comments).
+   * Which engagement signals to use. Options: 'reactor', 'commenter'.
    * @default ['reactor', 'commenter']
+   *
+   * For competitor_post_engagement: which engagers to extract FROM competitor
+   * posts (also drives post ranking — reactor-only ranks by reactions, not
+   * comments). For competitor_rep_engagement: which OUTGOING actions of the rep
+   * to harvest (reactor = posts they reacted to, commenter = posts they
+   * commented on).
    */
   engagementTypes?: PostEngagementType[]
 
@@ -745,6 +829,71 @@ export interface SpecializedAgentParams {
   maxCommentsPerPost?: number
 
   /**
+   * Enrich the full author/candidate pool BEFORE the LLM prefilter cuts it.
+   * Higher discrimination, higher cost (~20x enrichment spend on large runs).
+   * Default false enriches only prefilter survivors.
+   * @default false
+   * Used by competitor_post_engagement and competitor_rep_engagement.
+   */
+  thoroughEnrichment?: boolean
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Competitor Rep Engagement (competitor_rep_engagement)
+  //
+  // INVERSE of competitor_post_engagement: finds a competitor's SALES REPS and
+  // surfaces the AUTHORS of the posts those reps engage with (the reps' prospects).
+  // REUSES the competitor-sourcing params above (company / competitors /
+  // companyContext / companyExamples / excludeCompetitorEmployees /
+  // expandExclusionViaDiscovery / postsDateRange / thoroughEnrichment / limit) AND
+  // `engagementTypes` (reactor → posts the rep reacted to, commenter → posts the
+  // rep commented on). Only the rep-crawl knobs below are new.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Override the default sales-rep title list used to find competitor reps
+   * (e.g. Account Executive, SDR, BDR, Account Manager).
+   * Used by competitor_rep_engagement.
+   */
+  repTitles?: string[]
+
+  /**
+   * Max sales reps to crawl per competitor.
+   * @default 20
+   * @minimum 1
+   * @maximum 100
+   * Used by competitor_rep_engagement.
+   */
+  maxRepsPerCompetitor?: number
+
+  /**
+   * Max outgoing engagements (reactions + comments combined) harvested per rep.
+   * Bounds Fiber pagination cost.
+   * @default 100
+   * @minimum 1
+   * @maximum 1000
+   * Used by competitor_rep_engagement.
+   */
+  maxEngagementsPerRep?: number
+
+  /**
+   * Only mine a rep's engagement from AFTER they joined the competitor
+   * (engagement before their start date is a prior job's network, not
+   * current-role prospects). Effective lookback = min(postsDateRange,
+   * time-since-joined). Reps with unknown start date are not capped (kept).
+   * @default true
+   * Used by competitor_rep_engagement.
+   */
+  restrictEngagementToTenure?: boolean
+
+  /**
+   * In explicit-competitors mode, also run a names-only discovery to build a
+   * broader employee-exclusion set across the vertical.
+   * @default true
+   * Used by competitor_rep_engagement.
+   */
+  expandExclusionViaDiscovery?: boolean
+
+  /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates
    */
@@ -763,7 +912,8 @@ export interface CreateResponseRequest {
   modelOverrides?: ModelOverrides
   /**
    * Route to a specialized agent instead of the main Lumnis agent
-   * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring', 'competitor_post_engagement'
+   * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
+   * 'competitor_post_engagement', 'competitor_rep_engagement'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
@@ -920,3 +1070,9 @@ export type {
   PostEngagementProvenance,
   ResolvedCompetitorTarget,
 } from './competitor-post-engagement'
+
+export type {
+  CompetitorRepEngagementOutput,
+  RepEngagementData,
+  RepEngagementStats,
+} from './competitor-rep-engagement'

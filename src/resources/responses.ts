@@ -3,6 +3,7 @@
 // Specialized agents:
 //   - quickPeopleSearch / deepPeopleSearch / peopleScoring — see method JSDoc below
 //   - competitorPostEngagement — full reference in src/types/competitor-post-engagement.ts
+//   - competitorRepEngagement — full reference in src/types/competitor-rep-engagement.ts
 //
 import type { Http } from '../core/http'
 import type { PaginationParams } from '../types/common'
@@ -183,6 +184,66 @@ export class ResponsesResource {
     }
   }
 
+  private _validateCompetitorRepEngagementParams(params: Record<string, any>): void {
+    const company = this._getParamValue<string>(params, 'company', 'company')
+    const competitors = this._getParamValue<string[]>(params, 'competitors', 'competitors')
+    const engagementTypes = this._getParamValue<PostEngagementType[]>(
+      params,
+      'engagementTypes',
+      'engagement_types',
+    )
+
+    const hasCompany = typeof company === 'string' && company.trim().length > 0
+    const hasCompetitors = Array.isArray(competitors) && competitors.length > 0
+    if (hasCompany === hasCompetitors) {
+      throw new ValidationError(
+        'Provide exactly one of `company` or `competitors` for competitor_rep_engagement.',
+      )
+    }
+
+    if (engagementTypes !== undefined) {
+      if (!Array.isArray(engagementTypes) || engagementTypes.length === 0) {
+        throw new ValidationError('engagementTypes must contain at least one value')
+      }
+      const validTypes: PostEngagementType[] = ['reactor', 'commenter']
+      for (const type of engagementTypes) {
+        if (!validTypes.includes(type)) {
+          throw new ValidationError(
+            `Invalid engagementTypes value: ${String(type)}. Expected 'reactor' and/or 'commenter'.`,
+          )
+        }
+      }
+    }
+
+    const limit = this._getParamValue<number>(params, 'limit', 'limit')
+    if (limit !== undefined && (limit < 1 || limit > 1000)) {
+      throw new ValidationError('limit must be between 1 and 1000 for competitor_rep_engagement')
+    }
+
+    const maxCompetitors = this._getParamValue<number>(params, 'maxCompetitors', 'max_competitors')
+    if (maxCompetitors !== undefined && (maxCompetitors < 1 || maxCompetitors > 50)) {
+      throw new ValidationError('maxCompetitors must be between 1 and 50')
+    }
+
+    const maxRepsPerCompetitor = this._getParamValue<number>(
+      params,
+      'maxRepsPerCompetitor',
+      'max_reps_per_competitor',
+    )
+    if (maxRepsPerCompetitor !== undefined && (maxRepsPerCompetitor < 1 || maxRepsPerCompetitor > 100)) {
+      throw new ValidationError('maxRepsPerCompetitor must be between 1 and 100')
+    }
+
+    const maxEngagementsPerRep = this._getParamValue<number>(
+      params,
+      'maxEngagementsPerRep',
+      'max_engagements_per_rep',
+    )
+    if (maxEngagementsPerRep !== undefined && (maxEngagementsPerRep < 1 || maxEngagementsPerRep > 1000)) {
+      throw new ValidationError('maxEngagementsPerRep must be between 1 and 1000')
+    }
+  }
+
   private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
     if (!params)
       return
@@ -299,6 +360,9 @@ export class ResponsesResource {
 
     if (specializedAgent === 'competitor_post_engagement')
       this._validateCompetitorPostEngagementParams(rawParams)
+
+    if (specializedAgent === 'competitor_rep_engagement')
+      this._validateCompetitorRepEngagementParams(rawParams)
   }
 
   private _validateFileReference(uri: string): void {
@@ -794,6 +858,140 @@ export class ResponsesResource {
       params.maxReactorsPerPost = options.maxReactorsPerPost
     if (options.maxCommentsPerPost !== undefined)
       params.maxCommentsPerPost = options.maxCommentsPerPost
+
+    request.specializedAgentParams = params
+    return this.create(request)
+  }
+
+  /**
+   * Find a competitor's sales reps and surface the AUTHORS of the LinkedIn posts
+   * those reps engage with — i.e. the prospects the competitor is actively
+   * selling to. The INVERSE of {@link competitorPostEngagement}.
+   *
+   * **Discovery mode** — pass `company`: ReAct discovers competitors, then crawls
+   * each one's reps and harvests their outgoing engagement.
+   *
+   * **Explicit mode** — pass `competitors`: skips discovery, uses your list.
+   *
+   * Requires `FIBER_API_KEY` + `CRUSTDATA_API_KEY`.
+   *
+   * @param query - Persona prompt for the prospect-authors (e.g. "VP Eng at AI-native startups…")
+   * @param options - Exactly one of `company` or `competitors` is required
+   * @returns Response; poll with `get()` then read `structuredResponse` as
+   *   {@link CompetitorRepEngagementOutput}. See `src/types/competitor-rep-engagement.ts`
+   *   for the full agent reference (pipeline, API keys, engagementData shape).
+   */
+  async competitorRepEngagement(
+    query: string,
+    options: {
+      /** Seed company domain/name — triggers competitor discovery ReAct */
+      company?: string
+      /** Explicit competitor domains/names — skips discovery */
+      competitors?: string[]
+      /**
+       * What the seed company does — disambiguates ambiguous domains in discovery.
+       * @example 'AI-powered outbound automation for B2B sales'
+       */
+      companyContext?: string
+      /**
+       * Known-good competitors to anchor discovery vertical.
+       * @example ['outreach.io', 'apollo.io']
+       */
+      companyExamples?: string[]
+      /** Final scored candidate cap @default 100 @minimum 1 @maximum 1000 */
+      limit?: number
+      /**
+       * How far back to look at each rep's OUTGOING engagement @default 'past-month'.
+       * Longer windows (past-2-years/past-3-years) apply fully here.
+       */
+      postsDateRange?: PostsDateRange
+      /**
+       * Which OUTGOING engagement signals to harvest from each rep
+       * (reactor → reacted-to posts, commenter → commented-on posts).
+       * @default ['reactor', 'commenter']
+       */
+      engagementTypes?: PostEngagementType[]
+      /**
+       * Override the default sales-rep title list used to find competitor reps.
+       * @example ['Account Executive', 'SDR', 'Account Manager']
+       */
+      repTitles?: string[]
+      /** Max sales reps to crawl per competitor @default 20 @maximum 100 */
+      maxRepsPerCompetitor?: number
+      /**
+       * Max outgoing engagements (reactions + comments) harvested per rep.
+       * @default 100 @maximum 1000
+       */
+      maxEngagementsPerRep?: number
+      /**
+       * Only mine engagement from after a rep joined the competitor
+       * (effective lookback = min(postsDateRange, time-since-joined)).
+       * @default true
+       */
+      restrictEngagementToTenure?: boolean
+      /**
+       * Filter out authors currently employed at analyzed competitors @default true.
+       * Reps themselves are always dropped.
+       */
+      excludeCompetitorEmployees?: boolean
+      /**
+       * In explicit-competitors mode, also run a names-only discovery to build a
+       * broader employee-exclusion set across the vertical @default true.
+       */
+      expandExclusionViaDiscovery?: boolean
+      /** Cap after discovery engagement ranking @default 10 @maximum 50 */
+      maxCompetitors?: number
+      /**
+       * Enrich the full author pool BEFORE the LLM prefilter cuts it (~20x cost).
+       * @default false
+       */
+      thoroughEnrichment?: boolean
+    },
+  ): Promise<CreateResponseResponse> {
+    const hasCompany = typeof options.company === 'string' && options.company.trim().length > 0
+    const hasCompetitors = Array.isArray(options.competitors) && options.competitors.length > 0
+    if (hasCompany === hasCompetitors) {
+      throw new ValidationError(
+        'Provide exactly one of `company` or `competitors` for competitorRepEngagement.',
+      )
+    }
+
+    const request: CreateResponseRequest = {
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'competitor_rep_engagement',
+    }
+
+    const params: SpecializedAgentParams = {}
+    if (options.company)
+      params.company = options.company
+    if (options.competitors)
+      params.competitors = options.competitors
+    if (options.companyContext)
+      params.companyContext = options.companyContext
+    if (options.companyExamples)
+      params.companyExamples = options.companyExamples
+    if (options.limit !== undefined)
+      params.limit = options.limit
+    if (options.postsDateRange)
+      params.postsDateRange = options.postsDateRange
+    if (options.engagementTypes)
+      params.engagementTypes = options.engagementTypes
+    if (options.repTitles)
+      params.repTitles = options.repTitles
+    if (options.maxRepsPerCompetitor !== undefined)
+      params.maxRepsPerCompetitor = options.maxRepsPerCompetitor
+    if (options.maxEngagementsPerRep !== undefined)
+      params.maxEngagementsPerRep = options.maxEngagementsPerRep
+    if (options.restrictEngagementToTenure !== undefined)
+      params.restrictEngagementToTenure = options.restrictEngagementToTenure
+    if (options.excludeCompetitorEmployees !== undefined)
+      params.excludeCompetitorEmployees = options.excludeCompetitorEmployees
+    if (options.expandExclusionViaDiscovery !== undefined)
+      params.expandExclusionViaDiscovery = options.expandExclusionViaDiscovery
+    if (options.maxCompetitors !== undefined)
+      params.maxCompetitors = options.maxCompetitors
+    if (options.thoroughEnrichment !== undefined)
+      params.thoroughEnrichment = options.thoroughEnrichment
 
     request.specializedAgentParams = params
     return this.create(request)
