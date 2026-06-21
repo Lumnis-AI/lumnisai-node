@@ -4,6 +4,8 @@ import type {
   AddOrgMemberResponse,
   AddPersonaRequest,
   AddPersonaResponse,
+  ConnectInboxRequest,
+  ConnectInboxResponse,
   EmailOnboardRequest,
   EmailOnboardResponse,
   EmailOnboardStatusResponse,
@@ -11,6 +13,8 @@ import type {
   EmailOrgListResponse,
   EmailOrgSettingsResponse,
   EmailOrgSettingsUpdate,
+  MailboxUpdateRequest,
+  MailboxUpdateResponse,
   RemoveOrgMemberResponse,
   TeardownOrgResponse,
   UpdatePersonaRequest,
@@ -137,6 +141,39 @@ export class EmailResource {
   ): Promise<UpdatePersonaResponse> {
     return this.http.patch<UpdatePersonaResponse>(
       `/email/organizations/${encodeURIComponent(orgId)}/personas/${encodeURIComponent(personaId)}`,
+      update,
+      { params: { user_id: userId } },
+    )
+  }
+
+  // ==================== BYO Inboxes ====================
+
+  /**
+   * Connect a customer's own email inbox (Gmail/Outlook/IMAP) via Unipile.
+   *
+   * One call = one inbox. Returns a hosted-auth redirect URL; the user authes
+   * there and the connect webhook creates the `ready` mailbox. Call once per
+   * inbox to add multiple mailboxes.
+   */
+  async connectInbox(request: ConnectInboxRequest): Promise<ConnectInboxResponse> {
+    return this.http.post<ConnectInboxResponse>('/email/inboxes/connect', request)
+  }
+
+  /**
+   * Update a single mailbox's send settings (per-mailbox daily cap, pause).
+   *
+   * PATCH semantics — only provided fields change. The per-mailbox cap is the
+   * primary lever for BYO inboxes, which skip the InboxKit warmup ramp.
+   * Requires admin role on the org.
+   */
+  async updateMailbox(
+    orgId: string,
+    mailboxId: string,
+    userId: string,
+    update: MailboxUpdateRequest,
+  ): Promise<MailboxUpdateResponse> {
+    return this.http.patch<MailboxUpdateResponse>(
+      `/email/organizations/${encodeURIComponent(orgId)}/mailboxes/${encodeURIComponent(mailboxId)}`,
       update,
       { params: { user_id: userId } },
     )

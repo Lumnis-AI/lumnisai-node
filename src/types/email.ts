@@ -59,6 +59,35 @@ export interface AddOrgMemberRequest {
   role?: string
 }
 
+/**
+ * Connect a customer's own (BYO) email inbox (Gmail/Outlook/IMAP) via Unipile
+ * hosted auth. One call = one inbox; call once per inbox to add multiple.
+ */
+export interface ConnectInboxRequest {
+  userId: string
+  /** Email provider code: GOOGLE | OUTLOOK | MAIL. Defaults to GOOGLE. */
+  appName?: string
+  /** Base URL for OAuth success/failure callbacks. */
+  redirectUrl: string
+  /** Org to attach the mailbox to (defaults to the tenant BYO org). */
+  organizationId?: string
+  /** Persona to attach to (defaults to the shared BYO persona). */
+  personaId?: string
+  /** Initial per-mailbox daily cap; no hard ceiling, defaults to 40. */
+  dailySendCap?: number
+}
+
+/**
+ * Update a single mailbox's send settings. PATCH semantics — only provided
+ * fields change.
+ */
+export interface MailboxUpdateRequest {
+  /** Per-mailbox daily send cap (>= 1). No hard upper bound. */
+  dailySendCap?: number
+  /** Pause/unpause the mailbox. */
+  paused?: boolean
+}
+
 // ==================== Response Types ====================
 
 export interface EmailOnboardResponse {
@@ -143,4 +172,20 @@ export interface RemoveOrgMemberResponse {
 
 export interface TeardownOrgResponse {
   message: string
+}
+
+export interface ConnectInboxResponse {
+  /** Hosted-auth redirect URL; the user authes there to complete the connect. */
+  redirectUrl?: string | null
+  status?: string | null
+}
+
+export interface MailboxUpdateResponse {
+  mailboxId: string
+  emailAddress: string
+  status: string
+  dailySendCap: number
+  sendsToday: number
+  /** Where this mailbox came from: inboxkit | unipile | smtp. */
+  source: string
 }

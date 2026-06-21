@@ -19,6 +19,7 @@ import { IntegrationsResource } from '../resources/integrations'
 import { MCPServersResource } from '../resources/mcp-servers'
 import { MessagingResource } from '../resources/messaging'
 import { ModelPreferencesResource } from '../resources/model-preferences'
+import { OutreachResource } from '../resources/outreach'
 import { PeopleResource } from '../resources/people'
 import { ResponsesResource } from '../resources/responses'
 import { SequencesResource } from '../resources/sequences'
@@ -75,6 +76,7 @@ export class LumnisClient {
   public readonly enrichment: EnrichmentResource
   public readonly email: EmailResource
   public readonly crm: CrmResource
+  public readonly outreach: OutreachResource
 
   private readonly _scopedUserId?: string
   private readonly _defaultScope: Scope
@@ -124,6 +126,7 @@ export class LumnisClient {
     this.enrichment = new EnrichmentResource(this.http)
     this.email = new EmailResource(this.http)
     this.crm = new CrmResource(this.http)
+    this.outreach = new OutreachResource(this.http)
   }
 
   forUser(userId: string): LumnisClient {

@@ -77,6 +77,12 @@ export interface DisconnectRequest {
   userId: string
   appName: string
   provider?: ProviderType
+  /**
+   * Specific account to disconnect. Required to disconnect a single inbox when a
+   * user has multiple accounts for the same app (e.g. several BYO email
+   * mailboxes connected via Unipile). Omit for single-account apps.
+   */
+  accountId?: string
 }
 
 export interface DisconnectResponse {
