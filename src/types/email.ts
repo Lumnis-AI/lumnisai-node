@@ -88,6 +88,24 @@ export interface MailboxUpdateRequest {
   paused?: boolean
 }
 
+/** Which inboxes to return from `listInboxes`. */
+export type InboxKind = 'byo' | 'managed' | 'all'
+
+/**
+ * List the email inboxes (mailboxes) a user can send from.
+ */
+export interface ListInboxesParams {
+  /** User email or UUID (REQUIRED). */
+  userId: string
+  /**
+   * Which inboxes to return: 'byo' (customer-connected, the default),
+   * 'managed' (Lumnis-provisioned), or 'all'. Defaults to 'byo'.
+   */
+  kind?: InboxKind
+  /** Filter to a single organization. */
+  organizationId?: string
+}
+
 // ==================== Response Types ====================
 
 export interface EmailOnboardResponse {
@@ -188,4 +206,36 @@ export interface MailboxUpdateResponse {
   sendsToday: number
   /** Where this mailbox came from: inboxkit | unipile | smtp. */
   source: string
+}
+
+/** The sender persona an inbox is attached to (BYO inboxes share one). */
+export interface EmailInboxPersona {
+  id: string
+  firstName: string
+  lastName: string
+  title?: string | null
+}
+
+/** A single sendable mailbox in the user's connected-inboxes list. */
+export interface EmailInboxItem {
+  mailboxId: string
+  emailAddress: string
+  displayName: string
+  /** provisioning | warming | ready | paused | retired */
+  status: string
+  /** inboxkit | unipile | smtp */
+  source: string
+  dailySendCap: number
+  sendsToday: number
+  organizationId: string
+  organizationName: string
+  persona: EmailInboxPersona
+  /** ISO8601 timestamp. */
+  createdAt?: string | null
+}
+
+/** Connected inboxes for a user. `total` powers the count badge. */
+export interface EmailInboxListResponse {
+  inboxes: EmailInboxItem[]
+  total: number
 }

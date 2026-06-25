@@ -6,6 +6,7 @@ import type {
   AddPersonaResponse,
   ConnectInboxRequest,
   ConnectInboxResponse,
+  EmailInboxListResponse,
   EmailOnboardRequest,
   EmailOnboardResponse,
   EmailOnboardStatusResponse,
@@ -13,6 +14,7 @@ import type {
   EmailOrgListResponse,
   EmailOrgSettingsResponse,
   EmailOrgSettingsUpdate,
+  ListInboxesParams,
   MailboxUpdateRequest,
   MailboxUpdateResponse,
   RemoveOrgMemberResponse,
@@ -147,6 +149,24 @@ export class EmailResource {
   }
 
   // ==================== BYO Inboxes ====================
+
+  /**
+   * List the email inboxes (mailboxes) the user can send from.
+   *
+   * Scoped to mailboxes in organizations the user is a member of. Powers the
+   * connected-inboxes list and its count badge (`total`). `kind` defaults to
+   * `'byo'` (the customer's own connected inboxes); pass `'managed'` for
+   * Lumnis-provisioned inboxes or `'all'` for both.
+   */
+  async listInboxes(params: ListInboxesParams): Promise<EmailInboxListResponse> {
+    return this.http.get<EmailInboxListResponse>('/email/inboxes', {
+      params: {
+        user_id: params.userId,
+        kind: params.kind,
+        organization_id: params.organizationId,
+      },
+    })
+  }
 
   /**
    * Connect a customer's own email inbox (Gmail/Outlook/IMAP) via Unipile.
