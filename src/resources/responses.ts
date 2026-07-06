@@ -574,6 +574,10 @@ export class ResponsesResource {
    * @param options.excludePreviouslyContacted - Exclude previously contacted people
    * @param options.excludeNames - Names to exclude from results
    * @param options.searchJobSignal - CrustData job-listing signal search (decision makers at hiring companies); true | false | 'auto'
+   * @param options.deepVerify - Web verification for org/location/third-party criteria: 'auto' (default), 'always', or 'off'
+   * @param options.deepValidationUseRelevanceReranker - SLM relevance reranker for surfaced candidates (ranking-only); @default true
+   * @param options.deepValidationBackfillBelowCriteria - Pad with criteria-failed candidates when under count; @default true
+   * @param options.deepSearchCriteriaModel - Override criteria decomposition model (e.g. 'openai:gpt-5.4')
    * @returns Response with structured_response containing:
    *   - candidates: Validated and scored candidates
    *   - criteria: Generated/reused criteria definitions and classification
@@ -613,6 +617,10 @@ export class ResponsesResource {
       engagementScoreWeight?: number
       postsExtractAuthor?: boolean
       searchJobSignal?: boolean | 'auto'
+      deepVerify?: 'off' | 'auto' | 'always'
+      deepValidationUseRelevanceReranker?: boolean
+      deepValidationBackfillBelowCriteria?: boolean
+      deepSearchCriteriaModel?: string
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -620,8 +628,12 @@ export class ResponsesResource {
       specializedAgent: 'deep_people_search',
     }
 
+    const params: SpecializedAgentParams = {
+      deepValidationUseRelevanceReranker: options?.deepValidationUseRelevanceReranker ?? true,
+      deepValidationBackfillBelowCriteria: options?.deepValidationBackfillBelowCriteria ?? true,
+    }
+
     if (options) {
-      const params: SpecializedAgentParams = {}
       if (options.requestedCandidates !== undefined)
         params.requestedCandidates = options.requestedCandidates
       if (options.dataSources)
@@ -673,10 +685,13 @@ export class ResponsesResource {
         params.postsExtractAuthor = options.postsExtractAuthor
       if (options.searchJobSignal !== undefined)
         params.searchJobSignal = options.searchJobSignal
-
-      if (Object.keys(params).length > 0)
-        request.specializedAgentParams = params
+      if (options.deepVerify !== undefined)
+        params.deepVerify = options.deepVerify
+      if (options.deepSearchCriteriaModel)
+        params.deepSearchCriteriaModel = options.deepSearchCriteriaModel
     }
+
+    request.specializedAgentParams = params
 
     return this.create(request)
   }
@@ -695,6 +710,9 @@ export class ResponsesResource {
    *   Can be a string (criterion text) or an object with criterionText and optional suggestedColumnName.
    *   Example string: 'Must have 5+ years Python experience'
    *   Example object: { criterionText: 'Has ML experience', suggestedColumnName: 'ml_experience' }
+   * @param options.deepValidationUseRelevanceReranker - SLM relevance reranker for surfaced candidates (ranking-only); @default true
+   * @param options.deepValidationBackfillBelowCriteria - Pad with criteria-failed candidates when under count; @default true
+   * @param options.deepSearchCriteriaModel - Override criteria decomposition model (e.g. 'openai:gpt-5.4')
    * @returns Response with structured_response containing:
    *   - candidates: Scored candidates with validation results
    *   - criteria: Generated/reused criteria definitions and classification
@@ -714,6 +732,9 @@ export class ResponsesResource {
         weight?: number
       }
       addAndRunCriterion?: string | AddAndRunCriterionRequest
+      deepValidationUseRelevanceReranker?: boolean
+      deepValidationBackfillBelowCriteria?: boolean
+      deepSearchCriteriaModel?: string
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -721,6 +742,8 @@ export class ResponsesResource {
       specializedAgent: 'people_scoring',
       specializedAgentParams: {
         candidateProfiles,
+        deepValidationUseRelevanceReranker: options?.deepValidationUseRelevanceReranker ?? true,
+        deepValidationBackfillBelowCriteria: options?.deepValidationBackfillBelowCriteria ?? true,
       },
     }
 
@@ -737,6 +760,8 @@ export class ResponsesResource {
         request.specializedAgentParams!.addCriterion = options.addCriterion
       if (options.addAndRunCriterion)
         request.specializedAgentParams!.addAndRunCriterion = options.addAndRunCriterion
+      if (options.deepSearchCriteriaModel)
+        request.specializedAgentParams!.deepSearchCriteriaModel = options.deepSearchCriteriaModel
     }
 
     return this.create(request)
@@ -810,6 +835,8 @@ export class ResponsesResource {
        * Hard max 100 — above that Crustdata returns thin profiles.
        */
       maxCommentsPerPost?: number
+      /** SLM relevance reranker for surfaced candidates (ranking-only); @default true */
+      deepValidationUseRelevanceReranker?: boolean
     },
   ): Promise<CreateResponseResponse> {
     const hasCompany = typeof options.company === 'string' && options.company.trim().length > 0
@@ -825,7 +852,9 @@ export class ResponsesResource {
       specializedAgent: 'competitor_post_engagement',
     }
 
-    const params: SpecializedAgentParams = {}
+    const params: SpecializedAgentParams = {
+      deepValidationUseRelevanceReranker: options.deepValidationUseRelevanceReranker ?? true,
+    }
     if (options.company)
       params.company = options.company
     if (options.competitors)
@@ -946,6 +975,8 @@ export class ResponsesResource {
        * @default false
        */
       thoroughEnrichment?: boolean
+      /** SLM relevance reranker for surfaced candidates (ranking-only); @default true */
+      deepValidationUseRelevanceReranker?: boolean
     },
   ): Promise<CreateResponseResponse> {
     const hasCompany = typeof options.company === 'string' && options.company.trim().length > 0
@@ -961,7 +992,9 @@ export class ResponsesResource {
       specializedAgent: 'competitor_rep_engagement',
     }
 
-    const params: SpecializedAgentParams = {}
+    const params: SpecializedAgentParams = {
+      deepValidationUseRelevanceReranker: options.deepValidationUseRelevanceReranker ?? true,
+    }
     if (options.company)
       params.company = options.company
     if (options.competitors)

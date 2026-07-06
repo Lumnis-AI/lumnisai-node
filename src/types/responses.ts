@@ -48,12 +48,21 @@ export interface ModelOverrides {
 
 export type CriterionType = 'universal' | 'varying' | 'validation_only'
 
+/** SLM relevance reranker tier (deep_people_search / people_scoring output). */
+export type RelevanceTier = 'STRONG_MATCH' | 'PARTIAL_MATCH' | 'WEAK_MATCH'
+
 export interface CriterionDefinition {
   criterionId: string
   columnName: string
   criterionText: string
   criterionType: CriterionType
   weight: number
+  /** Set by the web-need classifier when deep verification runs (response output). */
+  requiresWebVerification?: boolean
+  /** Whose fact must be verified: person, organization, or location (response output). */
+  verificationEntity?: 'person' | 'organization' | 'location'
+  /** Positive fact question used for web verification (response output). */
+  verificationQuestion?: string
 }
 
 export interface CriteriaClassification {
@@ -227,9 +236,15 @@ export interface ValidatedCandidate {
   name: string
   /** LinkedIn profile URL */
   linkedinUrl?: string
-  /** Current job title */
+  /**
+   * Current job title. When the reranker runs, may reflect the resolved primary
+   * operating role (`primaryTitle`); see `enrichedCurrentTitle` for the pre-rerank value.
+   */
   currentTitle?: string
-  /** Current company */
+  /**
+   * Current company. When the reranker runs, may reflect the resolved primary
+   * employer (`primaryCompany`); see `enrichedCurrentCompany` for the pre-rerank value.
+   */
   currentCompany?: string
   /** Location */
   location?: string
@@ -270,6 +285,40 @@ export interface ValidatedCandidate {
    * competitor_rep_engagement.
    */
   intentSignals?: IntentSignal[]
+  /**
+   * Holistic relevance score (0-100) from the SLM reranker (on by default).
+   * Ranking-only: absent only when `deepValidationUseRelevanceReranker` was false;
+   * does not change `overallScore` or routing.
+   */
+  relevanceScore?: number
+  /** Coarse match tier paired with `relevanceScore`. */
+  relevanceTier?: RelevanceTier
+  /** One-line reranker justification grounded in candidate data. */
+  relevanceReason?: string
+  /**
+   * Primary current operating role from the reranker (main full-time job, not side/advisory).
+   * Also written to `currentTitle` when present.
+   */
+  primaryTitle?: string
+  /**
+   * Employer of the primary current role. Also written to `currentCompany` when present.
+   */
+  primaryCompany?: string
+  /** Pre-rerank `currentTitle` preserved when the reranker overwrites display fields. */
+  enrichedCurrentTitle?: string
+  /** Pre-rerank `currentCompany` preserved when the reranker overwrites display fields. */
+  enrichedCurrentCompany?: string
+  /**
+   * True when the candidate failed at least one universal or post_hard (must-have) criterion.
+   * Demoted candidates (`anyUniversalFailed` or `backfilled`) sort after passing ones regardless
+   * of relevance score.
+   */
+  anyUniversalFailed?: boolean
+  /**
+   * True when promoted from excluded to meet the requested count despite failing hard
+   * criteria. Such candidates sort after passing ones; use to segregate or badge them.
+   */
+  backfilled?: boolean
   /**
    * LinkedIn posts this candidate engaged with (reacted or commented).
    * One entry per post — if someone engaged with multiple competitor posts,
@@ -599,6 +648,43 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search when includeEngagementInScore is true.
    */
   engagementScoreWeight?: number
+
+  /**
+   * Web verification of criteria a LinkedIn profile cannot establish (customer/vendor
+   * status, agency type, city stats, grants, etc.).
+   * - 'auto' (default): classifier forces only web-only criteria to real web verification
+   * - 'always': force every non-profile criterion to web verification
+   * - 'off': legacy behavior (may clear web-only criteria from profile data alone)
+   * Used by deep_people_search.
+   */
+  deepVerify?: 'off' | 'auto' | 'always'
+
+  /**
+   * If true, re-rank surfaced results with a cheap SLM relevance judge (holistic fit
+   * to the request). Ranking-only: never changes routing/inclusion; `overallScore` and
+   * `intentScore` are untouched. Adds `relevanceScore` / `relevanceTier` per candidate.
+   * @default true
+   * Used by deep_people_search, people_scoring, competitor_post_engagement, and
+   * competitor_rep_engagement.
+   */
+  deepValidationUseRelevanceReranker?: boolean
+
+  /**
+   * When fewer candidates pass hard criteria than requested, pad the result list by
+   * promoting top-scoring excluded candidates (tagged `backfilled=true`). Set false for
+   * quality-over-count (return only passing candidates, even if fewer than requested).
+   * @default true
+   * Used by deep_people_search and people_scoring.
+   */
+  deepValidationBackfillBelowCriteria?: boolean
+
+  /**
+   * Override the model used for criteria decomposition (e.g. 'openai:gpt-5.4').
+   * Defaults to the configured deep-search model. Only changes the criteria generator,
+   * not fast_filter/validation.
+   * Used by deep_people_search and people_scoring.
+   */
+  deepSearchCriteriaModel?: string
 
   /**
    * Whether to extract post authors as candidates from posts search.

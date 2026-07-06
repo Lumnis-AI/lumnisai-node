@@ -20,6 +20,10 @@ export class EnrichmentResource {
    * @param params.onlyVerifiedEmail - Only return verified emails (default: true)
    * @param params.enrichMobile - Include mobile enrichment, 10x cost (default: false)
    * @param params.onlyVerifiedMobile - Only return verified mobiles (default: false)
+   * @param params.deepWebFallback - For vendor-misses, discover contacts from the
+   *   organization's official public web pages. Findings come back in
+   *   `result.deepWebFindings` with source URLs + confidence tiers and never
+   *   overwrite `person.email`. Pass false to disable (default: true)
    * @returns Promise resolving to enrichment results
    *
    * @example
