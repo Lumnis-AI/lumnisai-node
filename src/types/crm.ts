@@ -17,19 +17,74 @@
  *
  * Capability notes:
  * - `attio` supports both email and LinkedIn-URL person search.
- * - `hubspot` only supports email search; LinkedIn URLs are stored as a
- *   custom property on create but are not searchable through the
- *   reconciliation flow.
+ * - `hubspot` reconciles via email and name+company; LinkedIn URLs are
+ *   stored on create but are not directly searchable in live CRM calls.
+ *   The local `crm_contacts` ledger (see contacts sync) improves match-batch
+ *   and search/campaign exclusion without live HubSpot lookups.
  */
 export type CrmProvider = 'attio' | 'hubspot'
 
-// ==================== sync ====================
+// ==================== contacts ledger sync ====================
+
+/**
+ * Trigger a full mirror of the owner's CRM contact book into the local
+ * `crm_contacts` ledger (used for fast exclusion/matching; not a live CRM call).
+ */
+export interface CrmContactsSyncRequest {
+  /** UUID or email of the CRM owner whose connection is synced. */
+  userId: string
+  provider: CrmProvider
+}
+
+export interface CrmContactsSyncResponse {
+  /** `started` — sync claimed; `already_in_progress` — another run holds the lock. */
+  status: 'started' | 'already_in_progress'
+  provider: CrmProvider
+}
+
+/** Sync freshness for an owner+provider ledger mirror. */
+export interface CrmContactsSyncStatusResponse {
+  provider: CrmProvider
+  connected: boolean
+  syncInProgress: boolean
+  lastReconciledAt?: string | null
+  syncedCount: number
+  /** Null in v1 — LIST APIs do not return a reliable total. */
+  totalInCrm?: number | null
+}
+
+// ==================== exclusion grants (org sharing) ====================
+
+/**
+ * Grant or revoke a member's right to exclude against an owner's CRM ledger.
+ * Per-owner (all of that owner's synced CRMs inherit). Self-grant is a no-op.
+ */
+export interface CrmExclusionGrantRequest {
+  /** Member (UUID or email) who reads the owner's exclusion ledger. */
+  memberUserId: string
+  /** CRM owner (UUID or email) whose ledger is shared. */
+  ownerUserId: string
+}
+
+export interface CrmExclusionGrantResponse {
+  memberUserId: string
+  ownerUserId: string
+  status: 'granted' | 'revoked'
+}
+
+export interface CrmExclusionGrantListResponse {
+  memberUserId: string
+  ownerUserIds: string[]
+}
+
+// ==================== prospect sync ====================
 
 /**
  * Push one Lumnis prospect to the connected CRM.
  *
- * The prospect must already exist in a `campaign_prospects` row owned
- * by `userId`; the linkedin URL is the lookup key.
+ * Prefer a `campaign_prospects` row owned by `userId` when present; otherwise
+ * the server enriches from profile cache / Fiber and creates the CRM record.
+ * Provider-id/URN LinkedIn URLs are resolved to vanity before reconcile.
  */
 export interface CrmSyncProspectRequest {
   /** UUID or email of the user whose CRM connection executes the call. */

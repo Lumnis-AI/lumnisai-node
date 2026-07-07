@@ -1,7 +1,14 @@
 import type { Http } from '../core/http'
 import type {
+  CrmContactsSyncRequest,
+  CrmContactsSyncResponse,
+  CrmContactsSyncStatusResponse,
+  CrmExclusionGrantListResponse,
+  CrmExclusionGrantRequest,
+  CrmExclusionGrantResponse,
   CrmMatchBatchRequest,
   CrmMatchBatchResponse,
+  CrmProvider,
   CrmSyncProspectRequest,
   CrmSyncProspectResponse,
 } from '../types/crm'
@@ -9,7 +16,8 @@ import type {
 /**
  * Resource for the user-triggered CRM Sync API.
  *
- * Wraps `POST /v1/crm/prospects/sync` and `POST /v1/crm/prospects/match-batch`.
+ * Wraps prospect sync/match, contacts-ledger sync, and exclusion-grant routes
+ * under `/v1/crm`.
  *
  * The user identified by `userId` must already have an active CRM
  * connection (see `client.integrations.initiateConnection`). When the
@@ -19,8 +27,9 @@ import type {
  *
  * Failure modes worth handling:
  * - `409 crm_not_connected` — user hasn't connected the provider.
- * - `404 prospect_not_found` (sync only) — no `campaign_prospects` row
- *   matches `linkedinUrl` for this user.
+ * - `404 prospect_not_found` (sync) — profile could not be identified.
+ * - `422 linkedin_url_unresolved` (sync) — internal member-id URL could not
+ *   be resolved to a public vanity URL.
  * - `502 crm_upstream_error` — Attio/HubSpot returned an error.
  * - `503 crm_upstream_rate_limited` — upstream rate-limit; the response
  *   includes a `Retry-After` header.
@@ -35,6 +44,9 @@ export class CrmResource {
    * `(userId, provider, linkedinUrl)` return `linked` with the same
    * `crmRecordId`. Stale links (record deleted in the CRM) are detected
    * and re-created automatically.
+   *
+   * Works with or without a `campaign_prospects` row — search-sourced
+   * prospects are enriched from profile cache when needed.
    *
    * @example
    * ```typescript
@@ -56,16 +68,13 @@ export class CrmResource {
    * render a "linked" indicator for the ones that come back true.
    *
    * Layered cache on the server side: persistent positive matches are
-   * served from the `campaign_prospects.crm_record_id` column, negative
-   * results are served from a Redis cache (TTL configured by
-   * `CRM_MATCH_NEGATIVE_CACHE_TTL_SECONDS`). Only the leftover unknowns
-   * fan out to the live CRM, bounded by
+   * served from the `campaign_prospects.crm_record_id` column and the
+   * local `crm_contacts` ledger; negative results are served from a Redis
+   * cache (TTL configured by `CRM_MATCH_NEGATIVE_CACHE_TTL_SECONDS`).
+   * Only the leftover unknowns fan out to the live CRM, bounded by
    * `CRM_MATCH_LIVE_SEARCH_PARALLELISM`.
    *
-   * Note: HubSpot does not expose a LinkedIn-URL search field through
-   * Composio, so for `provider: 'hubspot'` URLs that aren't already in
-   * the persistent cache will always come back `linked: false`. The
-   * sync endpoint still reconciles via email when available.
+   * Provider-id/URN inputs are resolved to vanity before matching.
    *
    * @example
    * ```typescript
@@ -81,5 +90,57 @@ export class CrmResource {
    */
   async matchBatch(data: CrmMatchBatchRequest): Promise<CrmMatchBatchResponse> {
     return this.http.post<CrmMatchBatchResponse>('/crm/prospects/match-batch', data)
+  }
+
+  /**
+   * Trigger a full mirror of the owner's CRM contact book into the local
+   * `crm_contacts` ledger. Returns immediately (`202`); poll
+   * {@link getContactsSyncStatus} for progress.
+   */
+  async syncContacts(data: CrmContactsSyncRequest): Promise<CrmContactsSyncResponse> {
+    return this.http.post<CrmContactsSyncResponse>('/crm/contacts/sync', data)
+  }
+
+  /**
+   * Ledger sync freshness for an owner+provider: connection state, whether a
+   * sync is in progress, last reconcile time, and row count in the ledger.
+   */
+  async getContactsSyncStatus(
+    userId: string,
+    provider: CrmProvider,
+  ): Promise<CrmContactsSyncStatusResponse> {
+    return this.http.get<CrmContactsSyncStatusResponse>('/crm/contacts/sync-status', {
+      params: { userId, provider },
+    })
+  }
+
+  /**
+   * Grant a member the right to exclude against an owner's synced CRM ledger
+   * (all providers for that owner). Typically called by the FE on org join.
+   */
+  async grantExclusionGrant(
+    data: CrmExclusionGrantRequest,
+  ): Promise<CrmExclusionGrantResponse> {
+    return this.http.post<CrmExclusionGrantResponse>('/crm/exclusion-grants', data)
+  }
+
+  /**
+   * Revoke a member's access to an owner's CRM exclusion ledger.
+   */
+  async revokeExclusionGrant(
+    data: CrmExclusionGrantRequest,
+  ): Promise<CrmExclusionGrantResponse> {
+    return this.http.delete<CrmExclusionGrantResponse>('/crm/exclusion-grants', {
+      body: data,
+    })
+  }
+
+  /**
+   * List CRM owners whose exclusion ledger a member may read (via grants).
+   */
+  async listExclusionGrants(memberUserId: string): Promise<CrmExclusionGrantListResponse> {
+    return this.http.get<CrmExclusionGrantListResponse>('/crm/exclusion-grants', {
+      params: { memberUserId },
+    })
   }
 }

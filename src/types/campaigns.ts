@@ -33,6 +33,12 @@ export interface CampaignGuardrails {
    * as a kill-switch.
    */
   customerEditsEnabled?: boolean
+  /**
+   * When true (default), prospects already in the campaign owner's synced CRM
+   * are skipped at add-time (exact LinkedIn/email) and flagged on name+company.
+   * Set false to disable for this campaign.
+   */
+  excludeCrmContacts?: boolean
 }
 
 export type ApprovalMode = 'auto' | 'require'
@@ -200,6 +206,8 @@ export interface AddProspectsResponse {
   added: number
   skipped: number
   warnings: ProspectWarning[]
+  /** Prospects hard-skipped because they exactly matched the owner's CRM ledger. */
+  skippedInCrm?: number
 }
 
 export interface TransferProspectsRequest {

@@ -501,6 +501,26 @@ export interface SpecializedAgentParams {
    */
   excludeNames?: string[]
   /**
+   * Exclude people already in the acting user's synced CRM (`crm_contacts` ledger;
+   * local lookup only, never a live CRM call). Matches on exact LinkedIn URL and
+   * email; optionally name+company when `crmNameCompanyMatch` is true.
+   * @default true
+   * Used by deep_people_search (via `specializedAgentParams`) and quick_people_search
+   * (via top-level `options` on the create request).
+   */
+  excludeCrmContacts?: boolean
+  /**
+   * Narrow CRM exclusion to specific granted owners' ledgers (user id or email).
+   * Omitted = the acting user's own CRM only. Ungranted entries are ignored.
+   */
+  crmExclusionOwners?: string[]
+  /**
+   * Within CRM exclusion, also drop candidates matching by exact name + company
+   * (catches CRM contacts with no LinkedIn URL, especially HubSpot).
+   * @default true
+   */
+  crmNameCompanyMatch?: boolean
+  /**
    * Response ID to reuse criteria from.
    */
   reuseCriteriaFrom?: string

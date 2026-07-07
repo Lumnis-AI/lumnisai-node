@@ -522,6 +522,9 @@ export class ResponsesResource {
    * @param options - Optional search parameters
    * @param options.limit - Maximum number of results (1-100, default: 20)
    * @param options.dataSources - Specific data sources to use: ["PDL", "CORESIGNAL", "CRUST_DATA"]
+   * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default true (via request `options`)
+   * @param options.crmExclusionOwners - Granted owner ledgers to exclude against (user id or email)
+   * @param options.crmNameCompanyMatch - Also exclude by exact name+company; @default true
    * @returns Response with structured_response containing:
    *   - candidates: List of person results
    *   - totalFound: Total unique candidates found
@@ -534,6 +537,9 @@ export class ResponsesResource {
     options?: {
       limit?: number
       dataSources?: string[]
+      excludeCrmContacts?: boolean
+      crmExclusionOwners?: string[]
+      crmNameCompanyMatch?: boolean
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -550,6 +556,16 @@ export class ResponsesResource {
 
       if (Object.keys(params).length > 0)
         request.specializedAgentParams = params
+
+      const crmOptions: Record<string, unknown> = {}
+      if (options.excludeCrmContacts !== undefined)
+        crmOptions.excludeCrmContacts = options.excludeCrmContacts
+      if (options.crmExclusionOwners)
+        crmOptions.crmExclusionOwners = options.crmExclusionOwners
+      if (options.crmNameCompanyMatch !== undefined)
+        crmOptions.crmNameCompanyMatch = options.crmNameCompanyMatch
+      if (Object.keys(crmOptions).length > 0)
+        request.options = crmOptions
     }
 
     return this.create(request)
@@ -573,6 +589,9 @@ export class ResponsesResource {
    * @param options.excludeProfiles - LinkedIn URLs to exclude from results
    * @param options.excludePreviouslyContacted - Exclude previously contacted people
    * @param options.excludeNames - Names to exclude from results
+   * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default true
+   * @param options.crmExclusionOwners - Granted owner ledgers to exclude against (user id or email)
+   * @param options.crmNameCompanyMatch - Also exclude by exact name+company; @default true
    * @param options.searchJobSignal - CrustData job-listing signal search (decision makers at hiring companies); true | false | 'auto'
    * @param options.deepVerify - Web verification for org/location/third-party criteria: 'auto' (default), 'always', or 'off'
    * @param options.deepValidationUseRelevanceReranker - SLM relevance reranker for surfaced candidates (ranking-only); @default true
@@ -602,6 +621,9 @@ export class ResponsesResource {
       excludeProfiles?: string[]
       excludePreviouslyContacted?: boolean
       excludeNames?: string[]
+      excludeCrmContacts?: boolean
+      crmExclusionOwners?: string[]
+      crmNameCompanyMatch?: boolean
       // LinkedIn Posts Integration options
       searchProfiles?: boolean | 'auto'
       searchPosts?: boolean | 'auto'
@@ -656,6 +678,12 @@ export class ResponsesResource {
         params.excludePreviouslyContacted = options.excludePreviouslyContacted
       if (options.excludeNames)
         params.excludeNames = options.excludeNames
+      if (options.excludeCrmContacts !== undefined)
+        params.excludeCrmContacts = options.excludeCrmContacts
+      if (options.crmExclusionOwners)
+        params.crmExclusionOwners = options.crmExclusionOwners
+      if (options.crmNameCompanyMatch !== undefined)
+        params.crmNameCompanyMatch = options.crmNameCompanyMatch
       // LinkedIn Posts Integration parameters
       if (options.searchProfiles !== undefined)
         params.searchProfiles = options.searchProfiles
