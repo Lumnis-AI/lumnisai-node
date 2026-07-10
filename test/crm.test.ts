@@ -187,7 +187,7 @@ describe('crm', () => {
       const result = await crm.getContactsSyncStatus('owner@example.com', 'attio')
 
       expect(http.get).toHaveBeenCalledWith('/crm/contacts/sync-status', {
-        params: { userId: 'owner@example.com', provider: 'attio' },
+        params: { user_id: 'owner@example.com', provider: 'attio' },
       })
       expect(result.syncedCount).toBe(42)
     })
@@ -252,7 +252,7 @@ describe('crm', () => {
       const result = await crm.listExclusionGrants('member@example.com')
 
       expect(http.get).toHaveBeenCalledWith('/crm/exclusion-grants', {
-        params: { memberUserId: 'member@example.com' },
+        params: { member_user_id: 'member@example.com' },
       })
       expect(result.ownerUserIds).toHaveLength(2)
     })

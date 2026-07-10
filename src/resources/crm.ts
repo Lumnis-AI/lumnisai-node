@@ -110,7 +110,11 @@ export class CrmResource {
     provider: CrmProvider,
   ): Promise<CrmContactsSyncStatusResponse> {
     return this.http.get<CrmContactsSyncStatusResponse>('/crm/contacts/sync-status', {
-      params: { userId, provider },
+      // Backend requires snake_case query params (FastAPI `user_id`). Query
+      // keys are sent verbatim by the http layer (only bodies are snake-cased),
+      // so pass snake_case here like every other resource — a camelCase
+      // `userId` 422s with "field required: user_id".
+      params: { user_id: userId, provider },
     })
   }
 
@@ -140,7 +144,8 @@ export class CrmResource {
    */
   async listExclusionGrants(memberUserId: string): Promise<CrmExclusionGrantListResponse> {
     return this.http.get<CrmExclusionGrantListResponse>('/crm/exclusion-grants', {
-      params: { memberUserId },
+      // Backend requires snake_case `member_user_id` (see getContactsSyncStatus).
+      params: { member_user_id: memberUserId },
     })
   }
 }
