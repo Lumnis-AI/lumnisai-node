@@ -196,6 +196,25 @@ describe('lumnisAI', () => {
   })
 
   describe('error handling', () => {
+    it('surfaces FastAPI validation details for 422 responses', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        statusText: 'Unprocessable Entity',
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify({
+          detail: 'Invalid add_and_run_criterion: column_kind must be extraction or verdict',
+        }),
+      } as Response)
+
+      await expect(client.responses.create({
+        messages: [{ role: 'user', content: 'Add a column' }],
+      })).rejects.toMatchObject({
+        message: 'Invalid add_and_run_criterion: column_kind must be extraction or verdict',
+        statusCode: 422,
+      })
+    })
+
     it('should throw AuthenticationError for 401 status', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValueOnce({
         ok: false,

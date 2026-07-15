@@ -47,6 +47,7 @@ export interface ModelOverrides {
 }
 
 export type CriterionType = 'universal' | 'varying' | 'validation_only'
+export type ColumnKind = 'extraction' | 'verdict'
 
 /** SLM relevance reranker tier (deep_people_search / people_scoring output). */
 export type RelevanceTier = 'STRONG_MATCH' | 'PARTIAL_MATCH' | 'WEAK_MATCH'
@@ -57,6 +58,12 @@ export interface CriterionDefinition {
   criterionText: string
   criterionType: CriterionType
   weight: number
+  /** Expected answer shape for an extraction column. */
+  answerFormat?: string
+  /** Whether this criterion extracts a value or produces a score-bearing verdict. */
+  columnKind?: ColumnKind
+  /** Extraction columns are excluded from fit-score calculations. */
+  scoringRelevance?: 'none'
   /** Set by the web-need classifier when deep verification runs (response output). */
   requiresWebVerification?: boolean
   /** Whose fact must be verified: person, organization, or location (response output). */
@@ -84,6 +91,12 @@ export interface AddCriterionRequest {
 export interface AddAndRunCriterionRequest {
   criterionText: string
   suggestedColumnName?: string
+  /** Expected answer shape, such as "Exactly one of: A, B, C". */
+  answerFormat?: string
+  /** Extraction columns are score-neutral; verdict columns contribute to fit. */
+  columnKind?: ColumnKind
+  /** Verify the answer with web retrieval. Defaults to true. */
+  webVerify?: boolean
 }
 
 export interface CriteriaMetadata {
@@ -159,6 +172,10 @@ export interface CriterionResult {
   score: number
   /** Confidence in the evaluation (0.0-1.0) */
   confidence: number
+  /** Canonical cell value for extraction columns; null when no reliable answer was found. */
+  extractedValue?: string | null
+  /** Risk that the result is unsupported or hallucinated. */
+  hallucinationRisk?: 'low' | 'medium' | 'high'
 
   // Evidence and reasoning
   /** User-facing explanation of what was checked and found (min 2 sentences) */
@@ -260,8 +277,10 @@ export interface ValidatedCandidate {
   summary: string
 
   // Criterion results
-  /** Results for each evaluated criterion */
-  criterionResults: CriterionResult[]
+  /** Legacy criterion-results field returned by some scoring paths. */
+  criterionResults?: CriterionResult[]
+  /** Criterion results emitted by deep_people_search and people_scoring. */
+  deepCriteria?: CriterionResult[]
 
   // Metadata
   /** Warnings about criteria that couldn't be fully verified */
@@ -411,10 +430,17 @@ export interface DeepPeopleSearchOutput {
   searchStats?: DeepSearchStats
   /** Criteria metadata */
   criteria?: CriteriaMetadata
+  /** Definitions used by the scoring pipeline. */
+  criteriaDefinitions?: CriterionDefinition[]
+  /** Distinct canonical values for each extraction column. */
+  columnValues?: Record<string, string[]>
 }
 
 export interface StructuredResponse extends Record<string, any> {
   criteria?: CriteriaMetadata
+  criteriaDefinitions?: CriterionDefinition[]
+  /** Distinct canonical values for each extraction column. */
+  columnValues?: Record<string, string[]>
   /** Deep people search output (when using deep_people_search agent) */
   preview?: DeepSearchPreview
   candidates?: ValidatedCandidate[]
@@ -715,6 +741,18 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search.
    */
   postsExtractAuthor?: boolean
+
+  /**
+   * Whether to extract reactors from topic-based post search results.
+   * Omitted lets the post-search agent decide per committed post.
+   */
+  postsExtractReactors?: boolean
+
+  /**
+   * Whether to extract commenters from topic-based post search results.
+   * Omitted lets the post-search agent decide per committed post.
+   */
+  postsExtractCommenters?: boolean
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Direct LinkedIn Post URLs (deep_people_search)

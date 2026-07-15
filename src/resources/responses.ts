@@ -312,8 +312,8 @@ export class ResponsesResource {
     }
 
     if (addAndRunCriterion !== undefined) {
-      if (!reuseCriteriaFrom && !hasCriteria)
-        throw new ValidationError('add_and_run_criterion requires existing criteria (reuse or direct criteria).')
+      if (!reuseCriteriaFrom && !hasCriteria && specializedAgent !== 'people_scoring')
+        throw new ValidationError('add_and_run_criterion requires existing criteria outside people_scoring.')
 
       if (typeof addAndRunCriterion === 'string') {
         if (!addAndRunCriterion.trim())
@@ -326,11 +326,20 @@ export class ResponsesResource {
           'suggestedColumnName',
           'suggested_column_name',
         )
+        const answerFormat = this._getParamValue<string>(addAndRunCriterion, 'answerFormat', 'answer_format')
+        const columnKind = this._getParamValue<string>(addAndRunCriterion, 'columnKind', 'column_kind')
+        const webVerify = this._getParamValue<boolean>(addAndRunCriterion, 'webVerify', 'web_verify')
 
-        if (!criterionText || typeof criterionText !== 'string')
+        if (!criterionText || typeof criterionText !== 'string' || !criterionText.trim())
           throw new ValidationError('add_and_run_criterion object requires criterion_text')
         if (suggestedColumnName !== undefined && typeof suggestedColumnName !== 'string')
           throw new ValidationError('add_and_run_criterion suggested_column_name must be a string if provided')
+        if (answerFormat !== undefined && typeof answerFormat !== 'string')
+          throw new ValidationError('add_and_run_criterion answer_format must be a string if provided')
+        if (columnKind !== undefined && columnKind !== 'extraction' && columnKind !== 'verdict')
+          throw new ValidationError('add_and_run_criterion column_kind must be extraction or verdict')
+        if (webVerify !== undefined && typeof webVerify !== 'boolean')
+          throw new ValidationError('add_and_run_criterion web_verify must be a boolean if provided')
       }
       else {
         throw new ValidationError('add_and_run_criterion must be a string or an object')
@@ -583,7 +592,9 @@ export class ResponsesResource {
    * @param options.runSingleCriterion - Run only a single criterion by ID
    * @param options.addCriterion - Add a new criterion to existing criteria
    * @param options.addAndRunCriterion - Add criterion from text and run only that criterion.
-   *   Can be a string (criterion text) or an object with criterionText and optional suggestedColumnName.
+   *   Can be a string or an object with criterionText, columnKind, answerFormat, webVerify,
+   *   and optional suggestedColumnName. Deep search still requires an existing criteria set;
+   *   use peopleScoring to bootstrap a column on a plain candidate list.
    *   Example string: 'Must have 5+ years Python experience'
    *   Example object: { criterionText: 'Has ML experience', suggestedColumnName: 'ml_experience' }
    * @param options.excludeProfiles - LinkedIn URLs to exclude from results
@@ -638,6 +649,8 @@ export class ResponsesResource {
       postsEnableFiltering?: boolean
       engagementScoreWeight?: number
       postsExtractAuthor?: boolean
+      postsExtractReactors?: boolean
+      postsExtractCommenters?: boolean
       searchJobSignal?: boolean | 'auto'
       deepVerify?: 'off' | 'auto' | 'always'
       deepValidationUseRelevanceReranker?: boolean
@@ -711,6 +724,10 @@ export class ResponsesResource {
         params.engagementScoreWeight = options.engagementScoreWeight
       if (options.postsExtractAuthor !== undefined)
         params.postsExtractAuthor = options.postsExtractAuthor
+      if (options.postsExtractReactors !== undefined)
+        params.postsExtractReactors = options.postsExtractReactors
+      if (options.postsExtractCommenters !== undefined)
+        params.postsExtractCommenters = options.postsExtractCommenters
       if (options.searchJobSignal !== undefined)
         params.searchJobSignal = options.searchJobSignal
       if (options.deepVerify !== undefined)
@@ -735,7 +752,8 @@ export class ResponsesResource {
    * @param options.runSingleCriterion - Run only a single criterion by ID
    * @param options.addCriterion - Add a new criterion to existing criteria
    * @param options.addAndRunCriterion - Add criterion from text and run only that criterion.
-   *   Can be a string (criterion text) or an object with criterionText and optional suggestedColumnName.
+   *   Can be a string or an object with criterionText, columnKind, answerFormat, webVerify,
+   *   and optional suggestedColumnName. No existing criteria are required.
    *   Example string: 'Must have 5+ years Python experience'
    *   Example object: { criterionText: 'Has ML experience', suggestedColumnName: 'ml_experience' }
    * @param options.deepValidationUseRelevanceReranker - SLM relevance reranker for surfaced candidates (ranking-only); @default true

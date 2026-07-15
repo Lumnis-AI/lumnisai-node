@@ -63,7 +63,12 @@ export class Http {
     }
     catch {}
 
-    const errorMsg = detail?.error?.message || `Server error: ${response.status}`
+    const responseDetail = detail?.detail
+    const errorMsg = detail?.error?.message
+      || detail?.message
+      || (typeof responseDetail === 'string' ? responseDetail : undefined)
+      || (responseDetail !== undefined ? JSON.stringify(responseDetail) : undefined)
+      || `Server error: ${response.status}`
 
     switch (response.status) {
       case 401:
