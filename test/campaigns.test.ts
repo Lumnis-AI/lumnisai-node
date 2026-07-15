@@ -227,6 +227,47 @@ describe('campaigns', () => {
         { targetCampaignId: 'c-456' },
       )
     })
+
+    it('pauses prospects selected by state', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({ affected: 149 })
+
+      const result = await campaigns.pauseProspects('c-123', {
+        states: ['not_connected'],
+        reason: 'Hold connection requests',
+      })
+
+      expect(http.post).toHaveBeenCalledWith(
+        '/campaigns/c-123/prospects/pause',
+        { states: ['not_connected'], reason: 'Hold connection requests' },
+      )
+      expect(result.affected).toBe(149)
+    })
+
+    it('resumes selected prospects or all paused prospects', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({ affected: 2 })
+
+      await campaigns.resumeProspects('c-123', {
+        prospectIds: ['cp-1', 'cp-2'],
+      })
+      await campaigns.resumeProspects('c-123')
+
+      expect(http.post).toHaveBeenNthCalledWith(
+        1,
+        '/campaigns/c-123/prospects/resume',
+        { prospectIds: ['cp-1', 'cp-2'] },
+      )
+      expect(http.post).toHaveBeenNthCalledWith(
+        2,
+        '/campaigns/c-123/prospects/resume',
+        {},
+      )
+    })
   })
 
   describe('approvals', () => {

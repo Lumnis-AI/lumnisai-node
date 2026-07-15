@@ -20,6 +20,12 @@ export interface CampaignGuardrails {
   enableReactionEngagement?: boolean
   disableLikes?: boolean
   disableComments?: boolean
+  /**
+   * Restrict campaign outreach to a specific channel. Defaults to `both`.
+   * Email-only campaigns cannot select LinkedIn actions, and LinkedIn-only
+   * campaigns cannot select email actions.
+   */
+  channel?: 'both' | 'email_only' | 'linkedin_only'
   activeHours?: ActiveHours
   daysOfWeek?: number[]
   minHoursBetweenActions?: number
@@ -186,6 +192,7 @@ export type CampaignProspectState =
   | 'intro_accepted'
   | 'stopped'
   | 'snoozed'
+  | 'paused'
 
 export interface CampaignProspectInput {
   prospectId: string
@@ -230,6 +237,23 @@ export interface SkippedTransferProspect {
 export interface TransferProspectsResponse {
   transferred: number
   skipped: SkippedTransferProspect[]
+}
+
+export interface PauseProspectsRequest {
+  /** Campaign prospect ids (CampaignProspectResponse.id) to pause. */
+  prospectIds?: string[]
+  /** Pause every prospect currently in one of these states. */
+  states?: CampaignProspectState[]
+  reason?: string
+}
+
+export interface ResumeProspectsRequest {
+  /** Omit to resume every paused prospect in the campaign. */
+  prospectIds?: string[]
+}
+
+export interface PauseProspectsResponse {
+  affected: number
 }
 
 export interface CampaignProspectResponse {

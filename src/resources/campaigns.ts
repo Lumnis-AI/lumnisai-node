@@ -26,6 +26,8 @@ import type {
   OutreachAssetCreate,
   OutreachAssetResponse,
   OutreachAssetUpdate,
+  PauseProspectsRequest,
+  PauseProspectsResponse,
   PauseResumeQueuedRequest,
   PlaybookCreate,
   PlaybookGenerateJobResponse,
@@ -36,6 +38,7 @@ import type {
   PlaybookVersionResponse,
   RecordOutcomeRequest,
   RejectActionRequest,
+  ResumeProspectsRequest,
   SkipActionRequest,
   TransferProspectsRequest,
   TransferProspectsResponse,
@@ -310,6 +313,34 @@ export class CampaignsResource {
   ): Promise<TransferProspectsResponse> {
     return this.http.post<TransferProspectsResponse>(
       `/campaigns/${encodeURIComponent(campaignId)}/prospects/transfer`,
+      request,
+    )
+  }
+
+  /**
+   * Pause selected campaign prospects, or every prospect in the supplied
+   * states. Paused prospects are skipped until explicitly resumed.
+   */
+  async pauseProspects(
+    campaignId: string,
+    request: PauseProspectsRequest,
+  ): Promise<PauseProspectsResponse> {
+    return this.http.post<PauseProspectsResponse>(
+      `/campaigns/${encodeURIComponent(campaignId)}/prospects/pause`,
+      request,
+    )
+  }
+
+  /**
+   * Resume selected paused prospects. Omit prospectIds to resume every paused
+   * prospect in the campaign.
+   */
+  async resumeProspects(
+    campaignId: string,
+    request: ResumeProspectsRequest = {},
+  ): Promise<PauseProspectsResponse> {
+    return this.http.post<PauseProspectsResponse>(
+      `/campaigns/${encodeURIComponent(campaignId)}/prospects/resume`,
       request,
     )
   }
