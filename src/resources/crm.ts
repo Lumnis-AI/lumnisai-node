@@ -45,8 +45,9 @@ export class CrmResource {
    * `crmRecordId`. Stale links (record deleted in the CRM) are detected
    * and re-created automatically.
    *
-   * Works with or without a `campaign_prospects` row — search-sourced
-   * prospects are enriched from profile cache when needed.
+   * Pass `contact` to avoid re-deriving attributes the caller already has.
+   * Any omitted contact fields are gap-filled from campaign/profile data when
+   * available. `customFields` keys are provider-native property names.
    *
    * @example
    * ```typescript
@@ -54,6 +55,13 @@ export class CrmResource {
    *   userId: 'user@example.com',
    *   provider: 'attio',
    *   linkedinUrl: 'https://www.linkedin.com/in/jane-doe/',
+   *   contact: {
+   *     fullName: 'Jane Doe',
+   *     email: 'jane@example.com',
+   *     jobTitle: 'VP of Sales',
+   *     company: 'Acme',
+   *   },
+   *   customFields: { lead_source: 'Lumnis' },
    * })
    * console.log(result.action, result.crmUrl)
    * ```

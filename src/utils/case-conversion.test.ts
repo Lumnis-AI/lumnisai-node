@@ -73,5 +73,23 @@ describe('case-conversion', () => {
       expect(result.prospects[0].prospect_id).toBe(uuid)
       expect(result.prospects[0].linkedin_url).toBe('https://linkedin.com/in/test')
     })
+
+    it('preserves provider-native keys inside customFields', () => {
+      const input = {
+        userId: '123',
+        customFields: {
+          lead_source: 'Lumnis',
+          CaseSensitiveProperty: 'value',
+        },
+      }
+
+      expect(toSnakeCase<any>(input)).toEqual({
+        user_id: '123',
+        custom_fields: {
+          lead_source: 'Lumnis',
+          CaseSensitiveProperty: 'value',
+        },
+      })
+    })
   })
 })

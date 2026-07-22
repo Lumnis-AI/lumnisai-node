@@ -68,6 +68,49 @@ describe('crm', () => {
       expect(result.action).toBe('linked')
     })
 
+    it('passes contact attributes and custom CRM fields through', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({
+        action: 'created',
+        crmRecordId: 'rec_123',
+        crmUrl: 'https://app.attio.com/_/people/rec_123',
+      })
+
+      await crm.syncProspect({
+        userId: 'user@example.com',
+        provider: 'attio',
+        linkedinUrl: 'https://www.linkedin.com/in/jane-doe/',
+        contact: {
+          fullName: 'Jane Doe',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: 'jane@example.com',
+          jobTitle: 'VP of Sales',
+          company: 'Acme',
+          location: 'New York, NY',
+        },
+        customFields: { lead_source: 'Lumnis' },
+      })
+
+      expect(http.post).toHaveBeenCalledWith('/crm/prospects/sync', {
+        userId: 'user@example.com',
+        provider: 'attio',
+        linkedinUrl: 'https://www.linkedin.com/in/jane-doe/',
+        contact: {
+          fullName: 'Jane Doe',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: 'jane@example.com',
+          jobTitle: 'VP of Sales',
+          company: 'Acme',
+          location: 'New York, NY',
+        },
+        customFields: { lead_source: 'Lumnis' },
+      })
+    })
+
     it('propagates upstream errors thrown by the http layer', async () => {
       const http = createMockHttp()
       const crm = new CrmResource(http)

@@ -80,10 +80,29 @@ export interface CrmExclusionGrantListResponse {
 // ==================== prospect sync ====================
 
 /**
+ * Contact attributes to send with a prospect sync.
+ *
+ * Every field is optional. The server fills omitted values from its campaign
+ * and profile data when available. Supply either `fullName` or
+ * `firstName` + `lastName`; `fullName` takes precedence when both are set.
+ */
+export interface CrmContactInput {
+  fullName?: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  jobTitle?: string
+  company?: string
+  /** Accepted by the API but not mapped to a CRM field in v1. */
+  location?: string
+}
+
+/**
  * Push one Lumnis prospect to the connected CRM.
  *
- * Prefer a `campaign_prospects` row owned by `userId` when present; otherwise
- * the server enriches from profile cache / Fiber and creates the CRM record.
+ * Caller-supplied contact attributes take precedence. The server gap-fills
+ * omitted values from campaign/profile data and creates the CRM record when
+ * no existing contact matches.
  * Provider-id/URN LinkedIn URLs are resolved to vanity before reconcile.
  */
 export interface CrmSyncProspectRequest {
@@ -92,6 +111,13 @@ export interface CrmSyncProspectRequest {
   provider: CrmProvider
   /** Must contain `linkedin.com/in/`. */
   linkedinUrl: string
+  /** Optional contact details; omitted fields are gap-filled server-side. */
+  contact?: CrmContactInput
+  /**
+   * Provider-native CRM property/attribute names mapped to string values.
+   * These are applied on create and fill empty fields on an existing record.
+   */
+  customFields?: Record<string, string>
 }
 
 export interface CrmSyncProspectResponse {

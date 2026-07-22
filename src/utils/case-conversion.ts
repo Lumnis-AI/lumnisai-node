@@ -35,7 +35,13 @@ function convertCase(obj: any, converter: (s: string) => string): any {
   }
   else if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((acc: CaseObject, key: string) => {
-      acc[converter(key)] = convertCase(obj[key], converter)
+      // Values inside customFields/custom_fields are keyed by external
+      // provider-native property names, not by Lumnis API field names.
+      // Preserve those keys verbatim while still converting the container key.
+      const value = key === 'customFields' || key === 'custom_fields'
+        ? obj[key]
+        : convertCase(obj[key], converter)
+      acc[converter(key)] = value
       return acc
     }, {})
   }
