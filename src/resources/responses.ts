@@ -8,6 +8,10 @@
 import type { Http } from '../core/http'
 import type { PaginationParams } from '../types/common'
 import type {
+  ContentIntelligenceOptions,
+  ContentIntelligenceOutputName,
+} from '../types/content-intelligence'
+import type {
   AddAndRunCriterionRequest,
   ArtifactsListResponse,
   CancelResponseResponse,
@@ -244,6 +248,41 @@ export class ResponsesResource {
     }
   }
 
+  private _validateContentIntelligenceParams(params: Record<string, any>): void {
+    const limit = this._getParamValue<number>(params, 'limit', 'limit')
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 1000))
+      throw new ValidationError('limit must be an integer between 1 and 1000 for content_intelligence')
+
+    const exaResultsPerQuery = this._getParamValue<number>(
+      params,
+      'exaResultsPerQuery',
+      'exa_results_per_query',
+    )
+    if (exaResultsPerQuery !== undefined
+      && (!Number.isInteger(exaResultsPerQuery) || exaResultsPerQuery < 1)) {
+      throw new ValidationError('exaResultsPerQuery must be a positive integer')
+    }
+
+    const outputs = this._getParamValue<ContentIntelligenceOutputName[]>(params, 'outputs', 'outputs')
+    if (outputs !== undefined) {
+      if (!Array.isArray(outputs) || outputs.length === 0)
+        throw new ValidationError('outputs must contain at least one value')
+
+      const supported: ContentIntelligenceOutputName[] = [
+        'top_posts',
+        'post_ideas',
+        'engagement_analysis',
+      ]
+      for (const output of outputs) {
+        if (!supported.includes(output)) {
+          throw new ValidationError(
+            `Invalid content_intelligence output: ${String(output)}. Supported outputs: ${supported.join(', ')}.`,
+          )
+        }
+      }
+    }
+  }
+
   private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
     if (!params)
       return
@@ -372,6 +411,9 @@ export class ResponsesResource {
 
     if (specializedAgent === 'competitor_rep_engagement')
       this._validateCompetitorRepEngagementParams(rawParams)
+
+    if (specializedAgent === 'content_intelligence')
+      this._validateContentIntelligenceParams(rawParams)
   }
 
   private _validateFileReference(uri: string): void {
@@ -811,6 +853,46 @@ export class ResponsesResource {
     }
 
     return this.create(request)
+  }
+
+  /**
+   * Discover what content a described audience engages with on LinkedIn.
+   *
+   * The backend searches for the audience, collects their reaction history,
+   * saves the normalized package, and produces grounded views from it. Pass
+   * `reusePackageFrom` to re-cook a saved package without collecting again.
+   *
+   * @param query - Natural-language description of the audience. A nonblank
+   *   message is required even when reusing a package.
+   * @param options - Audience, collection-window, package-reuse, and output controls.
+   *   Omit `outputs` to use the backend's default set.
+   */
+  async contentIntelligence(
+    query: string,
+    options: ContentIntelligenceOptions = {},
+  ): Promise<CreateResponseResponse> {
+    if (!query.trim())
+      throw new ValidationError('contentIntelligence requires a non-empty audience query')
+
+    const params: SpecializedAgentParams = {}
+    if (options.limit !== undefined)
+      params.limit = options.limit
+    if (options.postsDateRange !== undefined)
+      params.postsDateRange = options.postsDateRange
+    if (options.postsEnableFiltering !== undefined)
+      params.postsEnableFiltering = options.postsEnableFiltering
+    if (options.exaResultsPerQuery !== undefined)
+      params.exaResultsPerQuery = options.exaResultsPerQuery
+    if (options.reusePackageFrom !== undefined)
+      params.reusePackageFrom = options.reusePackageFrom
+    if (options.outputs !== undefined)
+      params.outputs = options.outputs
+
+    return this.create({
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'content_intelligence',
+      specializedAgentParams: params,
+    })
   }
 
   /**

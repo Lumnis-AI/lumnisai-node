@@ -8,6 +8,14 @@ import type {
   ResolvedCompetitorTarget,
 } from './competitor-post-engagement'
 import type { RepEngagementStats } from './competitor-rep-engagement'
+import type {
+  ContentIntelligenceAudienceStats,
+  ContentIntelligenceCoverage,
+  ContentIntelligenceOutputName,
+  ContentIntelligenceOutputs,
+  ContentIntelligencePackage,
+  ContentIntelligenceSummary,
+} from './content-intelligence'
 import type { PersonResult } from './people'
 
 export type { PostEngagementType } from './competitor-post-engagement'
@@ -454,6 +462,12 @@ export interface StructuredResponse extends Record<string, any> {
   /** Competitor rep engagement output (when using competitor_rep_engagement agent) */
   resolutionWarnings?: string[]
   repEngagementStats?: RepEngagementStats
+  /** Content intelligence output (when using content_intelligence agent). */
+  package?: ContentIntelligencePackage
+  summary?: ContentIntelligenceSummary
+  outputs?: ContentIntelligenceOutputs
+  coverage?: ContentIntelligenceCoverage
+  audienceStats?: ContentIntelligenceAudienceStats | Record<string, never>
 }
 
 /**
@@ -466,6 +480,7 @@ export type SpecializedAgentType =
   | 'people_scoring'
   | 'competitor_post_engagement'
   | 'competitor_rep_engagement'
+  | 'content_intelligence'
   | (string & {})
 
 /**
@@ -581,6 +596,31 @@ export interface SpecializedAgentParams {
   candidateProfiles?: Array<Record<string, any>>
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // Content Intelligence
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Re-cook the content package stored on a prior response without repeating
+   * audience search or engagement collection.
+   * Used by content_intelligence.
+   */
+  reusePackageFrom?: string
+
+  /**
+   * Outputs to produce. Omit to use the backend's default set, currently all
+   * three supported outputs.
+   * Used by content_intelligence.
+   */
+  outputs?: ContentIntelligenceOutputName[]
+
+  /**
+   * Results requested from each Exa query in the people-search research lane.
+   * Minimum 1; omitted uses the lane default of 100.
+   * Used by deep_people_search and content_intelligence.
+   */
+  exaResultsPerQuery?: number
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // LinkedIn Posts Integration (deep_people_search)
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -629,12 +669,13 @@ export interface SpecializedAgentParams {
    * Options: 'past-24h', 'past-week', 'past-month', 'past-quarter',
    * 'past-6-months', 'past-year', 'past-2-years', 'past-3-years'.
    * @default 'past-month'
-   * Used by deep_people_search, competitor_post_engagement, and
-   * competitor_rep_engagement.
+   * Used by deep_people_search, competitor_post_engagement,
+   * competitor_rep_engagement, and content_intelligence.
    *
    * For deep_people_search / competitor_post_engagement it bounds POST recency;
    * for competitor_rep_engagement it bounds how far back each rep's OUTGOING
-   * engagement is considered (also bounded by `maxEngagementsPerRep`).
+   * engagement is considered (also bounded by `maxEngagementsPerRep`); for
+   * content_intelligence it bounds each audience member's reaction history.
    *
    * NOTE on keyword post search: Crustdata's keyword-post API only supports up to
    * 'past-year'. 'past-6-months' is honored window-exact via a client-side cutoff
@@ -683,7 +724,8 @@ export interface SpecializedAgentParams {
    * @default true
    * Uses LLM to identify and skip hiring posts, spam, and irrelevant content.
    * Improves candidate quality at cost of ~1 LLM call per post.
-   * Used by deep_people_search when searchPosts is enabled.
+   * In content_intelligence this marks junk on package rows without deleting it.
+   * Used by deep_people_search and content_intelligence.
    */
   postsEnableFiltering?: boolean
 
@@ -1057,7 +1099,8 @@ export interface CreateResponseRequest {
   /**
    * Route to a specialized agent instead of the main Lumnis agent
    * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
-   * 'competitor_post_engagement', 'competitor_rep_engagement'
+   * 'competitor_post_engagement', 'competitor_rep_engagement',
+   * 'content_intelligence'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
