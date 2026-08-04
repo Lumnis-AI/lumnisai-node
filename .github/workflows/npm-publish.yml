@@ -47,8 +47,13 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email github-actions[bot]@users.noreply.github.com
-          pnpm bumpp ${{ github.event.inputs.version }} --no-push --no-tag --no-commit
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          pnpm bumpp ${{ github.event.inputs.version }} --yes --no-push --no-tag --no-commit
           VERSION=$(node -p "require('./package.json').version")
+          if [ "$VERSION" = "$OLD_VERSION" ]; then
+            echo "Version bump did not change package.json ($OLD_VERSION)"
+            exit 1
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Publish to npm
