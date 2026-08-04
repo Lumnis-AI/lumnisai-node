@@ -4,6 +4,7 @@
 //   - quickPeopleSearch / deepPeopleSearch / peopleScoring — see method JSDoc below
 //   - competitorPostEngagement — full reference in src/types/competitor-post-engagement.ts
 //   - competitorRepEngagement — full reference in src/types/competitor-rep-engagement.ts
+//   - engagementExpansion — expand a saved content-intelligence package into people
 //
 import type { Http } from '../core/http'
 import type { PaginationParams } from '../types/common'
@@ -11,6 +12,7 @@ import type {
   ContentIntelligenceOptions,
   ContentIntelligenceOutputName,
 } from '../types/content-intelligence'
+import type { EngagementExpansionOptions } from '../types/engagement-expansion'
 import type {
   AddAndRunCriterionRequest,
   ArtifactsListResponse,
@@ -283,6 +285,36 @@ export class ResponsesResource {
     }
   }
 
+  private _validateEngagementExpansionParams(params: Record<string, any>): void {
+    const expandFromResponse = this._getParamValue<string>(
+      params,
+      'expandFromResponse',
+      'expand_from_response',
+    )
+    if (typeof expandFromResponse !== 'string' || !expandFromResponse.trim()) {
+      throw new ValidationError(
+        'expandFromResponse is required for engagement_expansion and must be a non-empty string',
+      )
+    }
+
+    for (const [camel, snake] of [
+      ['hops', 'hops'],
+      ['postsPerHop', 'posts_per_hop'],
+      ['peoplePerNextHop', 'people_per_next_hop'],
+      ['limit', 'limit'],
+    ] as const) {
+      const value = this._getParamValue<number>(params, camel, snake)
+      if (value !== undefined && (!Number.isInteger(value) || value < 1))
+        throw new ValidationError(`${camel} must be a positive integer for engagement_expansion`)
+    }
+
+    const excludeUrls = this._getParamValue<string[]>(params, 'excludeUrls', 'exclude_urls')
+    if (excludeUrls !== undefined
+      && (!Array.isArray(excludeUrls) || excludeUrls.some(url => typeof url !== 'string'))) {
+      throw new ValidationError('excludeUrls must be an array of strings for engagement_expansion')
+    }
+  }
+
   private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
     if (!params)
       return
@@ -414,6 +446,9 @@ export class ResponsesResource {
 
     if (specializedAgent === 'content_intelligence')
       this._validateContentIntelligenceParams(rawParams)
+
+    if (specializedAgent === 'engagement_expansion')
+      this._validateEngagementExpansionParams(rawParams)
   }
 
   private _validateFileReference(uri: string): void {
@@ -891,6 +926,53 @@ export class ResponsesResource {
     return this.create({
       messages: [{ role: 'user', content: query }],
       specializedAgent: 'content_intelligence',
+      specializedAgentParams: params,
+    })
+  }
+
+  /**
+   * Find new people by walking outward from a saved content-intelligence package.
+   *
+   * Hop 1 pulls the other engagers of the package's best posts. Additional hops
+   * select the highest-fit new people, rank posts from their feeds, and pull the
+   * engagers of those posts. Collection breadth is derived from `limit` unless
+   * `postsPerHop` is set explicitly. At the default limit, collection is about
+   * 300 credits for one hop and 1,060 for three hops; enrichment and validation
+   * use the standard deep-search economics on top.
+   *
+   * @param query - Persona prompt used to rank and validate discovered people.
+   * @param options - Source response plus hop, breadth, limit, and exclusion controls.
+   * @returns Response; poll with `get()` and read `structuredResponse` as
+   *   {@link EngagementExpansionOutput}.
+   */
+  async engagementExpansion(
+    query: string,
+    options: EngagementExpansionOptions,
+  ): Promise<CreateResponseResponse> {
+    if (!query.trim())
+      throw new ValidationError('engagementExpansion requires a non-empty persona query')
+
+    const params: SpecializedAgentParams = {
+      expandFromResponse: options?.expandFromResponse,
+    }
+    if (options?.hops !== undefined)
+      params.hops = options.hops
+    if (options?.postsPerHop !== undefined)
+      params.postsPerHop = options.postsPerHop
+    if (options?.peoplePerNextHop !== undefined)
+      params.peoplePerNextHop = options.peoplePerNextHop
+    if (options?.limit !== undefined)
+      params.limit = options.limit
+    if (options?.excludeUrls !== undefined)
+      params.excludeUrls = options.excludeUrls
+    if (options?.deepValidationUseRelevanceReranker !== undefined) {
+      params.deepValidationUseRelevanceReranker
+        = options.deepValidationUseRelevanceReranker
+    }
+
+    return this.create({
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'engagement_expansion',
       specializedAgentParams: params,
     })
   }

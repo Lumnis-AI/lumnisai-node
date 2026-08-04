@@ -81,17 +81,34 @@ describe('contentIntelligence', () => {
         outputs: {
           outputs_requested: ['top_posts', 'post_ideas', 'engagement_analysis'],
           top_posts: { artifact: 'top_posts', n: 1 },
-          post_ideas: { artifact: 'post_ideas', all_supported: true },
+          post_ideas: {
+            artifact: 'post_ideas',
+            all_supported: true,
+            ideas: [{
+              cited_posts: [{ key: 'post-1', url: 'https://linkedin.com/posts/1' }],
+            }],
+          },
           engagement_analysis: { artifact: 'engagement_analysis', theme_stats: [] },
         },
+        package: { posts: [{ key: 'post-1', has_video: true }] },
       },
     })
 
     expect(response.structuredResponse.outputs).toEqual({
       outputsRequested: ['top_posts', 'post_ideas', 'engagement_analysis'],
       topPosts: { artifact: 'top_posts', n: 1 },
-      postIdeas: { artifact: 'post_ideas', allSupported: true },
+      postIdeas: {
+        artifact: 'post_ideas',
+        allSupported: true,
+        ideas: [{
+          citedPosts: [{ key: 'post-1', url: 'https://linkedin.com/posts/1' }],
+        }],
+      },
       engagementAnalysis: { artifact: 'engagement_analysis', themeStats: [] },
+    })
+    expect(response.structuredResponse.package.posts[0]).toEqual({
+      key: 'post-1',
+      hasVideo: true,
     })
   })
 })

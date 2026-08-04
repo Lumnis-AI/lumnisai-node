@@ -16,6 +16,10 @@ import type {
   ContentIntelligencePackage,
   ContentIntelligenceSummary,
 } from './content-intelligence'
+import type {
+  EngagementExpansionStats,
+  EngagementHistoryEntry,
+} from './engagement-expansion'
 import type { PersonResult } from './people'
 
 export type { PostEngagementType } from './competitor-post-engagement'
@@ -273,6 +277,12 @@ export interface ValidatedCandidate {
   currentCompany?: string
   /** Location */
   location?: string
+  /** Location resolved by validation, including an evidence-based inference when needed. */
+  primaryLocation?: string | null
+  /** Evidence and reasoning used to resolve `primaryLocation`. */
+  locationReasoning?: string | null
+  /** Provenance for an inferred `location`, such as `inferred:validation`. */
+  locationSource?: string | null
   /** Profile picture URL */
   profilePictureUrl?: string
 
@@ -289,6 +299,8 @@ export interface ValidatedCandidate {
   criterionResults?: CriterionResult[]
   /** Criterion results emitted by deep_people_search and people_scoring. */
   deepCriteria?: CriterionResult[]
+  /** Number of criteria actually judged by an LLM; zero means the candidate was unjudged. */
+  criteriaJudged?: number
 
   // Metadata
   /** Warnings about criteria that couldn't be fully verified */
@@ -323,6 +335,17 @@ export interface ValidatedCandidate {
   /** One-line reranker justification grounded in candidate data. */
   relevanceReason?: string
   /**
+   * Backend-authored delivery tier. Current runs use 3 for judged/in-region,
+   * 2 for judged/out-of-region, and 0 for unjudged. Tier 1 may exist on older responses.
+   */
+  rankTier?: 0 | 1 | 2 | 3
+  /** Whether the candidate satisfies the search's location requirement. */
+  geoOk?: boolean
+  /** Model's direct answer to the location requirement, when one exists. */
+  llmRegionMatch?: boolean | null
+  /** Reasoning behind `llmRegionMatch`. */
+  llmRegionMatchReasoning?: string | null
+  /**
    * Primary current operating role from the reranker (main full-time job, not side/advisory).
    * Also written to `currentTitle` when present.
    */
@@ -337,13 +360,12 @@ export interface ValidatedCandidate {
   enrichedCurrentCompany?: string
   /**
    * True when the candidate failed at least one universal or post_hard (must-have) criterion.
-   * Demoted candidates (`anyUniversalFailed` or `backfilled`) sort after passing ones regardless
-   * of relevance score.
+   * This affects scoring and routing but no longer forces a lower delivery tier.
    */
   anyUniversalFailed?: boolean
   /**
    * True when promoted from excluded to meet the requested count despite failing hard
-   * criteria. Such candidates sort after passing ones; use to segregate or badge them.
+   * criteria. This is useful for display and auditing but no longer forces a lower rank tier.
    */
   backfilled?: boolean
   /**
@@ -354,6 +376,12 @@ export interface ValidatedCandidate {
    * competitor_post_engagement (with competitor provenance joined in).
    */
   engagementData?: PostEngagementData[]
+  /** Broader recent reaction history loaded for engagement-expansion finalists. */
+  engagementHistory?: EngagementHistoryEntry[]
+  /** Number of history records found while preparing a later expansion hop. */
+  engagementHistoryCount?: number
+  /** True when a later hop found this person through an additional independent post. */
+  refoundOnNewPost?: boolean
   /** Source of candidate data */
   source?: string
   /** When source is job_signal: hiring-company context from CrustData job listings */
@@ -468,6 +496,8 @@ export interface StructuredResponse extends Record<string, any> {
   outputs?: ContentIntelligenceOutputs
   coverage?: ContentIntelligenceCoverage
   audienceStats?: ContentIntelligenceAudienceStats | Record<string, never>
+  /** Engagement expansion output (when using engagement_expansion agent). */
+  expansionStats?: EngagementExpansionStats
 }
 
 /**
@@ -481,6 +511,7 @@ export type SpecializedAgentType =
   | 'competitor_post_engagement'
   | 'competitor_rep_engagement'
   | 'content_intelligence'
+  | 'engagement_expansion'
   | (string & {})
 
 /**
@@ -612,6 +643,21 @@ export interface SpecializedAgentParams {
    * Used by content_intelligence.
    */
   outputs?: ContentIntelligenceOutputName[]
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Engagement Expansion
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Saved content-intelligence response whose package seeds the expansion. */
+  expandFromResponse?: string
+  /** Outward rounds to walk. Minimum 1; defaults to 1. */
+  hops?: number
+  /** Answering posts per hop. Minimum 1; omitted derives breadth from `limit`. */
+  postsPerHop?: number
+  /** Highest-fit people carried into the next hop. Minimum 1; defaults to 20. */
+  peoplePerNextHop?: number
+  /** LinkedIn profile URLs excluded in addition to the source package audience. */
+  excludeUrls?: string[]
 
   /**
    * Results requested from each Exa query in the people-search research lane.
@@ -1100,7 +1146,7 @@ export interface CreateResponseRequest {
    * Route to a specialized agent instead of the main Lumnis agent
    * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
    * 'competitor_post_engagement', 'competitor_rep_engagement',
-   * 'content_intelligence'
+   * 'content_intelligence', 'engagement_expansion'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType

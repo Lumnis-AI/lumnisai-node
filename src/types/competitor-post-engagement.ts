@@ -201,8 +201,14 @@ export interface ResolvedCompetitorTarget {
  * provenance (competitor, author, date). Multiple posts → multiple entries.
  */
 export interface PostEngagementData {
+  /** Stable package key for the source post (engagement expansion). */
+  postKey?: string
   /** LinkedIn post URL the person engaged with */
   postUrl: string
+  /** Full source-post text when retained by the lane. */
+  postText?: string | null
+  /** Source-post publication date; reaction payloads do not provide per-person timestamps. */
+  postPublished?: string | { kind?: string, value?: string } | null
   /** How the person engaged */
   role: 'reactor' | 'commenter'
   /** Reaction type for reactors (e.g. LIKE, PRAISE, EMPATHY) */
@@ -215,12 +221,22 @@ export interface PostEngagementData {
   postAuthorType?: 'company' | 'exec'
   /** Name of the post author (company or exec) */
   postAuthorName?: string
+  /** Source-post author name used by engagement expansion. */
+  postAuthor?: string
   /** LinkedIn URL of the post author */
   postAuthorUrl?: string
   /** ISO timestamp of the post */
   postDate?: string
   /** Total engagement on the post (reactions + comments) at selection time */
   engagementScore?: number
+  /** One-based expansion hop that discovered this edge. */
+  hop?: number
+  /** Expansion walk strategy that produced the edge. */
+  walk?: 'post_coengagement' | string
+  /** Relevance assigned to the source post during curation. */
+  postRelevance?: number | null
+  /** Source-package audience members who also engaged with this post. */
+  audienceEngagers?: string[]
   [key: string]: any
 }
 

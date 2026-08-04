@@ -67,6 +67,8 @@ export interface ContentIntelligencePost {
   relevance?: number | null
   totalReactions?: number | null
   totalComments?: number | null
+  /** Whether the source post includes video. The backend does not expose the media URL. */
+  hasVideo?: boolean
   hybridScore?: number
 }
 
@@ -99,6 +101,12 @@ export interface PostIdea {
   idea: string
   angle: string
   citedPostKeys: string[]
+  /** Clickable source posts that inspired the idea. */
+  citedPosts: Array<{
+    key: string
+    url?: string | null
+    author?: string | null
+  }>
   draft: string
   probability: number
   keysExist: number
