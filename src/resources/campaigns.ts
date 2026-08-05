@@ -4,6 +4,7 @@ import type {
   AddProspectsResponse,
   ApprovalActionRequest,
   CampaignActionListResponse,
+  CampaignAssetUpsertRequest,
   CampaignBulkApprovalRequest,
   CampaignBulkApprovalResponse,
   CampaignCreate,
@@ -533,6 +534,23 @@ export class CampaignsResource {
   }
 
   // ==================== Campaign Asset Links ====================
+
+  /**
+   * Create or reuse assets owned by the campaign's user, then link them.
+   *
+   * Prefer this method for campaign launch flows because the backend resolves
+   * asset ownership from the campaign instead of accepting a caller-provided
+   * user ID.
+   */
+  async upsertCampaignAssets(
+    campaignId: string,
+    request: CampaignAssetUpsertRequest,
+  ): Promise<LinkedAssetsResponse> {
+    return this.http.post<LinkedAssetsResponse>(
+      `/campaigns/${encodeURIComponent(campaignId)}/assets/upsert`,
+      request,
+    )
+  }
 
   /**
    * Link outreach assets to a campaign.

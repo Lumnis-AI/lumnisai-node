@@ -499,6 +499,17 @@ export interface LinkAssetsRequest {
   assetIds: string[]
 }
 
+export interface CampaignAssetUpsertItem {
+  name: string
+  key: string
+  type?: OutreachAssetType
+  value: string
+}
+
+export interface CampaignAssetUpsertRequest {
+  items: CampaignAssetUpsertItem[]
+}
+
 export interface LinkedAssetsResponse {
   items: OutreachAssetResponse[]
 }

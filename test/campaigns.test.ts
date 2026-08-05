@@ -383,6 +383,28 @@ describe('campaigns', () => {
         assetIds: ['asset-1', 'asset-2'],
       })
     })
+
+    it('upserts campaign-owned assets and links them', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      const request = {
+        items: [{
+          name: 'Calendly Link',
+          key: 'booking_link',
+          type: 'link' as const,
+          value: 'https://calendly.com/jane/15min',
+        }],
+      }
+
+      vi.mocked(http.post).mockResolvedValue({ items: [] })
+
+      await campaigns.upsertCampaignAssets('c-123', request)
+
+      expect(http.post).toHaveBeenCalledWith(
+        '/campaigns/c-123/assets/upsert',
+        request,
+      )
+    })
   })
 
   describe('metrics', () => {
