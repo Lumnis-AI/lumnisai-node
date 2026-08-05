@@ -339,6 +339,12 @@ export interface ValidatedCandidate {
    * 2 for judged/out-of-region, and 0 for unjudged. Tier 1 may exist on older responses.
    */
   rankTier?: 0 | 1 | 2 | 3
+  /**
+   * Zero-based position in the backend's shipped order. Preserve response
+   * order or sort this field ascending; per-row scores cannot reproduce
+   * diversity reordering exactly.
+   */
+  deliveryRank?: number
   /** Whether the candidate satisfies the search's location requirement. */
   geoOk?: boolean
   /** Model's direct answer to the location requirement, when one exists. */
@@ -368,6 +374,8 @@ export interface ValidatedCandidate {
    * criteria. This is useful for display and auditing but no longer forces a lower rank tier.
    */
   backfilled?: boolean
+  /** Promoted from the excluded pool so deep validation could issue a real verdict. */
+  promotedToValidation?: boolean
   /**
    * LinkedIn posts this candidate engaged with (reacted or commented).
    * One entry per post — if someone engaged with multiple competitor posts,
@@ -490,7 +498,7 @@ export interface StructuredResponse extends Record<string, any> {
   /** Competitor rep engagement output (when using competitor_rep_engagement agent) */
   resolutionWarnings?: string[]
   repEngagementStats?: RepEngagementStats
-  /** Content intelligence output (when using content_intelligence agent). */
+  /** Saved content package from content_intelligence or engagement_expansion. */
   package?: ContentIntelligencePackage
   summary?: ContentIntelligenceSummary
   outputs?: ContentIntelligenceOutputs

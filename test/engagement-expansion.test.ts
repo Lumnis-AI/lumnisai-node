@@ -1,4 +1,5 @@
 import type { Http } from '../src/core/http'
+import type { EngagementExpansionStats } from '../src/types/engagement-expansion'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ResponsesResource } from '../src/resources/responses'
 import { toCamelCase } from '../src/utils/case-conversion'
@@ -53,10 +54,34 @@ describe('engagementExpansion', () => {
     })
   })
 
-  it('validates the required source and positive-integer controls', async () => {
+  it('supports prompt-only seed collection without a source response', async () => {
+    await responses.engagementExpansion('Revenue leaders')
+
+    expect(postMock).toHaveBeenCalledWith('/responses', {
+      messages: [{ role: 'user', content: 'Revenue leaders' }],
+      specializedAgent: 'engagement_expansion',
+      specializedAgentParams: {},
+    })
+  })
+
+  it('allows the partial stats returned by an empty package stop', () => {
+    const stats: EngagementExpansionStats = {
+      hopsRun: 0,
+      stopReason: 'empty_package',
+      perHop: [],
+    }
+
+    expect(stats).toEqual({
+      hopsRun: 0,
+      stopReason: 'empty_package',
+      perHop: [],
+    })
+  })
+
+  it('validates a provided source and positive-integer controls', async () => {
     await expect(responses.engagementExpansion('Revenue leaders', {
       expandFromResponse: '   ',
-    })).rejects.toThrow('expandFromResponse is required')
+    })).rejects.toThrow('expandFromResponse must be a non-empty string when provided')
 
     await expect(responses.engagementExpansion('Revenue leaders', {
       expandFromResponse: 'source-response-id',
@@ -86,6 +111,8 @@ describe('engagementExpansion', () => {
           criteria_judged: 9,
           geo_ok: false,
           rank_tier: 2,
+          delivery_rank: 0,
+          promoted_to_validation: true,
           primary_location: 'Barcelona, Spain',
           location_reasoning: 'The profile names Barcelona.',
           location_source: 'inferred:validation',
@@ -94,6 +121,10 @@ describe('engagementExpansion', () => {
           engagement_history: [{ reaction_type: 'LIKE', post_author: 'Lumnis' }],
           refound_on_new_post: true,
         }],
+        package: {
+          posts: [{ key: 'seed-post', ids: [], sources: [], engagers: [], audience_count: 1, missing: [] }],
+          uncopied_fields: {},
+        },
       },
     })
 
@@ -107,6 +138,8 @@ describe('engagementExpansion', () => {
       criteriaJudged: 9,
       geoOk: false,
       rankTier: 2,
+      deliveryRank: 0,
+      promotedToValidation: true,
       primaryLocation: 'Barcelona, Spain',
       locationReasoning: 'The profile names Barcelona.',
       locationSource: 'inferred:validation',
@@ -114,6 +147,17 @@ describe('engagementExpansion', () => {
       llmRegionMatchReasoning: 'The search requires New York City.',
       engagementHistory: [{ reactionType: 'LIKE', postAuthor: 'Lumnis' }],
       refoundOnNewPost: true,
+    })
+    expect(response.structuredResponse.package).toEqual({
+      posts: [{
+        key: 'seed-post',
+        ids: [],
+        sources: [],
+        engagers: [],
+        audienceCount: 1,
+        missing: [],
+      }],
+      uncopiedFields: {},
     })
   })
 })

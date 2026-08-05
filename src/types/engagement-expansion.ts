@@ -1,9 +1,14 @@
+import type { ContentIntelligencePackage } from './content-intelligence'
 import type { CriteriaMetadata, ValidatedCandidate } from './responses'
 
 /** Options accepted by {@link ResponsesResource.engagementExpansion}. */
 export interface EngagementExpansionOptions {
-  /** Finished content_intelligence response whose saved package seeds the walk. */
-  expandFromResponse: string
+  /**
+   * Finished response whose saved package seeds the walk. This may be a
+   * content-intelligence or prior engagement-expansion response. Omit it to
+   * collect a seed audience and package from the persona prompt first.
+   */
+  expandFromResponse?: string
   /**
    * Number of outward rounds to run. At the default limit, collection is
    * approximately 300 credits for one hop and 1,060 for three hops.
@@ -28,7 +33,8 @@ export interface EngagementExpansionOptions {
 
 /** Resolved parameters echoed in `structuredResponse.agentParams`. */
 export interface EngagementExpansionResolvedParams {
-  expandFromResponse: string
+  /** Null when the run collected its seed package from the prompt. */
+  expandFromResponse: string | null
   hops: number
   postsPerHop?: number | null
   peoplePerNextHop: number
@@ -51,12 +57,16 @@ export interface EngagementExpansionHopStats {
 /** Collection and finalist-history accounting for an expansion run. */
 export interface EngagementExpansionStats {
   hopsRun: number
-  hopsRequested: number
-  postsPerHop: number
-  postsPerHopSource: 'requested' | 'derived'
+  /** Absent on an early `empty_package` stop. */
+  hopsRequested?: number
+  /** Absent on an early `empty_package` stop. */
+  postsPerHop?: number
+  /** Absent on an early `empty_package` stop. */
+  postsPerHopSource?: 'requested' | 'derived'
   /** Hop collection only; enrichment and validation use standard deep-search economics. */
-  collectionCreditsSpent: number
-  collectionCreditCeiling: number
+  collectionCreditsSpent?: number
+  /** Absent on an early `empty_package` stop. */
+  collectionCreditCeiling?: number
   stopReason: string
   perHop: EngagementExpansionHopStats[]
   /** Credits spent loading broader engagement history for finalists. */
@@ -80,5 +90,7 @@ export interface EngagementExpansionOutput {
   candidates: ValidatedCandidate[]
   criteria?: CriteriaMetadata
   expansionStats?: EngagementExpansionStats
+  /** Package used by this run, saved so a later expansion can chain from it. */
+  package?: ContentIntelligencePackage
   agentParams: EngagementExpansionResolvedParams
 }

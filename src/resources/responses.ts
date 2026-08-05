@@ -291,9 +291,10 @@ export class ResponsesResource {
       'expandFromResponse',
       'expand_from_response',
     )
-    if (typeof expandFromResponse !== 'string' || !expandFromResponse.trim()) {
+    if (expandFromResponse !== undefined
+      && (typeof expandFromResponse !== 'string' || !expandFromResponse.trim())) {
       throw new ValidationError(
-        'expandFromResponse is required for engagement_expansion and must be a non-empty string',
+        'expandFromResponse must be a non-empty string when provided for engagement_expansion',
       )
     }
 
@@ -931,30 +932,32 @@ export class ResponsesResource {
   }
 
   /**
-   * Find new people by walking outward from a saved content-intelligence package.
+   * Find new people by walking outward from a saved engagement package.
    *
-   * Hop 1 pulls the other engagers of the package's best posts. Additional hops
-   * select the highest-fit new people, rank posts from their feeds, and pull the
-   * engagers of those posts. Collection breadth is derived from `limit` unless
-   * `postsPerHop` is set explicitly. At the default limit, collection is about
-   * 300 credits for one hop and 1,060 for three hops; enrichment and validation
-   * use the standard deep-search economics on top.
+   * With `expandFromResponse`, hop 1 pulls the other engagers of that response's
+   * saved package. Without it, the backend first finds a seed audience from the
+   * prompt, collects and saves its package, then expands it. Additional hops
+   * select the highest-fit new people, rank posts from their feeds, and pull
+   * their engagers. Collection breadth is derived from `limit` unless
+   * `postsPerHop` is explicit. At the default limit, hop collection is about
+   * 300 credits for one hop and 1,060 for three; prompt-only seed collection,
+   * enrichment, and validation are additional.
    *
    * @param query - Persona prompt used to rank and validate discovered people.
-   * @param options - Source response plus hop, breadth, limit, and exclusion controls.
+   * @param options - Optional source response, hop, breadth, limit, and exclusion controls.
    * @returns Response; poll with `get()` and read `structuredResponse` as
    *   {@link EngagementExpansionOutput}.
    */
   async engagementExpansion(
     query: string,
-    options: EngagementExpansionOptions,
+    options: EngagementExpansionOptions = {},
   ): Promise<CreateResponseResponse> {
     if (!query.trim())
       throw new ValidationError('engagementExpansion requires a non-empty persona query')
 
-    const params: SpecializedAgentParams = {
-      expandFromResponse: options?.expandFromResponse,
-    }
+    const params: SpecializedAgentParams = {}
+    if (options.expandFromResponse !== undefined)
+      params.expandFromResponse = options.expandFromResponse
     if (options?.hops !== undefined)
       params.hops = options.hops
     if (options?.postsPerHop !== undefined)
