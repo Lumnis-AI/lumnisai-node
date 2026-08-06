@@ -225,6 +225,13 @@ export interface EmailInboxItem {
   status: string
   /** inboxkit | unipile | smtp */
   source: string
+  /**
+   * Connection app code for BYO inboxes: GOOGLE | OUTLOOK | MAIL. Null for
+   * managed (InboxKit) mailboxes, which have no Unipile connection. Prefer this
+   * over guessing from the address domain — a Workspace/365 custom domain is
+   * indistinguishable from a generic IMAP host by domain alone.
+   */
+  provider?: string | null
   dailySendCap: number
   sendsToday: number
   organizationId: string
