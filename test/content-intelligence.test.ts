@@ -28,12 +28,14 @@ describe('contentIntelligence', () => {
     expect(postMock.mock.calls[0][1].specializedAgentParams).not.toHaveProperty('outputs')
   })
 
-  it('forwards collection, reuse, and output controls', async () => {
+  it('forwards collection, steering, reuse, and output controls', async () => {
     await responses.contentIntelligence('Original audience prompt', {
       limit: 40,
       postsDateRange: 'past-quarter',
       postsEnableFiltering: false,
       exaResultsPerQuery: 25,
+      companyContext: 'We sell cloud containment to security teams.',
+      contentDirection: 'Practitioner how-tos; no hiring posts.',
       reusePackageFrom: '4eebf64e-66aa-45f6-9abe-0be82a141097',
       outputs: ['top_posts', 'post_ideas', 'engagement_analysis'],
     })
@@ -45,6 +47,8 @@ describe('contentIntelligence', () => {
         postsDateRange: 'past-quarter',
         postsEnableFiltering: false,
         exaResultsPerQuery: 25,
+        companyContext: 'We sell cloud containment to security teams.',
+        contentDirection: 'Practitioner how-tos; no hiring posts.',
         reusePackageFrom: '4eebf64e-66aa-45f6-9abe-0be82a141097',
         outputs: ['top_posts', 'post_ideas', 'engagement_analysis'],
       },
@@ -84,8 +88,14 @@ describe('contentIntelligence', () => {
           post_ideas: {
             artifact: 'post_ideas',
             all_supported: true,
+            drafts_with_company: 1,
+            company_drafts_supported: 1,
+            steered_by: ['company_context', 'content_direction'],
             ideas: [{
               cited_posts: [{ key: 'post-1', url: 'https://linkedin.com/posts/1' }],
+              draft_with_company: 'The company-aware version.',
+              supported_with_company: true,
+              grounding_reason_with_company: 'Supported by both sources.',
             }],
           },
           engagement_analysis: { artifact: 'engagement_analysis', theme_stats: [] },
@@ -100,8 +110,14 @@ describe('contentIntelligence', () => {
       postIdeas: {
         artifact: 'post_ideas',
         allSupported: true,
+        draftsWithCompany: 1,
+        companyDraftsSupported: 1,
+        steeredBy: ['company_context', 'content_direction'],
         ideas: [{
           citedPosts: [{ key: 'post-1', url: 'https://linkedin.com/posts/1' }],
+          draftWithCompany: 'The company-aware version.',
+          supportedWithCompany: true,
+          groundingReasonWithCompany: 'Supported by both sources.',
         }],
       },
       engagementAnalysis: { artifact: 'engagement_analysis', themeStats: [] },

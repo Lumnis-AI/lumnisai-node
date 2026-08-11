@@ -897,6 +897,8 @@ export class ResponsesResource {
    * The backend searches for the audience, collects their reaction history,
    * saves the normalized package, and produces grounded views from it. Pass
    * `reusePackageFrom` to re-cook a saved package without collecting again.
+   * `companyContext` and `contentDirection` steer post ideas only; collection,
+   * curation, and engagement analysis remain an unbiased read of the audience.
    *
    * @param query - Natural-language description of the audience. A nonblank
    *   message is required even when reusing a package.
@@ -919,6 +921,10 @@ export class ResponsesResource {
       params.postsEnableFiltering = options.postsEnableFiltering
     if (options.exaResultsPerQuery !== undefined)
       params.exaResultsPerQuery = options.exaResultsPerQuery
+    if (options.companyContext !== undefined)
+      params.companyContext = options.companyContext
+    if (options.contentDirection !== undefined)
+      params.contentDirection = options.contentDirection
     if (options.reusePackageFrom !== undefined)
       params.reusePackageFrom = options.reusePackageFrom
     if (options.outputs !== undefined)

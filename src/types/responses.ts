@@ -968,14 +968,25 @@ export interface SpecializedAgentParams {
   competitors?: string[]
 
   /**
-   * Free-text summary of what the seed company does. Anchors competitor
-   * discovery so the ReAct doesn't misclassify ambiguous domains
-   * (e.g. "lumnis.ai" → academic AI vs sales automation).
-   * Used when `company` is provided (discovery mode).
+   * Free-text summary of what a company does.
+   *
+   * For competitor_post_engagement, this describes the seed company and
+   * anchors discovery when `company` is provided. For content_intelligence,
+   * this describes the company the post ideas are for and steers only those
+   * ideas; search, curation, and engagement analysis remain unsteered.
    *
    * @example 'AI-powered outbound automation for B2B sales — books meetings via LinkedIn + email on autopilot'
    */
   companyContext?: string
+
+  /**
+   * Desired content type, angle, format, or exclusions for post ideas.
+   * Used only by content_intelligence post-idea generation; it does not steer
+   * search, curation, or engagement analysis.
+   *
+   * @example 'Practitioner how-tos, not hot takes; no hiring posts'
+   */
+  contentDirection?: string
 
   /**
    * Optional list of known-good example competitors. The discovery ReAct

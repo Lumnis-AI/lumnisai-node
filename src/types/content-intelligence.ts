@@ -16,6 +16,16 @@ export interface ContentIntelligenceOptions {
   postsEnableFiltering?: boolean
   /** Results requested from each Exa people-search query. The search lane defaults to 100. */
   exaResultsPerQuery?: number
+  /**
+   * Company the post ideas are for. Used only to tailor post ideas; it does not
+   * affect search, curation, engagement analysis, or grounding of neutral drafts.
+   */
+  companyContext?: string
+  /**
+   * Requested content style, angle, format, or exclusions. Used only to tailor
+   * post ideas so audience discovery and analysis remain unbiased.
+   */
+  contentDirection?: string
   /** Re-cook the package stored on this response ID without collecting again. */
   reusePackageFrom?: string
   /** Outputs to produce. Omit to use the backend's current default set. */
@@ -27,6 +37,8 @@ export interface ContentIntelligenceResolvedParams {
   postsDateRange: PostsDateRange
   postsEnableFiltering: boolean
   exaResultsPerQuery?: number | null
+  companyContext?: string | null
+  contentDirection?: string | null
   reusePackageFrom?: string | null
   outputs: ContentIntelligenceOutputName[]
 }
@@ -107,12 +119,22 @@ export interface PostIdea {
     url?: string | null
     author?: string | null
   }>
+  /** Neutral draft, with no company mention. */
   draft: string
+  /**
+   * The same post rewritten with an honest company tie-in. Null when no
+   * company context was supplied.
+   */
+  draftWithCompany?: string | null
   probability: number
   keysExist: number
   keysCited: number
   supported: boolean
   groundingReason: string
+  /** Independent grounding verdict for `draftWithCompany`. */
+  supportedWithCompany?: boolean
+  /** Why `draftWithCompany` did or did not pass its two-source grounding check. */
+  groundingReasonWithCompany?: string
 }
 
 export interface PostIdeasOutput {
@@ -120,8 +142,14 @@ export interface PostIdeasOutput {
   n: number
   ideas: PostIdea[]
   allSupported?: boolean
+  /** Number of ideas that include a company-tailored draft. */
+  draftsWithCompany?: number
+  /** Number of company-tailored drafts that passed grounding. */
+  companyDraftsSupported?: number
   postsSeen?: number
   chunks?: number
+  /** Request fields that actually steered the generated post ideas. */
+  steeredBy?: Array<'company_context' | 'content_direction'>
   note?: string
 }
 
