@@ -68,6 +68,7 @@ export type { UsersResource } from './resources/users'
 // Export types
 export * from './types/campaigns'
 export * from './types/common'
+export * from './types/company-intelligence'
 export * from './types/competitor-post-engagement'
 export * from './types/competitor-rep-engagement'
 export * from './types/contact-relationships'

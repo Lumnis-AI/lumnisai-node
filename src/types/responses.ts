@@ -1,6 +1,12 @@
 // Response API types
 import type { Message, UUID } from './common'
 import type {
+  IntelligenceCreditLedger,
+  IntelligenceReportEnvelope,
+  IntelligenceReportSummary,
+  PersonEvidenceRichness,
+} from './company-intelligence'
+import type {
   AgentCostStats,
   DiscoveryTrace,
   PostEngagementData,
@@ -500,12 +506,28 @@ export interface StructuredResponse extends Record<string, any> {
   repEngagementStats?: RepEngagementStats
   /** Saved content package from content_intelligence or engagement_expansion. */
   package?: ContentIntelligencePackage
-  summary?: ContentIntelligenceSummary
+  summary?: ContentIntelligenceSummary | IntelligenceReportSummary
   outputs?: ContentIntelligenceOutputs
   coverage?: ContentIntelligenceCoverage
   audienceStats?: ContentIntelligenceAudienceStats | Record<string, never>
   /** Engagement expansion output (when using engagement_expansion agent). */
   expansionStats?: EngagementExpansionStats
+  /**
+   * Company/person intelligence output (when using company_intelligence or
+   * person_intelligence). `envelope` is the display-block document; it is null
+   * when the translator step failed — the report itself still ships and
+   * `summary.errors` counts the failure.
+   * @see {@link ./company-intelligence.ts} for the full agent reference.
+   */
+  envelope?: IntelligenceReportEnvelope | null
+  /** The full intelligence report markdown — the same text as `outputText`. */
+  reportMarkdown?: string
+  /** Person-lane evidence grades. Null on company reports. */
+  richness?: PersonEvidenceRichness | null
+  /** Company-lane corpus statistics. Empty on person reports. */
+  stats?: Record<string, any>
+  /** Per-call vendor credit ledger for the run. */
+  credits?: IntelligenceCreditLedger
 }
 
 /**
@@ -520,6 +542,8 @@ export type SpecializedAgentType =
   | 'competitor_rep_engagement'
   | 'content_intelligence'
   | 'engagement_expansion'
+  | 'company_intelligence'
+  | 'person_intelligence'
   | (string & {})
 
 /**
@@ -955,9 +979,17 @@ export interface SpecializedAgentParams {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Single seed company (domain or name) for competitor discovery.
-   * The agent discovers competitors of this seed and analyzes their post engagement.
-   * Exactly one of `company` or `competitors` is required.
+   * Single seed company (domain or name).
+   *
+   * For competitor_post_engagement / competitor_rep_engagement this is the seed
+   * whose competitors are discovered; exactly one of `company` or `competitors`
+   * is required. For company_intelligence it is the REQUIRED target domain (the
+   * one the company uses on LinkedIn when they differ). For person_intelligence
+   * it is the EMPLOYER's domain — required on the name door, optional context on
+   * the LinkedIn-URL door.
+   *
+   * The intelligence agents normalize a pasted URL: `https://www.acme.com/about`
+   * resolves to `acme.com`.
    */
   company?: string
 
@@ -973,7 +1005,9 @@ export interface SpecializedAgentParams {
    * For competitor_post_engagement, this describes the seed company and
    * anchors discovery when `company` is provided. For content_intelligence,
    * this describes the company the post ideas are for and steers only those
-   * ideas; search, curation, and engagement analysis remain unsteered.
+   * ideas; search, curation, and engagement analysis remain unsteered. For
+   * company_intelligence / person_intelligence it says who is asking and why,
+   * and is the only content-tailoring input.
    *
    * @example 'AI-powered outbound automation for B2B sales — books meetings via LinkedIn + email on autopilot'
    */
@@ -1144,6 +1178,64 @@ export interface SpecializedAgentParams {
    */
   expandExclusionViaDiscovery?: boolean
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Company / Person Intelligence (company_intelligence, person_intelligence)
+  //
+  // One deep report on a single company, or on a single person. Two registered
+  // agents over one pipeline. The company lane REUSES `company` (its domain)
+  // and `companyContext` (who is asking) from above; the person lane reuses
+  // `company` as the EMPLOYER's domain and `companyContext` as requester
+  // context. Only the params below are new.
+  //
+  // Required API keys (BYO or platform) — every leg fails soft when one is absent:
+  //   - CRUSTDATA_API_KEY — posting corpus, headcount/traffic series, enrichment,
+  //     roster, exec posts
+  //   - FIBER_API_KEY — talent flow, revenue estimate, person profile/posts/X/IG
+  //   - FIRECRAWL_API_KEY — careers + press page capture (plain fetch fallback)
+  //   - EXA_API_KEY — news sweep, web-events check, person web presence
+  //
+  // Full reference: src/types/company-intelligence.ts
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * LinkedIn profile URL of the person to report on (person_intelligence, URL
+   * door). No name needed — it is read from the live profile. `company` may
+   * accompany it as the employer's domain for employer context.
+   */
+  linkedinUrl?: string
+
+  /**
+   * Full name of the person to report on (person_intelligence, name door).
+   * Requires `company` — the employer's domain — to resolve the right person.
+   * Prefer `linkedinUrl` when you have it; the URL door needs no name.
+   */
+  personName?: string
+
+  /**
+   * Report register for company_intelligence: investor, competitor, vendor or
+   * neutral. Register only — it never changes which findings appear or how
+   * they are weighted. Content tailoring comes from `companyContext`.
+   * @default 'neutral'
+   */
+  reader?: string
+
+  /**
+   * Permit company_intelligence's job-posting fetch to spend past the per-run
+   * credit ceiling. Off by default: an oversized corpus stops before buying.
+   * @default false
+   */
+  allowSpend?: boolean
+
+  /**
+   * Job-posting window in days for company_intelligence, filtered server-side
+   * on the posting's date added. Omit for the FULL posting history — the deep
+   * report's timelines, first-of-function detection and never-posted claims
+   * need the whole record. Set a window only to trade depth for credits.
+   * @minimum 1
+   * @maximum 3650
+   */
+  sinceDays?: number
+
   /**
    * Additional parameters for any specialized agent
    * This allows flexibility for future agents without SDK updates
@@ -1165,7 +1257,8 @@ export interface CreateResponseRequest {
    * Route to a specialized agent instead of the main Lumnis agent
    * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
    * 'competitor_post_engagement', 'competitor_rep_engagement',
-   * 'content_intelligence', 'engagement_expansion'
+   * 'content_intelligence', 'engagement_expansion', 'company_intelligence',
+   * 'person_intelligence'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType

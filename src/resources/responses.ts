@@ -5,9 +5,14 @@
 //   - competitorPostEngagement — full reference in src/types/competitor-post-engagement.ts
 //   - competitorRepEngagement — full reference in src/types/competitor-rep-engagement.ts
 //   - engagementExpansion — expand a saved content-intelligence package into people
+//   - companyIntelligence / personIntelligence — full reference in src/types/company-intelligence.ts
 //
 import type { Http } from '../core/http'
 import type { PaginationParams } from '../types/common'
+import type {
+  CompanyIntelligenceOptions,
+  PersonIntelligenceOptions,
+} from '../types/company-intelligence'
 import type {
   ContentIntelligenceOptions,
   ContentIntelligenceOutputName,
@@ -316,6 +321,62 @@ export class ResponsesResource {
     }
   }
 
+  private _validateSinceDays(value: unknown, agent: string): void {
+    if (value === undefined)
+      return
+    if (!Number.isInteger(value as number) || (value as number) < 1 || (value as number) > 3650) {
+      throw new ValidationError(
+        `sinceDays must be an integer between 1 and 3650 for ${agent}`,
+      )
+    }
+  }
+
+  private _validateCompanyIntelligenceParams(params: Record<string, any>): void {
+    const company = this._getParamValue<string>(params, 'company', 'company')
+    if (typeof company !== 'string' || !company.trim()) {
+      throw new ValidationError(
+        '`company` is required for company_intelligence — give the company\'s domain. '
+        + 'For a report on a person use the person_intelligence agent.',
+      )
+    }
+
+    this._validateSinceDays(
+      this._getParamValue<number>(params, 'sinceDays', 'since_days'),
+      'company_intelligence',
+    )
+
+    const reader = this._getParamValue<string>(params, 'reader', 'reader')
+    if (reader !== undefined && (typeof reader !== 'string' || !reader.trim()))
+      throw new ValidationError('reader must be a non-empty string for company_intelligence')
+
+    const allowSpend = this._getParamValue<boolean>(params, 'allowSpend', 'allow_spend')
+    if (allowSpend !== undefined && typeof allowSpend !== 'boolean')
+      throw new ValidationError('allowSpend must be a boolean for company_intelligence')
+  }
+
+  private _validatePersonIntelligenceParams(params: Record<string, any>): void {
+    const linkedinUrl = this._getParamValue<string>(params, 'linkedinUrl', 'linkedin_url')
+    const personName = this._getParamValue<string>(params, 'personName', 'person_name')
+    const company = this._getParamValue<string>(params, 'company', 'company')
+
+    const hasUrl = typeof linkedinUrl === 'string' && linkedinUrl.trim().length > 0
+    const hasName = typeof personName === 'string' && personName.trim().length > 0
+    const hasCompany = typeof company === 'string' && company.trim().length > 0
+
+    if (hasName && !hasUrl && !hasCompany) {
+      throw new ValidationError(
+        '`personName` needs `company` (the employer\'s domain) to resolve the right '
+        + 'person — or give `linkedinUrl` instead.',
+      )
+    }
+    if (!hasUrl && !hasName) {
+      throw new ValidationError(
+        'Give a person for person_intelligence: `linkedinUrl`, or `personName` + '
+        + '`company`. For a report on a company use the company_intelligence agent.',
+      )
+    }
+  }
+
   private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
     if (!params)
       return
@@ -450,6 +511,12 @@ export class ResponsesResource {
 
     if (specializedAgent === 'engagement_expansion')
       this._validateEngagementExpansionParams(rawParams)
+
+    if (specializedAgent === 'company_intelligence')
+      this._validateCompanyIntelligenceParams(rawParams)
+
+    if (specializedAgent === 'person_intelligence')
+      this._validatePersonIntelligenceParams(rawParams)
   }
 
   private _validateFileReference(uri: string): void {
@@ -472,7 +539,10 @@ export class ResponsesResource {
       ]
 
       if (allowedSchemes.includes(parsed.protocol.replace(':', ''))) {
-        if ((parsed.protocol === 'http:' || parsed.protocol === 'https протокол:') && !parsed.hostname)
+        // Defensive only: WHATWG URL never yields an empty hostname for
+        // http/https — an extra slash collapses into one ('http:///a' parses
+        // with hostname 'a') and a bare 'https://' throws above.
+        if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && !parsed.hostname)
           throw new LocalFileNotSupportedError(uri)
 
         return
@@ -1247,5 +1317,124 @@ export class ResponsesResource {
 
     request.specializedAgentParams = params
     return this.create(request)
+  }
+
+  /** True when a person target reads as a LinkedIn profile URL rather than a name. */
+  private _looksLikeLinkedInUrl(value: string): boolean {
+    const target = value.trim().toLowerCase()
+    return target.startsWith('http://')
+      || target.startsWith('https://')
+      || target.startsWith('www.linkedin.com/')
+      || target.startsWith('linkedin.com/')
+  }
+
+  /**
+   * Produce one deep intelligence report on a single company.
+   *
+   * The backend reads everything it can buy or fetch about the company — the
+   * job-posting corpus with zero truncation, headcount and web-traffic series,
+   * live careers boards and the careers page, executive LinkedIn posts and
+   * company mentions, the employee roster, recent news and vendor enrichment —
+   * prepares all of it in code, and has a writer model read it into a markdown
+   * report. A second cheap call slices the same report into a display-block
+   * envelope.
+   *
+   * Runs are long on a cold corpus (tens of minutes). `sinceDays` trades depth
+   * for credits; omit it for the full posting history, which the report's
+   * timelines and never-posted claims depend on. A posting fetch projected past
+   * the per-run credit ceiling stops rather than spending — `allowSpend: true`
+   * lets it through.
+   *
+   * @param company - The company's domain (the one it uses on LinkedIn when they
+   *   differ). A pasted URL is normalized server-side: `https://www.acme.com/about`
+   *   resolves to `acme.com`.
+   * @param options - Requester context, register, posting window, and spend control.
+   * @returns Response; poll with `get()`, read the report from `outputText` and
+   *   the envelope from `structuredResponse` as {@link CompanyIntelligenceOutput}.
+   *   See `src/types/company-intelligence.ts` for the full agent reference.
+   */
+  async companyIntelligence(
+    company: string,
+    options: CompanyIntelligenceOptions = {},
+  ): Promise<CreateResponseResponse> {
+    if (typeof company !== 'string' || !company.trim())
+      throw new ValidationError('companyIntelligence requires a non-empty company domain')
+
+    const params: SpecializedAgentParams = { company: company.trim() }
+    if (options.companyContext !== undefined)
+      params.companyContext = options.companyContext
+    if (options.reader !== undefined)
+      params.reader = options.reader
+    if (options.sinceDays !== undefined)
+      params.sinceDays = options.sinceDays
+    if (options.allowSpend !== undefined)
+      params.allowSpend = options.allowSpend
+
+    const prompt = options.prompt?.trim()
+      || `Company intelligence report for ${company.trim()}`
+
+    return this.create({
+      messages: [{ role: 'user', content: prompt }],
+      specializedAgent: 'company_intelligence',
+      specializedAgentParams: params,
+    })
+  }
+
+  /**
+   * Produce one deep intelligence report on a single person.
+   *
+   * Two doors, chosen from `person`. Pass a **LinkedIn profile URL** and no name
+   * is needed — it is read from the live profile. Pass a **full name** and
+   * `options.company` (the employer's domain) is required to resolve the right
+   * person. The backend reads their live profile, their posts and the engagement
+   * on them, other platforms (X/Instagram) and their web presence, and grades
+   * how much evidence it actually found so thin sections stay honest.
+   *
+   * @param person - A LinkedIn profile URL, or the person's full name.
+   * @param options - `company` (employer domain — required with a name),
+   *   requester context, and an optional focus prompt.
+   * @returns Response; poll with `get()`, read the report from `outputText` and
+   *   the envelope from `structuredResponse` as {@link PersonIntelligenceOutput}.
+   *   See `src/types/company-intelligence.ts` for the full agent reference.
+   */
+  async personIntelligence(
+    person: string,
+    options: PersonIntelligenceOptions = {},
+  ): Promise<CreateResponseResponse> {
+    if (typeof person !== 'string' || !person.trim()) {
+      throw new ValidationError(
+        'personIntelligence requires a LinkedIn profile URL or a person name',
+      )
+    }
+
+    const target = person.trim()
+    const params: SpecializedAgentParams = {}
+
+    if (this._looksLikeLinkedInUrl(target)) {
+      params.linkedinUrl = target
+    }
+    else {
+      if (typeof options.company !== 'string' || !options.company.trim()) {
+        throw new ValidationError(
+          `personIntelligence needs \`company\` (the employer's domain) to resolve `
+          + `"${target}" — or pass the person's LinkedIn profile URL instead.`,
+        )
+      }
+      params.personName = target
+    }
+
+    if (options.company !== undefined)
+      params.company = options.company
+    if (options.companyContext !== undefined)
+      params.companyContext = options.companyContext
+
+    const prompt = options.prompt?.trim()
+      || `Person intelligence report for ${target}`
+
+    return this.create({
+      messages: [{ role: 'user', content: prompt }],
+      specializedAgent: 'person_intelligence',
+      specializedAgentParams: params,
+    })
   }
 }
