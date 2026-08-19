@@ -1,20 +1,37 @@
 name: Publish to npm
 
+# Publish-only. `pnpm bumpp` owns versioning: it bumps package.json,
+# commits, tags and pushes, and the tag push below triggers this run.
+#
+# This workflow must NEVER bump the version itself. It used to, on
+# workflow_dispatch, which double-bumped every release run after a local
+# bumpp and silently skipped a version on npm (v0.5.35 exists as a git
+# tag but was never published).
 on:
+  # Primary path: `pnpm bumpp patch --yes` pushes the tag, this fires.
+  push:
+    tags:
+      - 'v*'
+  # Fallback: a manually created GitHub release. Releases created by
+  # GITHUB_TOKEN (changelogithub in release.yml) do NOT trigger workflows,
+  # so this only fires for releases a person creates.
   release:
     types: [created]
+  # Manual retry — publishes whatever version package.json holds on the
+  # selected ref. Use after fixing NPM_TOKEN or a transient failure.
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to publish (e.g., patch, minor, major, or specific version)'
-        required: true
-        default: patch
+
+# One publish at a time per ref, so a tag push and a release created for
+# the same version cannot race each other to the registry.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -42,29 +59,7 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Bump version (if workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email github-actions[bot]@users.noreply.github.com
-          OLD_VERSION=$(node -p "require('./package.json').version")
-          pnpm bumpp ${{ github.event.inputs.version }} --yes --no-push --no-tag --no-commit
-          VERSION=$(node -p "require('./package.json').version")
-          if [ "$VERSION" = "$OLD_VERSION" ]; then
-            echo "Version bump did not change package.json ($OLD_VERSION)"
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
       - name: Publish to npm
         run: pnpm publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create release commit and tag (if workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git add package.json
-          git commit -m "chore: release v${{ env.VERSION }}"
-          git tag -a v${{ env.VERSION }} -m "Release v${{ env.VERSION }}"
-          git push origin main --tags

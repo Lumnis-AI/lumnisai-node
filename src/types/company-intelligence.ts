@@ -106,7 +106,9 @@
  * - `richness` — person lane only; `null` on company reports.
  * - `stats` — company corpus stats; `{}` on person reports.
  * - `credits` — the per-call credit ledger for the run.
- * - `summary` / `agentParams` — run summary and the resolved params.
+ * - `summary` — run summary, including `legCounts` (per-leg evidence sizes on
+ *   the person lane; `{}` on company reports).
+ * - `agentParams` — the resolved params the run actually used.
  *
  * The envelope is lossless by construction: prose blocks are verbatim slices of
  * `reportMarkdown` (concatenating them reproduces the report minus its `##`
@@ -126,13 +128,17 @@ export type IntelligenceReportReader =
 /** Options accepted by {@link ResponsesResource.companyIntelligence}. */
 export interface CompanyIntelligenceOptions {
   /**
-   * What the report should focus on, sent as the request message. Defaults to a
-   * generic prompt naming the company; the backend requires a non-empty message.
+   * What the report should focus on, sent as the request message. The backend
+   * folds it into the requester context alongside `companyContext`, so it
+   * genuinely steers emphasis and the per-reader takeaways — it is not just a
+   * label. Defaults to a generic prompt naming the company; the backend
+   * requires a non-empty message.
    */
   prompt?: string
   /**
-   * Free-text on who is asking and why. The only content-tailoring input —
-   * it steers emphasis and the per-reader takeaways.
+   * Free-text on who is asking and why. Steers emphasis and the per-reader
+   * takeaways, and is treated as first-hand knowledge — facts stated here
+   * outrank third-party estimates in the report. Combined with `prompt`.
    */
   companyContext?: string
   /**
@@ -160,8 +166,10 @@ export interface CompanyIntelligenceOptions {
 /** Options accepted by {@link ResponsesResource.personIntelligence}. */
 export interface PersonIntelligenceOptions {
   /**
-   * What the report should focus on, sent as the request message. Defaults to a
-   * generic prompt naming the person; the backend requires a non-empty message.
+   * What the report should focus on, sent as the request message. The backend
+   * folds it into the requester context alongside `companyContext`, so it
+   * genuinely steers the "how to approach" section. Defaults to a generic
+   * prompt naming the person; the backend requires a non-empty message.
    */
   prompt?: string
   /**
@@ -258,6 +266,22 @@ export interface IntelligenceReportCompleteness {
   why?: string
 }
 
+/**
+ * How much evidence each person-lane leg actually returned. Present on
+ * `summary.legCounts` for person reports; `{}` on company reports.
+ */
+export interface PersonEvidenceLegCounts {
+  posts?: number
+  comments?: number
+  reactions?: number
+  tweets?: number
+  igPosts?: number
+  webResults?: number
+  /** Whether the employer's cached company brief was attached as context. */
+  employerBrief?: boolean
+  [key: string]: any
+}
+
 /** Run summary carried on the structured response. */
 export interface IntelligenceReportSummary {
   mode: 'company' | 'person' | (string & {})
@@ -265,6 +289,11 @@ export interface IntelligenceReportSummary {
   reportChars: number
   complete?: boolean | null
   creditsTotal?: number | null
+  /**
+   * Per-leg evidence counts on the person lane — the raw sizes behind
+   * `richness`. Empty on company reports.
+   */
+  legCounts?: PersonEvidenceLegCounts | Record<string, never>
   /** Count of recorded errors (not-indexed company, failed translation). */
   errors: number
 }
@@ -275,7 +304,12 @@ export interface IntelligenceReportSummary {
 
 /** One `##` section of the report, for building an index or nav. */
 export interface IntelligenceReportSectionRef {
-  /** Slug derived from the heading, e.g. `1_executive_summary`. Matches `blocks[].sectionId`. */
+  /**
+   * Slug derived from the heading, e.g. `1_executive_summary`. Matches
+   * `blocks[].sectionId`, and unique within a report — a repeated heading
+   * gets a numeric suffix (`overview`, `overview_2`) so by-id joins never
+   * collapse two sections into one.
+   */
   id: string
   title: string
 }
@@ -476,7 +510,10 @@ export interface PersonIntelligenceOutput {
   reportMarkdown: string
   /** How much evidence the run actually found, graded per category. */
   richness: PersonEvidenceRichness | null
-  /** Empty on the person lane — corpus stats are a company-lane artifact. */
+  /**
+   * Empty on the person lane — corpus stats are a company-lane artifact.
+   * Per-leg evidence sizes live on `summary.legCounts` instead.
+   */
   stats: Record<string, never> | Record<string, any>
   credits: IntelligenceCreditLedger
   summary: IntelligenceReportSummary

@@ -251,6 +251,7 @@ describe('intelligence report structured response', () => {
           report_chars: 40823,
           complete: true,
           credits_total: 74.5,
+          leg_counts: {},
           errors: 0,
         },
         agent_params: { company: 'acme.com', since_days: null, allow_spend: false },
@@ -258,7 +259,11 @@ describe('intelligence report structured response', () => {
           subject: { type: 'company', domain: 'acme.com' },
           generated_at: '2026-08-19T12:00:00+00:00',
           translator_model: 'openai:gpt-5.4',
-          sections: [{ id: '1_executive_summary', title: '1. Executive summary' }],
+          sections: [
+            { id: '1_executive_summary', title: '1. Executive summary' },
+            { id: 'overview', title: 'Overview' },
+            { id: 'overview_2', title: 'Overview' },
+          ],
           blocks: [{
             type: 'prose',
             section_id: '1_executive_summary',
@@ -295,6 +300,7 @@ describe('intelligence report structured response', () => {
       reportChars: 40823,
       complete: true,
       creditsTotal: 74.5,
+      legCounts: {},
       errors: 0,
     })
     expect(output.credits.entries[0]).toEqual({
@@ -323,6 +329,12 @@ describe('intelligence report structured response', () => {
     expect(output.envelope.translatorModel).toBe('openai:gpt-5.4')
     expect(output.envelope.overlayDrops).toBe(2)
     expect(output.envelope.sections[0].id).toBe('1_executive_summary')
+    // Repeated headings get a numeric suffix so by-id joins stay 1:1.
+    expect(output.envelope.sections.map((s: any) => s.id)).toEqual([
+      '1_executive_summary',
+      'overview',
+      'overview_2',
+    ])
     expect(output.envelope.charts.map((c: any) => [c.type, c.id])).toEqual([
       ['line_chart', 'headcount_weekly'],
       ['bar_chart', 'function_mix'],
@@ -366,6 +378,15 @@ describe('intelligence report structured response', () => {
             company_domain: 'acme.com',
           },
           report_chars: 18000,
+          leg_counts: {
+            posts: 42,
+            comments: 12,
+            reactions: 88,
+            tweets: 0,
+            ig_posts: 0,
+            web_results: 7,
+            employer_brief: true,
+          },
           errors: 0,
         },
       },
@@ -387,6 +408,16 @@ describe('intelligence report structured response', () => {
       name: 'Dan Chen',
       linkedinUrl: 'https://linkedin.com/in/dan',
       companyDomain: 'acme.com',
+    })
+    // Per-leg evidence sizes ride on summary.legCounts, not on `stats`.
+    expect(response.structuredResponse.summary.legCounts).toEqual({
+      posts: 42,
+      comments: 12,
+      reactions: 88,
+      tweets: 0,
+      igPosts: 0,
+      webResults: 7,
+      employerBrief: true,
     })
   })
 
