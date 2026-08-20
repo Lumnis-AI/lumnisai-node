@@ -5,6 +5,7 @@
 //   - competitorPostEngagement — full reference in src/types/competitor-post-engagement.ts
 //   - competitorRepEngagement — full reference in src/types/competitor-rep-engagement.ts
 //   - engagementExpansion — expand a saved content-intelligence package into people
+//   - influencerEngagement — score people engaging with a set of LinkedIn profiles
 //   - companyIntelligence / personIntelligence — full reference in src/types/company-intelligence.ts
 //
 import type { Http } from '../core/http'
@@ -18,6 +19,7 @@ import type {
   ContentIntelligenceOutputName,
 } from '../types/content-intelligence'
 import type { EngagementExpansionOptions } from '../types/engagement-expansion'
+import type { InfluencerEngagementOptions } from '../types/influencer-engagement'
 import type {
   AddAndRunCriterionRequest,
   ArtifactsListResponse,
@@ -321,6 +323,86 @@ export class ResponsesResource {
     }
   }
 
+  private _validateInfluencerEngagementParams(params: Record<string, any>): void {
+    const seedProfiles = this._getParamValue<string[]>(params, 'seedProfiles', 'seed_profiles')
+    if (!Array.isArray(seedProfiles)
+      || seedProfiles.some(url => typeof url !== 'string')
+      || !seedProfiles.some(url => url.trim().length > 0)) {
+      throw new ValidationError(
+        'seedProfiles is required for influencer_engagement and must contain at least one non-empty string',
+      )
+    }
+
+    const engagementTypes = this._getParamValue<PostEngagementType[]>(
+      params,
+      'engagementTypes',
+      'engagement_types',
+    )
+    if (engagementTypes !== undefined) {
+      if (!Array.isArray(engagementTypes) || engagementTypes.length === 0)
+        throw new ValidationError('engagementTypes must contain at least one value')
+
+      const validTypes: PostEngagementType[] = ['reactor', 'commenter']
+      for (const type of engagementTypes) {
+        if (!validTypes.includes(type)) {
+          throw new ValidationError(
+            `Invalid engagementTypes value: ${String(type)}. Expected 'reactor' and/or 'commenter'.`,
+          )
+        }
+      }
+    }
+
+    const postsDateRange = this._getParamValue<PostsDateRange>(
+      params,
+      'postsDateRange',
+      'posts_date_range',
+    )
+    if (postsDateRange !== undefined) {
+      const validRanges: PostsDateRange[] = [
+        'past-24h',
+        'past-week',
+        'past-month',
+        'past-quarter',
+        'past-6-months',
+        'past-year',
+        'past-2-years',
+        'past-3-years',
+      ]
+      if (!validRanges.includes(postsDateRange))
+        throw new ValidationError(`Invalid postsDateRange value: ${String(postsDateRange)}`)
+    }
+
+    for (const [camel, snake, maximum] of [
+      ['limit', 'limit', 1000],
+      ['maxReactorsPerPost', 'max_reactors_per_post', 5000],
+      ['maxCommentsPerPost', 'max_comments_per_post', 5000],
+    ] as const) {
+      const value = this._getParamValue<number>(params, camel, snake)
+      if (value !== undefined
+        && (!Number.isInteger(value) || value < 1 || value > maximum)) {
+        throw new ValidationError(
+          `${camel} must be an integer between 1 and ${maximum} for influencer_engagement`,
+        )
+      }
+    }
+
+    for (const [camel, snake] of [
+      ['postsEnableFiltering', 'posts_enable_filtering'],
+      ['thoroughEnrichment', 'thorough_enrichment'],
+      ['deepValidationUseRelevanceReranker', 'deep_validation_use_relevance_reranker'],
+    ] as const) {
+      const value = this._getParamValue<boolean>(params, camel, snake)
+      if (value !== undefined && typeof value !== 'boolean')
+        throw new ValidationError(`${camel} must be a boolean for influencer_engagement`)
+    }
+
+    const excludeUrls = this._getParamValue<string[]>(params, 'excludeUrls', 'exclude_urls')
+    if (excludeUrls !== undefined
+      && (!Array.isArray(excludeUrls) || excludeUrls.some(url => typeof url !== 'string'))) {
+      throw new ValidationError('excludeUrls must be an array of strings for influencer_engagement')
+    }
+  }
+
   private _validateSinceDays(value: unknown, agent: string): void {
     if (value === undefined)
       return
@@ -511,6 +593,9 @@ export class ResponsesResource {
 
     if (specializedAgent === 'engagement_expansion')
       this._validateEngagementExpansionParams(rawParams)
+
+    if (specializedAgent === 'influencer_engagement')
+      this._validateInfluencerEngagementParams(rawParams)
 
     if (specializedAgent === 'company_intelligence')
       this._validateCompanyIntelligenceParams(rawParams)
@@ -1052,6 +1137,57 @@ export class ResponsesResource {
     return this.create({
       messages: [{ role: 'user', content: query }],
       specializedAgent: 'engagement_expansion',
+      specializedAgentParams: params,
+    })
+  }
+
+  /**
+   * Score people who react to or comment on posts connected to named LinkedIn profiles.
+   *
+   * The backend reads posts each seed authored and reacted to within the requested
+   * window, selects posts relevant to the persona prompt, then runs their engagers
+   * through the deep people-search scoring chain. Seed profiles are always excluded
+   * from delivered candidates.
+   *
+   * @param query - Persona prompt used to select posts and score discovered people.
+   * @param options - Seed profiles plus optional window, extraction, and cost controls.
+   * @returns Response; poll with `get()` and read `structuredResponse` as
+   *   {@link InfluencerEngagementOutput}.
+   */
+  async influencerEngagement(
+    query: string,
+    options: InfluencerEngagementOptions,
+  ): Promise<CreateResponseResponse> {
+    if (!query.trim())
+      throw new ValidationError('influencerEngagement requires a non-empty persona query')
+
+    const params: SpecializedAgentParams = {
+      seedProfiles: options.seedProfiles,
+    }
+    if (options.postsDateRange !== undefined)
+      params.postsDateRange = options.postsDateRange
+    if (options.engagementTypes !== undefined)
+      params.engagementTypes = options.engagementTypes
+    if (options.postsEnableFiltering !== undefined)
+      params.postsEnableFiltering = options.postsEnableFiltering
+    if (options.thoroughEnrichment !== undefined)
+      params.thoroughEnrichment = options.thoroughEnrichment
+    if (options.deepValidationUseRelevanceReranker !== undefined) {
+      params.deepValidationUseRelevanceReranker
+        = options.deepValidationUseRelevanceReranker
+    }
+    if (options.maxReactorsPerPost !== undefined)
+      params.maxReactorsPerPost = options.maxReactorsPerPost
+    if (options.maxCommentsPerPost !== undefined)
+      params.maxCommentsPerPost = options.maxCommentsPerPost
+    if (options.excludeUrls !== undefined)
+      params.excludeUrls = options.excludeUrls
+    if (options.limit !== undefined)
+      params.limit = options.limit
+
+    return this.create({
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'influencer_engagement',
       specializedAgentParams: params,
     })
   }

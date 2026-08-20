@@ -213,6 +213,8 @@ export interface PostEngagementData {
   role: 'reactor' | 'commenter'
   /** Reaction type for reactors (e.g. LIKE, PRAISE, EMPATHY) */
   reactionType?: string
+  /** Full, untruncated comment body for commenters. */
+  commentText?: string | null
   /** Original competitor input identifier (e.g. "openai.com") */
   competitor?: string
   /** Display name of the competitor company */

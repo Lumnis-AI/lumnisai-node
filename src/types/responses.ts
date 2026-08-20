@@ -26,6 +26,10 @@ import type {
   EngagementExpansionStats,
   EngagementHistoryEntry,
 } from './engagement-expansion'
+import type {
+  InfluencerEngagementSeedCoverage,
+  InfluencerEngagementSeedPost,
+} from './influencer-engagement'
 import type { PersonResult } from './people'
 
 export type { PostEngagementType } from './competitor-post-engagement'
@@ -121,7 +125,7 @@ export interface CriteriaMetadata {
   version: number
   createdAt: string
   source: 'generated' | 'reused' | 'provided'
-  sourceResponseId?: string
+  sourceResponseId?: string | null
   criteriaDefinitions: CriterionDefinition[]
   criteriaClassification: CriteriaClassification
 }
@@ -387,7 +391,8 @@ export interface ValidatedCandidate {
    * One entry per post — if someone engaged with multiple competitor posts,
    * this is a list with multiple entries (merged by merge_candidates_node).
    * Populated by deep_people_search (posts / direct_posts) and
-   * competitor_post_engagement (with competitor provenance joined in).
+   * competitor_post_engagement (with competitor provenance joined in), and
+   * influencer_engagement.
    */
   engagementData?: PostEngagementData[]
   /** Broader recent reaction history loaded for engagement-expansion finalists. */
@@ -512,6 +517,9 @@ export interface StructuredResponse extends Record<string, any> {
   audienceStats?: ContentIntelligenceAudienceStats | Record<string, never>
   /** Engagement expansion output (when using engagement_expansion agent). */
   expansionStats?: EngagementExpansionStats
+  /** Influencer engagement collection metadata. */
+  seedCoverage?: InfluencerEngagementSeedCoverage[]
+  seedPosts?: InfluencerEngagementSeedPost[]
   /**
    * Company/person intelligence output (when using company_intelligence or
    * person_intelligence). `envelope` is the display-block document; it is null
@@ -542,17 +550,17 @@ export type SpecializedAgentType =
   | 'competitor_rep_engagement'
   | 'content_intelligence'
   | 'engagement_expansion'
+  | 'influencer_engagement'
   | 'company_intelligence'
   | 'person_intelligence'
   | (string & {})
 
 /**
- * Shared posts date-range enum (deep_people_search, competitor_post_engagement,
- * competitor_rep_engagement).
+ * Shared posts date-range enum for LinkedIn post and engagement agents.
  *
  * The longer ranges (`past-6-months`, `past-2-years`, `past-3-years`) apply fully
- * only to `competitor_rep_engagement` (engagement is sourced from Fiber profile
- * history, ~3 years). For KEYWORD post search (deep_people_search posts +
+ * only to the Fiber profile-history lanes (`competitor_rep_engagement` and
+ * `influencer_engagement`, ~3 years). For KEYWORD post search (deep_people_search posts +
  * competitor_post_engagement), Crustdata's keyword-post API only supports up to
  * `past-year`: `past-6-months` is honored window-exact via a client-side cutoff
  * (may return fewer results), while `past-2-years`/`past-3-years` are CAPPED to
@@ -659,6 +667,16 @@ export interface SpecializedAgentParams {
   candidateProfiles?: Array<Record<string, any>>
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // Influencer Engagement
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * LinkedIn profile URLs whose authored and reacted-to posts seed discovery.
+   * Required by influencer_engagement. Seeds are always excluded from results.
+   */
+  seedProfiles?: string[]
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // Content Intelligence
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -688,7 +706,10 @@ export interface SpecializedAgentParams {
   postsPerHop?: number
   /** Highest-fit people carried into the next hop. Minimum 1; defaults to 20. */
   peoplePerNextHop?: number
-  /** LinkedIn profile URLs excluded in addition to the source package audience. */
+  /**
+   * LinkedIn profile URLs excluded in addition to the source package audience
+   * or influencer seed profiles.
+   */
   excludeUrls?: string[]
 
   /**
@@ -748,17 +769,18 @@ export interface SpecializedAgentParams {
    * 'past-6-months', 'past-year', 'past-2-years', 'past-3-years'.
    * @default 'past-month'
    * Used by deep_people_search, competitor_post_engagement,
-   * competitor_rep_engagement, and content_intelligence.
+   * competitor_rep_engagement, influencer_engagement, and content_intelligence.
    *
    * For deep_people_search / competitor_post_engagement it bounds POST recency;
    * for competitor_rep_engagement it bounds how far back each rep's OUTGOING
    * engagement is considered (also bounded by `maxEngagementsPerRep`); for
-   * content_intelligence it bounds each audience member's reaction history.
+   * influencer_engagement it bounds each seed's authored and reacted-to posts;
+   * for content_intelligence it bounds each audience member's reaction history.
    *
    * NOTE on keyword post search: Crustdata's keyword-post API only supports up to
    * 'past-year'. 'past-6-months' is honored window-exact via a client-side cutoff
    * (may return fewer results); 'past-2-years'/'past-3-years' are capped to
-   * 'past-year'. The longer ranges apply fully only to competitor_rep_engagement.
+   * 'past-year'. The longer ranges apply fully to the Fiber history lanes.
    */
   postsDateRange?: PostsDateRange
 
@@ -803,7 +825,7 @@ export interface SpecializedAgentParams {
    * Uses LLM to identify and skip hiring posts, spam, and irrelevant content.
    * Improves candidate quality at cost of ~1 LLM call per post.
    * In content_intelligence this marks junk on package rows without deleting it.
-   * Used by deep_people_search and content_intelligence.
+   * Used by deep_people_search, content_intelligence, and influencer_engagement.
    */
   postsEnableFiltering?: boolean
 
@@ -830,8 +852,8 @@ export interface SpecializedAgentParams {
    * to the request). Ranking-only: never changes routing/inclusion; `overallScore` and
    * `intentScore` are untouched. Adds `relevanceScore` / `relevanceTier` per candidate.
    * @default true
-   * Used by deep_people_search, people_scoring, competitor_post_engagement, and
-   * competitor_rep_engagement.
+   * Used by deep_people_search, people_scoring, competitor_post_engagement,
+   * competitor_rep_engagement, and influencer_engagement.
    */
   deepValidationUseRelevanceReranker?: boolean
 
@@ -1096,7 +1118,7 @@ export interface SpecializedAgentParams {
   maxPostsPerTarget?: number
 
   /**
-   * Cap reactors extracted per post. Omit to use Crustdata API max (5000).
+   * Cap reactors extracted per post. Omit to use the agent default (5000).
    * Lower values speed up runs but reduce the candidate pool.
    * Cost is unchanged — Crustdata bills per call regardless of count.
    * @minimum 1
@@ -1105,11 +1127,11 @@ export interface SpecializedAgentParams {
   maxReactorsPerPost?: number
 
   /**
-   * Cap commenters extracted per post. Omit to use quality-cliff threshold (100).
-   * Hard-capped at 100: above 100 Crustdata returns thin profiles
-   * (name + headline only — no employer/skills/education), degrading scoring.
+   * Requested commenter cap per post. Competitor post engagement accepts up to
+   * 100; influencer engagement accepts up to 5000. The backend currently echoes
+   * this field but does not enforce it in direct-post extraction.
    * @minimum 1
-   * @maximum 100
+   * @maximum 5000 (influencer_engagement); 100 (competitor_post_engagement)
    */
   maxCommentsPerPost?: number
 
@@ -1118,7 +1140,8 @@ export interface SpecializedAgentParams {
    * Higher discrimination, higher cost (~20x enrichment spend on large runs).
    * Default false enriches only prefilter survivors.
    * @default false
-   * Used by competitor_post_engagement and competitor_rep_engagement.
+   * Used by competitor_post_engagement, competitor_rep_engagement, and
+   * influencer_engagement.
    */
   thoroughEnrichment?: boolean
 
@@ -1257,8 +1280,8 @@ export interface CreateResponseRequest {
    * Route to a specialized agent instead of the main Lumnis agent
    * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
    * 'competitor_post_engagement', 'competitor_rep_engagement',
-   * 'content_intelligence', 'engagement_expansion', 'company_intelligence',
-   * 'person_intelligence'
+   * 'content_intelligence', 'engagement_expansion', 'influencer_engagement',
+   * 'company_intelligence', 'person_intelligence'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
