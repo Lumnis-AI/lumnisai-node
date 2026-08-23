@@ -387,6 +387,7 @@ export class ResponsesResource {
     }
 
     for (const [camel, snake] of [
+      ['includeReactedPosts', 'include_reacted_posts'],
       ['postsEnableFiltering', 'posts_enable_filtering'],
       ['thoroughEnrichment', 'thorough_enrichment'],
       ['deepValidationUseRelevanceReranker', 'deep_validation_use_relevance_reranker'],
@@ -457,6 +458,86 @@ export class ResponsesResource {
         + '`company`. For a report on a company use the company_intelligence agent.',
       )
     }
+  }
+
+  private _validateSalesNavigatorRequest(request: CreateResponseRequest): void {
+    const directParams = request.specializedAgentParams as Record<string, any> | undefined
+    const directUrl = directParams
+      ? this._getParamValue<unknown>(directParams, 'salesNavigatorUrl', 'sales_navigator_url')
+      : undefined
+
+    const requestOptions = request.options as Record<string, any> | undefined
+    const nestedParams = requestOptions
+      ? this._getParamValue<unknown>(
+          requestOptions,
+          'specializedAgentParams',
+          'specialized_agent_params',
+        )
+      : undefined
+    const nestedUrl = this._isPlainObject(nestedParams)
+      ? this._getParamValue<unknown>(nestedParams, 'salesNavigatorUrl', 'sales_navigator_url')
+      : undefined
+    const optionsUrl = requestOptions
+      ? this._getParamValue<unknown>(requestOptions, 'salesNavigatorUrl', 'sales_navigator_url')
+      : undefined
+    const salesNavigatorUrl = directUrl ?? nestedUrl ?? optionsUrl
+
+    if (salesNavigatorUrl === undefined || salesNavigatorUrl === null)
+      return
+
+    if (typeof salesNavigatorUrl !== 'string'
+      || salesNavigatorUrl.length > 8192
+      || !salesNavigatorUrl.trim()) {
+      throw new ValidationError(
+        'salesNavigatorUrl must be a non-empty string no longer than 8192 characters',
+      )
+    }
+
+    if ([...salesNavigatorUrl].some(character => character.charCodeAt(0) < 32)
+      || salesNavigatorUrl.includes('\\')) {
+      throw new ValidationError('salesNavigatorUrl contains unsafe characters')
+    }
+
+    let parsed: URL
+    try {
+      parsed = new URL(salesNavigatorUrl)
+    }
+    catch {
+      throw new ValidationError('salesNavigatorUrl is malformed')
+    }
+
+    const authorityMatch = salesNavigatorUrl.match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)
+    const rawAuthority = authorityMatch?.[1]
+    if (parsed.protocol !== 'https:')
+      throw new ValidationError('salesNavigatorUrl must use https')
+    if (parsed.hostname !== 'www.linkedin.com')
+      throw new ValidationError('salesNavigatorUrl must use www.linkedin.com')
+    if (parsed.username || parsed.password || parsed.port
+      || rawAuthority?.toLowerCase() !== 'www.linkedin.com') {
+      throw new ValidationError('salesNavigatorUrl cannot contain credentials or a custom port')
+    }
+    if (parsed.hash)
+      throw new ValidationError('salesNavigatorUrl cannot contain a fragment')
+
+    const rawSuffix = authorityMatch
+      ? salesNavigatorUrl.slice(authorityMatch[0].length)
+      : ''
+    const rawPath = rawSuffix.split(/[?#]/, 1)[0]
+    if (rawPath === '/sales/search/company') {
+      throw new ValidationError(
+        'Company Sales Navigator searches are not supported yet; '
+        + 'use a people search or people list URL',
+      )
+    }
+    if (rawPath !== '/sales/search/people'
+      && !/^\/sales\/lists\/people\/\d+$/.test(rawPath)) {
+      throw new ValidationError(
+        'salesNavigatorUrl must be a Sales Navigator people-search or people-list URL',
+      )
+    }
+
+    if (typeof request.userId !== 'string' || !request.userId.trim())
+      throw new ValidationError('userId is required when salesNavigatorUrl is provided')
   }
 
   private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
@@ -662,6 +743,7 @@ export class ResponsesResource {
       for (const file of request.files)
         this._validateFileReference(file.uri)
     }
+    this._validateSalesNavigatorRequest(request)
     if (request.specializedAgentParams)
       this._validateCriteriaParams(request.specializedAgentParams, request.specializedAgent)
     return this.http.post<CreateResponseResponse>('/responses', request)
@@ -836,10 +918,13 @@ export class ResponsesResource {
    * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default true
    * @param options.crmExclusionOwners - Granted owner ledgers to exclude against (user id or email)
    * @param options.crmNameCompanyMatch - Also exclude by exact name+company; @default true
+   * @param options.salesNavigatorUrl - Sales Navigator people-search or people-list URL to use as the only discovery source
+   * @param options.userId - Acting user whose owned Sales Navigator connection should be used; required with `salesNavigatorUrl`
    * @param options.searchJobSignal - CrustData job-listing signal search (decision makers at hiring companies); true | false | 'auto'
    * @param options.deepVerify - Web verification for org/location/third-party criteria: 'auto' (default), 'always', or 'off'
    * @param options.deepValidationUseRelevanceReranker - SLM relevance reranker for surfaced candidates (ranking-only); @default true
    * @param options.deepValidationBackfillBelowCriteria - Pad with criteria-failed candidates when under count; @default true
+   * @param options.enrichEngagementHistory - Add recent LinkedIn engagement evidence before validation; forced off for Sales Navigator V1
    * @param options.deepSearchCriteriaModel - Override criteria decomposition model (e.g. 'openai:gpt-5.4')
    * @returns Response with structured_response containing:
    *   - candidates: Validated and scored candidates
@@ -868,6 +953,8 @@ export class ResponsesResource {
       excludeCrmContacts?: boolean
       crmExclusionOwners?: string[]
       crmNameCompanyMatch?: boolean
+      salesNavigatorUrl?: string
+      userId?: string
       // LinkedIn Posts Integration options
       searchProfiles?: boolean | 'auto'
       searchPosts?: boolean | 'auto'
@@ -888,6 +975,7 @@ export class ResponsesResource {
       deepVerify?: 'off' | 'auto' | 'always'
       deepValidationUseRelevanceReranker?: boolean
       deepValidationBackfillBelowCriteria?: boolean
+      enrichEngagementHistory?: boolean
       deepSearchCriteriaModel?: string
     },
   ): Promise<CreateResponseResponse> {
@@ -895,6 +983,9 @@ export class ResponsesResource {
       messages: [{ role: 'user', content: query }],
       specializedAgent: 'deep_people_search',
     }
+
+    if (options?.userId !== undefined)
+      request.userId = options.userId
 
     const params: SpecializedAgentParams = {
       deepValidationUseRelevanceReranker: options?.deepValidationUseRelevanceReranker ?? true,
@@ -930,6 +1021,8 @@ export class ResponsesResource {
         params.crmExclusionOwners = options.crmExclusionOwners
       if (options.crmNameCompanyMatch !== undefined)
         params.crmNameCompanyMatch = options.crmNameCompanyMatch
+      if (options.salesNavigatorUrl !== undefined)
+        params.salesNavigatorUrl = options.salesNavigatorUrl
       // LinkedIn Posts Integration parameters
       if (options.searchProfiles !== undefined)
         params.searchProfiles = options.searchProfiles
@@ -965,8 +1058,25 @@ export class ResponsesResource {
         params.searchJobSignal = options.searchJobSignal
       if (options.deepVerify !== undefined)
         params.deepVerify = options.deepVerify
+      if (options.enrichEngagementHistory !== undefined)
+        params.enrichEngagementHistory = options.enrichEngagementHistory
       if (options.deepSearchCriteriaModel)
         params.deepSearchCriteriaModel = options.deepSearchCriteriaModel
+
+      if (options.salesNavigatorUrl !== undefined) {
+        // Sales Navigator V1 is a fixed source/cost lane. Keep the outgoing
+        // request consistent with the backend's authoritative overrides.
+        params.searchProfiles = false
+        params.searchPosts = false
+        params.searchConnections = false
+        params.searchJobSignal = false
+        params.includeEngagementInScore = false
+        params.postsEnableEnrichment = false
+        params.postsEnableFiltering = false
+        params.deepValidationUseRelevanceReranker = false
+        params.deepValidationBackfillBelowCriteria = false
+        params.enrichEngagementHistory = false
+      }
     }
 
     request.specializedAgentParams = params
@@ -1144,10 +1254,10 @@ export class ResponsesResource {
   /**
    * Score people who react to or comment on posts connected to named LinkedIn profiles.
    *
-   * The backend reads posts each seed authored and reacted to within the requested
-   * window, selects posts relevant to the persona prompt, then runs their engagers
-   * through the deep people-search scoring chain. Seed profiles are always excluded
-   * from delivered candidates.
+   * The backend reads posts each seed authored within the requested window and can
+   * optionally include posts they reacted to. It selects posts relevant to the
+   * persona prompt, then runs their engagers through the deep people-search scoring
+   * chain. Seed profiles are always excluded from delivered candidates.
    *
    * @param query - Persona prompt used to select posts and score discovered people.
    * @param options - Seed profiles plus optional window, extraction, and cost controls.
@@ -1164,6 +1274,8 @@ export class ResponsesResource {
     const params: SpecializedAgentParams = {
       seedProfiles: options.seedProfiles,
     }
+    if (options.includeReactedPosts !== undefined)
+      params.includeReactedPosts = options.includeReactedPosts
     if (options.postsDateRange !== undefined)
       params.postsDateRange = options.postsDateRange
     if (options.engagementTypes !== undefined)

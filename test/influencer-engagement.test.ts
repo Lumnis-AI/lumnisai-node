@@ -24,6 +24,7 @@ describe('influencerEngagement', () => {
         'https://www.linkedin.com/in/influencer-one',
         'https://www.linkedin.com/in/influencer-two',
       ],
+      includeReactedPosts: true,
       postsDateRange: 'past-quarter',
       engagementTypes: ['commenter'],
       postsEnableFiltering: false,
@@ -43,6 +44,7 @@ describe('influencerEngagement', () => {
           'https://www.linkedin.com/in/influencer-one',
           'https://www.linkedin.com/in/influencer-two',
         ],
+        includeReactedPosts: true,
         postsDateRange: 'past-quarter',
         engagementTypes: ['commenter'],
         postsEnableFiltering: false,
@@ -103,6 +105,14 @@ describe('influencerEngagement', () => {
         postsDateRange: 'past-decade' as any,
       },
     })).rejects.toThrow('Invalid postsDateRange value')
+
+    await expect(responses.create({
+      ...base,
+      specializedAgentParams: {
+        seedProfiles: ['https://www.linkedin.com/in/influencer'],
+        include_reacted_posts: 'yes' as any,
+      },
+    })).rejects.toThrow('includeReactedPosts must be a boolean')
 
     await expect(responses.create({
       ...base,
@@ -173,6 +183,7 @@ describe('influencerEngagement', () => {
         }],
         agent_params: {
           seed_profiles: ['https://www.linkedin.com/in/influencer'],
+          include_reacted_posts: true,
           posts_date_range: 'past-month',
           engagement_types: ['reactor', 'commenter'],
           posts_enable_filtering: true,
@@ -197,6 +208,7 @@ describe('influencerEngagement', () => {
     expect(response.structuredResponse.candidates[0].engagementData?.[0].commentText)
       .toBe('This is the problem our team is solving now.')
     expect(response.structuredResponse.agentParams.postsEnableFiltering).toBe(true)
+    expect(response.structuredResponse.agentParams.includeReactedPosts).toBe(true)
     expect(response.structuredResponse.totalExcluded).toBe(2)
   })
 })

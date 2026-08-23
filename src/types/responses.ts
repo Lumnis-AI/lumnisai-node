@@ -275,6 +275,8 @@ export interface ValidatedCandidate {
   name: string
   /** LinkedIn profile URL */
   linkedinUrl?: string
+  /** LinkedIn/provider member identifier, including Sales Navigator hidden-profile IDs. */
+  linkedinMemberId?: string | null
   /**
    * Current job title. When the reranker runs, may reflect the resolved primary
    * operating role (`primaryTitle`); see `enrichedCurrentTitle` for the pre-rerank value.
@@ -336,8 +338,9 @@ export interface ValidatedCandidate {
   intentSignals?: IntentSignal[]
   /**
    * Holistic relevance score (0-100) from the SLM reranker (on by default).
-   * Ranking-only: absent only when `deepValidationUseRelevanceReranker` was false;
-   * does not change `overallScore` or routing.
+   * Ranking-only: absent when `deepValidationUseRelevanceReranker` was false or
+   * when the fixed Sales Navigator lane was used; does not change `overallScore`
+   * or routing.
    */
   relevanceScore?: number
   /** Coarse match tier paired with `relevanceScore`. */
@@ -403,6 +406,12 @@ export interface ValidatedCandidate {
   refoundOnNewPost?: boolean
   /** Source of candidate data */
   source?: string
+  /** Candidate-source lanes that found this person, including `sales_navigator`. */
+  discoverySources?: string[]
+  /** LinkedIn relationship distance reported by Sales Navigator. */
+  networkDistance?: 'FIRST_DEGREE' | 'SECOND_DEGREE' | 'THIRD_DEGREE' | 'OUT_OF_NETWORK' | null
+  /** Number of mutual LinkedIn connections reported by Sales Navigator. */
+  mutualConnectionsCount?: number | null
   /** When source is job_signal: hiring-company context from CrustData job listings */
   jobSignalMetadata?: {
     companyId?: number | null
@@ -585,7 +594,8 @@ export type PostsDateRange =
 export interface SpecializedAgentParams {
   /**
    * Maximum number of results.
-   * Agent-specific ranges: quick_people_search (1-100), competitor_post_engagement (1-1000).
+   * Agent-specific ranges: quick_people_search (1-100), deep_people_search
+   * alias (1-1000), competitor_post_engagement (1-1000).
    */
   limit?: number
   /**
@@ -593,6 +603,17 @@ export interface SpecializedAgentParams {
    * Range: 1-1000
    */
   requestedCandidates?: number
+  /**
+   * LinkedIn Sales Navigator people-search or people-list URL used as the
+   * deterministic candidate source for deep_people_search. Requires `userId`
+   * on the create request so the backend can resolve the acting user's owned
+   * LinkedIn connection. V1 accepts people-search and people-list URLs only,
+   * caps provider extraction at 2,500 rows, and disables all other discovery
+   * lanes, relevance reranking, below-criteria backfill, and engagement-history
+   * enrichment.
+   * @maxLength 8192
+   */
+  salesNavigatorUrl?: string
   /**
    * Specific data sources to use (agent-specific)
    * For people search agents: ["PDL", "CORESIGNAL", "CRUST_DATA"]
@@ -671,10 +692,18 @@ export interface SpecializedAgentParams {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * LinkedIn profile URLs whose authored and reacted-to posts seed discovery.
+   * LinkedIn profile URLs whose authored posts seed discovery.
    * Required by influencer_engagement. Seeds are always excluded from results.
    */
   seedProfiles?: string[]
+
+  /**
+   * Whether influencer_engagement should also use posts the seeds reacted to.
+   * These posts describe a wider, third-party audience and may carry no
+   * engagement counts, so they can rank below authored posts.
+   * @default false
+   */
+  includeReactedPosts?: boolean
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Content Intelligence
@@ -774,7 +803,8 @@ export interface SpecializedAgentParams {
    * For deep_people_search / competitor_post_engagement it bounds POST recency;
    * for competitor_rep_engagement it bounds how far back each rep's OUTGOING
    * engagement is considered (also bounded by `maxEngagementsPerRep`); for
-   * influencer_engagement it bounds each seed's authored and reacted-to posts;
+   * influencer_engagement it bounds each seed's authored posts and, when
+   * `includeReactedPosts` is true, reacted-to posts;
    * for content_intelligence it bounds each audience member's reaction history.
    *
    * NOTE on keyword post search: Crustdata's keyword-post API only supports up to
@@ -853,7 +883,8 @@ export interface SpecializedAgentParams {
    * `intentScore` are untouched. Adds `relevanceScore` / `relevanceTier` per candidate.
    * @default true
    * Used by deep_people_search, people_scoring, competitor_post_engagement,
-   * competitor_rep_engagement, and influencer_engagement.
+   * competitor_rep_engagement, and influencer_engagement. Forced off for the
+   * Sales Navigator V1 source lane.
    */
   deepValidationUseRelevanceReranker?: boolean
 
@@ -862,9 +893,19 @@ export interface SpecializedAgentParams {
    * promoting top-scoring excluded candidates (tagged `backfilled=true`). Set false for
    * quality-over-count (return only passing candidates, even if fewer than requested).
    * @default true
-   * Used by deep_people_search and people_scoring.
+   * Used by deep_people_search and people_scoring. Forced off for the Sales
+   * Navigator V1 source lane.
    */
   deepValidationBackfillBelowCriteria?: boolean
+
+  /**
+   * Enrich fast-filter survivors with recent LinkedIn engagement history before
+   * deep validation. This is an optional paid stage and is forced off for the
+   * Sales Navigator V1 source lane.
+   * @default true
+   * Used by deep_people_search.
+   */
+  enrichEngagementHistory?: boolean
 
   /**
    * Override the model used for criteria decomposition (e.g. 'openai:gpt-5.4').

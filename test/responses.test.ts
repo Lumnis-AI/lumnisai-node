@@ -63,6 +63,119 @@ describe('responses AI columns', () => {
     }))
   })
 
+  it('forwards a Sales Navigator source with its acting user', async () => {
+    const salesNavigatorUrl
+      = 'https://www.linkedin.com/sales/search/people?query=finance-leaders'
+
+    await responses.deepPeopleSearch('Find finance leaders', {
+      salesNavigatorUrl,
+      userId: 'person@example.com',
+      requestedCandidates: 10,
+      searchProfiles: true,
+      searchPosts: true,
+      searchJobSignal: true,
+      deepValidationUseRelevanceReranker: true,
+      deepValidationBackfillBelowCriteria: true,
+      enrichEngagementHistory: true,
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/responses', expect.objectContaining({
+      userId: 'person@example.com',
+      specializedAgent: 'deep_people_search',
+      specializedAgentParams: expect.objectContaining({
+        salesNavigatorUrl,
+        requestedCandidates: 10,
+        searchProfiles: false,
+        searchPosts: false,
+        searchConnections: false,
+        searchJobSignal: false,
+        includeEngagementInScore: false,
+        postsEnableEnrichment: false,
+        postsEnableFiltering: false,
+        deepValidationUseRelevanceReranker: false,
+        deepValidationBackfillBelowCriteria: false,
+        enrichEngagementHistory: false,
+      }),
+    }))
+  })
+
+  it('requires an acting user for a Sales Navigator source', async () => {
+    await expect(responses.deepPeopleSearch('Find finance leaders', {
+      salesNavigatorUrl: 'https://www.linkedin.com/sales/lists/people/7361316386964402177',
+    })).rejects.toThrow('userId is required when salesNavigatorUrl is provided')
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it('enforces the Sales Navigator user guard for nested legacy params', async () => {
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Find finance leaders' }],
+      options: {
+        specialized_agent_params: {
+          sales_navigator_url:
+            'https://www.linkedin.com/sales/search/people?query=finance-leaders',
+        },
+      },
+    })).rejects.toThrow('userId is required when salesNavigatorUrl is provided')
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it('enforces the Sales Navigator user guard for top-level legacy options', async () => {
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Find finance leaders' }],
+      options: {
+        sales_navigator_url:
+          'https://www.linkedin.com/sales/search/people?query=finance-leaders',
+      },
+    })).rejects.toThrow('userId is required when salesNavigatorUrl is provided')
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty Sales Navigator URL before sending the request', async () => {
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Find finance leaders' }],
+      userId: 'person@example.com',
+      specializedAgent: 'deep_people_search',
+      specializedAgentParams: { salesNavigatorUrl: '   ' },
+    })).rejects.toThrow('salesNavigatorUrl must be a non-empty string')
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'http://www.linkedin.com/sales/search/people?query=x',
+    'https://linkedin.com/sales/search/people?query=x',
+    'https://user@www.linkedin.com/sales/search/people?query=x',
+    'https://www.linkedin.com:443/sales/search/people?query=x',
+    'https://www.linkedin.com/sales/search/people?query=x#fragment',
+    'https://www.linkedin.com/sales/lists/people/not-a-number',
+    'https://www.linkedin.com/in/example',
+  ])('rejects invalid Sales Navigator URL %s', async (salesNavigatorUrl) => {
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Find finance leaders' }],
+      userId: 'person@example.com',
+      specializedAgent: 'deep_people_search',
+      specializedAgentParams: { salesNavigatorUrl },
+    })).rejects.toThrow()
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects Sales Navigator company searches with people-only guidance', async () => {
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Find companies' }],
+      userId: 'person@example.com',
+      specializedAgent: 'deep_people_search',
+      specializedAgentParams: {
+        salesNavigatorUrl: 'https://www.linkedin.com/sales/search/company?query=x',
+      },
+    })).rejects.toThrow('Company Sales Navigator searches are not supported yet')
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
   it('still requires existing criteria when adding a criterion during deep search', async () => {
     await expect(responses.deepPeopleSearch('Find relevant people', {
       addAndRunCriterion: 'Has relevant experience',

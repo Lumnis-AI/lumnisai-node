@@ -7,8 +7,14 @@ import type {
 
 /** Options accepted by {@link ResponsesResource.influencerEngagement}. */
 export interface InfluencerEngagementOptions {
-  /** LinkedIn profile URLs whose authored and reacted-to posts seed discovery. */
+  /** LinkedIn profile URLs whose authored posts seed discovery. */
   seedProfiles: string[]
+  /**
+   * Also use posts the seeds reacted to. These posts describe a wider,
+   * third-party audience and are disabled by default.
+   * @default false
+   */
+  includeReactedPosts?: boolean
   /** How far back to inspect each seed's activity. @default 'past-month' */
   postsDateRange?: PostsDateRange
   /** Candidate engagement roles to collect. @default ['reactor', 'commenter'] */
@@ -37,6 +43,7 @@ export interface InfluencerEngagementOptions {
 /** Resolved parameters echoed in `structuredResponse.agentParams`. */
 export interface InfluencerEngagementResolvedParams {
   seedProfiles: string[]
+  includeReactedPosts: boolean
   postsDateRange: PostsDateRange
   engagementTypes: PostEngagementType[]
   postsEnableFiltering: boolean
