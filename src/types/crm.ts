@@ -227,7 +227,8 @@ export interface CrmAccountContextCandidateInput {
 
 /**
  * Query exact-person and account/deal context across all configured CRMs.
- * The backend accepts 1..1000 candidates per request.
+ * The backend accepts 1..100 candidates per request; chunk longer lists
+ * client-side and reassemble by `inputKey`.
  */
 export interface CrmAccountContextBatchRequest {
   /** UUID or email of the CRM owner whose context is queried. */

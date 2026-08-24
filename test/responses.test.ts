@@ -1,7 +1,9 @@
 import type { Http } from '../src/core/http'
+import type { DeepPeopleSearchOutput } from '../src/types/responses'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocalFileNotSupportedError } from '../src/errors'
 import { ResponsesResource } from '../src/resources/responses'
+import { toCamelCase } from '../src/utils/case-conversion'
 
 describe('responses AI columns', () => {
   let responses: ResponsesResource
@@ -180,6 +182,149 @@ describe('responses AI columns', () => {
     await expect(responses.deepPeopleSearch('Find relevant people', {
       addAndRunCriterion: 'Has relevant experience',
     })).rejects.toThrow('requires existing criteria outside people_scoring')
+  })
+
+  it('accepts hard and soft post-retrieval criteria together', async () => {
+    const postHard = {
+      criterionId: 'post_hard_0',
+      columnName: 'commercial_sales',
+      criterionText: 'Must sell to commercial accounts',
+      criterionType: 'post_hard' as const,
+      weight: 1,
+    }
+    const postSoft = {
+      criterionId: 'post_soft_0',
+      columnName: 'first_role_holder',
+      criterionText: 'Preferably the first person to hold this role',
+      criterionType: 'post_soft' as const,
+      weight: 1,
+      sourceClauseQuote: 'Preferably the first person to hold this role',
+    }
+
+    await responses.deepPeopleSearch('Find commercial sellers', {
+      criteriaDefinitions: [postHard, postSoft],
+      criteriaClassification: {
+        universalCriteria: [],
+        postHardCriteria: [postHard],
+        varyingCriteria: [],
+        postSoftCriteria: [postSoft],
+        validationOnlyCriteria: [],
+      },
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/responses', expect.objectContaining({
+      specializedAgentParams: expect.objectContaining({
+        criteriaDefinitions: [postHard, postSoft],
+        criteriaClassification: expect.objectContaining({
+          postHardCriteria: [postHard],
+          postSoftCriteria: [postSoft],
+        }),
+      }),
+    }))
+  })
+
+  it('keeps legacy criteria responses valid when post-retrieval buckets are absent', () => {
+    const output = toCamelCase<DeepPeopleSearchOutput>({
+      candidates: [{
+        candidate_id: 'candidate-1',
+        name: 'Legacy Candidate',
+        overall_score: 8.5,
+        overall_confidence: 0.9,
+        summary: 'Legacy response',
+        any_universal_failed: false,
+      }],
+      criteria: {
+        version: 1,
+        created_at: '2026-08-20T00:00:00Z',
+        source: 'generated',
+        criteria_definitions: [{
+          criterion_id: 'universal_0',
+          column_name: 'current_employer',
+          criterion_text: 'Currently works at Acme',
+          criterion_type: 'universal',
+          weight: 1,
+        }],
+        criteria_classification: {
+          universal_criteria: [],
+          varying_criteria: [],
+          validation_only_criteria: [],
+        },
+      },
+    })
+
+    expect(output.criteria?.criteriaClassification.postHardCriteria).toBeUndefined()
+    expect(output.criteria?.criteriaClassification.postSoftCriteria).toBeUndefined()
+    expect(output.candidates[0].anyUniversalFailed).toBe(false)
+  })
+
+  it('camel-cases new criteria audit, uncertainty, and job-evidence fields', () => {
+    const output = toCamelCase<DeepPeopleSearchOutput>({
+      candidates: [{
+        candidate_id: 'candidate-2',
+        name: 'Current Candidate',
+        overall_score: 7.5,
+        overall_confidence: 0.8,
+        summary: 'Needs review',
+        any_universal_failed: false,
+        any_universal_uncertain: true,
+        any_hard_uncertain: true,
+        job_signal_metadata: {
+          sample_job_listings: [{
+            job_id: 'job-1',
+            title: 'Revenue Operations Manager',
+            date_added: '2026-08-20',
+            date_updated: '2026-08-23',
+            checked_at: '2026-08-24T12:00:00Z',
+            url: 'https://jobs.example.com/job-1',
+            source: 'linkedin',
+          }],
+        },
+      }],
+      criteria: {
+        version: 2,
+        created_at: '2026-08-24T00:00:00Z',
+        source: 'generated',
+        criteria_definitions: [{
+          criterion_id: 'post_soft_0',
+          column_name: 'first_role_holder',
+          criterion_text: 'Preferably first in role',
+          criterion_type: 'post_soft',
+          weight: 1,
+          source_clause_quote: 'Preferably first in role',
+          audit_mutated: 'edited+retyped',
+          strength_guard_mutated: true,
+          strength_guard_reason: 'explicit_soft_source_clause',
+        }],
+        criteria_classification: {
+          universal_criteria: [],
+          post_hard_criteria: [],
+          varying_criteria: [],
+          post_soft_criteria: [],
+          validation_only_criteria: [],
+        },
+      },
+    })
+
+    const definition = output.criteria?.criteriaDefinitions[0]
+    const listing = output.candidates[0].jobSignalMetadata?.sampleJobListings?.[0]
+    expect(definition).toEqual(expect.objectContaining({
+      criterionType: 'post_soft',
+      sourceClauseQuote: 'Preferably first in role',
+      auditMutated: 'edited+retyped',
+      strengthGuardMutated: true,
+      strengthGuardReason: 'explicit_soft_source_clause',
+    }))
+    expect(output.candidates[0]).toEqual(expect.objectContaining({
+      anyUniversalUncertain: true,
+      anyHardUncertain: true,
+    }))
+    expect(listing).toEqual(expect.objectContaining({
+      jobId: 'job-1',
+      dateAdded: '2026-08-20',
+      dateUpdated: '2026-08-23',
+      checkedAt: '2026-08-24T12:00:00Z',
+      url: 'https://jobs.example.com/job-1',
+    }))
   })
 
   it('rejects an invalid AI column kind passed through create', async () => {

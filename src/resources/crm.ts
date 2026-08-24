@@ -35,8 +35,9 @@ import type {
  * - `502 crm_upstream_error` — Attio/HubSpot returned an error.
  * - `503 crm_upstream_rate_limited` — upstream rate-limit; the response
  *   includes a `Retry-After` header.
- * - `503 account_context_not_configured` — account-context serving data is not
- *   configured for the requested CRM owner.
+ * - `503 crm_connection_status_unavailable` (account context) — the provider
+ *   connection status could not be verified. Retryable; the response includes
+ *   a `Retry-After` header. Distinct from `409 crm_not_connected`.
  */
 export class CrmResource {
   constructor(private readonly http: Http) {}
@@ -112,6 +113,12 @@ export class CrmResource {
    * Results preserve candidate order and reference deduplicated account
    * details through `accountRef`. Provider degradation and unknown deal stages
    * are returned explicitly and must not be treated as safe negative results.
+   *
+   * Capped at 100 candidates per request; chunk longer lists and reassemble by
+   * `inputKey`. Provider selection comes from the resolved owner's active
+   * HubSpot/Attio connections: no active supported connection is
+   * `409 crm_not_connected`, and a connection-verification failure is a
+   * retryable `503 crm_connection_status_unavailable`.
    *
    * @example
    * ```typescript

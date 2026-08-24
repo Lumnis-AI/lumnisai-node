@@ -68,7 +68,12 @@ export interface ModelOverrides {
   [key: string]: string
 }
 
-export type CriterionType = 'universal' | 'varying' | 'validation_only'
+export type CriterionType
+  = | 'universal'
+    | 'post_hard'
+    | 'varying'
+    | 'post_soft'
+    | 'validation_only'
 export type ColumnKind = 'extraction' | 'verdict'
 
 /** SLM relevance reranker tier (deep_people_search / people_scoring output). */
@@ -80,6 +85,14 @@ export interface CriterionDefinition {
   criterionText: string
   criterionType: CriterionType
   weight: number
+  /** Exact user-prompt clause supporting the generated criterion, when available. */
+  sourceClauseQuote?: string
+  /** The grounded fidelity audit edited, retyped, or added this criterion. */
+  auditMutated?: 'edited' | 'edited+retyped' | 'added'
+  /** The deterministic source-clause strength guard retyped this criterion. */
+  strengthGuardMutated?: boolean
+  /** Machine-readable explanation for a deterministic strength retype. */
+  strengthGuardReason?: string
   /** Expected answer shape for an extraction column. */
   answerFormat?: string
   /** Whether this criterion extracts a value or produces a score-bearing verdict. */
@@ -96,10 +109,14 @@ export interface CriterionDefinition {
 
 export interface CriteriaClassification {
   universalCriteria: CriterionDefinition[]
+  postHardCriteria?: CriterionDefinition[]
   varyingCriteria: CriterionDefinition[]
+  postSoftCriteria?: CriterionDefinition[]
   validationOnlyCriteria: CriterionDefinition[]
   universalReasoning?: string
+  postHardReasoning?: string
   varyingReasoning?: string
+  postSoftReasoning?: string
   validationReasoning?: string
 }
 
@@ -178,7 +195,7 @@ export interface EvidenceSource {
 export interface CriterionResult {
   /** Unique identifier matching criteria definition */
   criterionId: string
-  /** Type: universal, varying, or validation_only */
+  /** Type encodes both requirement strength and evaluation stage. */
   criterionType: CriterionType
   /** Column name for display */
   columnName: string
@@ -383,6 +400,13 @@ export interface ValidatedCandidate {
    */
   anyUniversalFailed?: boolean
   /**
+   * Legacy-named aggregate: true when any universal or post_hard criterion
+   * could not be decided from sufficient evidence.
+   */
+  anyUniversalUncertain?: boolean
+  /** Explicit alias for anyUniversalUncertain covering every hard criterion. */
+  anyHardUncertain?: boolean
+  /**
    * True when promoted from excluded to meet the requested count despite failing hard
    * criteria. This is useful for display and auditing but no longer forces a lower rank tier.
    */
@@ -420,11 +444,16 @@ export interface ValidatedCandidate {
     jobCount?: number
     signalSource?: string
     sampleJobListings?: Array<{
+      jobId?: string | number | null
       title?: string
       description?: string
       workplaceType?: string
       country?: string
       dateAdded?: string
+      dateUpdated?: string
+      checkedAt?: string
+      url?: string | null
+      source?: string | null
     }>
   }
   /** Raw profile data */

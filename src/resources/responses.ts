@@ -65,7 +65,13 @@ export class ResponsesResource {
 
     const criterionIds = new Set<string>()
     const columnNames = new Set<string>()
-    const validTypes: CriterionType[] = ['universal', 'varying', 'validation_only']
+    const validTypes: CriterionType[] = [
+      'universal',
+      'post_hard',
+      'varying',
+      'post_soft',
+      'validation_only',
+    ]
 
     criteriaDefinitions.forEach((criterion, index) => {
       if (!this._isPlainObject(criterion))
@@ -108,7 +114,9 @@ export class ResponsesResource {
       throw new ValidationError('criteria_classification must be an object')
 
     const universalCriteria = this._getParamValue<unknown>(criteriaClassification, 'universalCriteria', 'universal_criteria')
+    const postHardCriteria = this._getParamValue<unknown>(criteriaClassification, 'postHardCriteria', 'post_hard_criteria')
     const varyingCriteria = this._getParamValue<unknown>(criteriaClassification, 'varyingCriteria', 'varying_criteria')
+    const postSoftCriteria = this._getParamValue<unknown>(criteriaClassification, 'postSoftCriteria', 'post_soft_criteria')
     const validationOnlyCriteria = this._getParamValue<unknown>(criteriaClassification, 'validationOnlyCriteria', 'validation_only_criteria')
 
     if (!Array.isArray(universalCriteria))
@@ -117,6 +125,10 @@ export class ResponsesResource {
       throw new ValidationError('criteria_classification missing or invalid varying_criteria')
     if (!Array.isArray(validationOnlyCriteria))
       throw new ValidationError('criteria_classification missing or invalid validation_only_criteria')
+    if (postHardCriteria !== undefined && !Array.isArray(postHardCriteria))
+      throw new ValidationError('criteria_classification has invalid post_hard_criteria')
+    if (postSoftCriteria !== undefined && !Array.isArray(postSoftCriteria))
+      throw new ValidationError('criteria_classification has invalid post_soft_criteria')
   }
 
   private _validateCompetitorPostEngagementParams(params: Record<string, any>): void {
