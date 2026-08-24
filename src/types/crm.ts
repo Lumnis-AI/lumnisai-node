@@ -161,3 +161,150 @@ export interface CrmMatchedProspect {
 export interface CrmMatchBatchResponse {
   matches: CrmMatchedProspect[]
 }
+
+// ==================== account context ====================
+
+/** Whether a provider source can support a trustworthy conclusion. */
+export type CrmAccountContextSourceStatus
+  = | 'complete'
+    | 'empty_complete'
+    | 'degraded'
+    | 'not_configured'
+
+/** Cross-provider deal-stage classification; native stage values stay intact. */
+export type CrmAccountContextStageClass
+  = | 'active'
+    | 'terminal_won'
+    | 'terminal_lost'
+    | 'non_blocking'
+    | 'unknown'
+
+/** Interpreted account-level sales state. */
+export type CrmAccountContextSalesState
+  = | 'active_pipeline'
+    | 'existing_customer'
+    | 'marketing_only'
+    | 'no_active_pipeline'
+    | 'not_found'
+    | 'unknown'
+
+/** How a candidate was matched to a provider account. */
+export type CrmAccountContextMatchMethod
+  = | 'exact_person_association'
+    | 'exact_domain'
+    | 'exact_company_linkedin'
+    | 'unique_exact_name'
+    | 'ambiguous'
+    | 'none'
+
+export type CrmAccountContextMatchConfidence = 'high' | 'medium' | 'low' | 'none'
+
+export type CrmAccountContextAssociationKind = 'direct' | 'via_contact'
+
+export type CrmAccountContextAssociationConfidence = 'high' | 'medium' | 'low'
+
+/**
+ * Stable candidate identity plus the best grounded current-company identity.
+ *
+ * At least one person identity (`linkedinUrl` or `email`) or account identity
+ * (`companyDomain`, `companyLinkedinUrl`, or `companyName`) is required.
+ * `inputKey` values must be unique within a batch.
+ */
+export interface CrmAccountContextCandidateInput {
+  inputKey: string
+  linkedinUrl?: string
+  email?: string
+  fullName?: string
+  companyName?: string
+  companyDomain?: string
+  companyLinkedinUrl?: string
+}
+
+/**
+ * Query exact-person and account/deal context across all configured CRMs.
+ * The backend accepts 1..1000 candidates per request.
+ */
+export interface CrmAccountContextBatchRequest {
+  /** UUID or email of the CRM owner whose context is queried. */
+  userId: string
+  candidates: CrmAccountContextCandidateInput[]
+}
+
+export interface CrmAccountContextProviderCoverage {
+  provider: CrmProvider
+  accountSource: CrmAccountContextSourceStatus
+  personSource: CrmAccountContextSourceStatus
+  dealSource: CrmAccountContextSourceStatus
+  /** ISO-8601 timestamp. */
+  checkedAt: string
+  /** ISO-8601 timestamp. */
+  freshUntil: string
+  generation: number
+  errorCode?: string | null
+}
+
+export interface CrmAccountContextPersonPresence {
+  provider: CrmProvider
+  personId: string
+  displayName: string
+  recordUrl?: string | null
+  relationshipClass: string
+}
+
+export interface CrmAccountContextPersonPreview {
+  personId: string
+  displayName: string
+  recordUrl?: string | null
+}
+
+export interface CrmAccountContextDealSummary {
+  dealId: string
+  displayName: string
+  recordUrl?: string | null
+  pipelineId: string
+  pipelineLabel: string
+  stageId: string
+  stageLabel: string
+  stageClass: CrmAccountContextStageClass
+  associationKind: CrmAccountContextAssociationKind
+  associationConfidence: CrmAccountContextAssociationConfidence
+  participantCount: number
+  participantPreview: CrmAccountContextPersonPreview[]
+}
+
+/** Provider-qualified account details emitted once and referenced by rows. */
+export interface CrmAccountContextDetail {
+  accountRef: string
+  provider: CrmProvider
+  accountId: string
+  displayName: string
+  recordUrl?: string | null
+  contactCount: number
+  contactPreview: CrmAccountContextPersonPreview[]
+  dealCount: number
+  dealPreview: CrmAccountContextDealSummary[]
+}
+
+export interface CrmAccountContextProviderResult {
+  provider: CrmProvider
+  personPresence: CrmAccountContextPersonPresence[]
+  accountRef?: string | null
+  matchMethod: CrmAccountContextMatchMethod
+  matchConfidence: CrmAccountContextMatchConfidence
+  salesState: CrmAccountContextSalesState
+  reasonCode: string
+  coverageStatus: CrmAccountContextSourceStatus
+}
+
+export interface CrmAccountContextResult {
+  inputKey: string
+  salesState: CrmAccountContextSalesState
+  providers: CrmAccountContextProviderResult[]
+}
+
+/** Ordered candidate results plus deduplicated provider-qualified accounts. */
+export interface CrmAccountContextBatchResponse {
+  results: CrmAccountContextResult[]
+  accounts: CrmAccountContextDetail[]
+  providerCoverage: CrmAccountContextProviderCoverage[]
+}

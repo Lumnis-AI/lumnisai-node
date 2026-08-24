@@ -1,5 +1,7 @@
 import type { Http } from '../core/http'
 import type {
+  CrmAccountContextBatchRequest,
+  CrmAccountContextBatchResponse,
   CrmContactsSyncRequest,
   CrmContactsSyncResponse,
   CrmContactsSyncStatusResponse,
@@ -16,8 +18,8 @@ import type {
 /**
  * Resource for the user-triggered CRM Sync API.
  *
- * Wraps prospect sync/match, contacts-ledger sync, and exclusion-grant routes
- * under `/v1/crm`.
+ * Wraps prospect sync/match, account context, contacts-ledger sync, and
+ * exclusion-grant routes under `/v1/crm`.
  *
  * The user identified by `userId` must already have an active CRM
  * connection (see `client.integrations.initiateConnection`). When the
@@ -33,6 +35,8 @@ import type {
  * - `502 crm_upstream_error` — Attio/HubSpot returned an error.
  * - `503 crm_upstream_rate_limited` — upstream rate-limit; the response
  *   includes a `Retry-After` header.
+ * - `503 account_context_not_configured` — account-context serving data is not
+ *   configured for the requested CRM owner.
  */
 export class CrmResource {
   constructor(private readonly http: Http) {}
@@ -98,6 +102,37 @@ export class CrmResource {
    */
   async matchBatch(data: CrmMatchBatchRequest): Promise<CrmMatchBatchResponse> {
     return this.http.post<CrmMatchBatchResponse>('/crm/prospects/match-batch', data)
+  }
+
+  /**
+   * Return exact-person presence and account/deal context across every
+   * configured CRM. This remains separate from {@link matchBatch}: an account
+   * match does not mean the candidate is personally present in the CRM.
+   *
+   * Results preserve candidate order and reference deduplicated account
+   * details through `accountRef`. Provider degradation and unknown deal stages
+   * are returned explicitly and must not be treated as safe negative results.
+   *
+   * @example
+   * ```typescript
+   * const context = await client.crm.accountContextBatch({
+   *   userId: 'owner@example.com',
+   *   candidates: [{
+   *     inputKey: 'candidate-123',
+   *     linkedinUrl: 'https://www.linkedin.com/in/jane-doe/',
+   *     companyDomain: 'acme.example',
+   *   }],
+   * })
+   * console.log(context.results[0].salesState)
+   * ```
+   */
+  async accountContextBatch(
+    data: CrmAccountContextBatchRequest,
+  ): Promise<CrmAccountContextBatchResponse> {
+    return this.http.post<CrmAccountContextBatchResponse>(
+      '/crm/account-context/batch',
+      data,
+    )
   }
 
   /**

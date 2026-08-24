@@ -192,6 +192,94 @@ describe('crm', () => {
     })
   })
 
+  describe('accountContextBatch', () => {
+    it('posts candidates to /crm/account-context/batch and returns account context', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({
+        results: [{
+          inputKey: 'candidate-123',
+          salesState: 'active_pipeline',
+          providers: [{
+            provider: 'hubspot',
+            personPresence: [],
+            accountRef: 'hubspot:company-1',
+            matchMethod: 'exact_domain',
+            matchConfidence: 'high',
+            salesState: 'active_pipeline',
+            reasonCode: 'ACTIVE_ACCOUNT_DEAL',
+            coverageStatus: 'complete',
+          }],
+        }],
+        accounts: [{
+          accountRef: 'hubspot:company-1',
+          provider: 'hubspot',
+          accountId: 'company-1',
+          displayName: 'Acme',
+          recordUrl: 'https://app.hubspot.com/contacts/1/company/company-1',
+          contactCount: 1,
+          contactPreview: [{
+            personId: 'contact-1',
+            displayName: 'Alex Buyer',
+            recordUrl: 'https://app.hubspot.com/contacts/1/contact/contact-1',
+          }],
+          dealCount: 1,
+          dealPreview: [{
+            dealId: 'deal-1',
+            displayName: 'Acme expansion',
+            pipelineId: 'default',
+            pipelineLabel: 'Sales Pipeline',
+            stageId: 'appointmentscheduled',
+            stageLabel: 'Appointment scheduled',
+            stageClass: 'active',
+            associationKind: 'direct',
+            associationConfidence: 'high',
+            participantCount: 1,
+            participantPreview: [{
+              personId: 'contact-1',
+              displayName: 'Alex Buyer',
+            }],
+          }],
+        }],
+        providerCoverage: [{
+          provider: 'hubspot',
+          accountSource: 'complete',
+          personSource: 'complete',
+          dealSource: 'complete',
+          checkedAt: '2026-08-23T12:00:00Z',
+          freshUntil: '2026-08-23T12:05:00Z',
+          generation: 3,
+        }],
+      })
+
+      const result = await crm.accountContextBatch({
+        userId: 'owner@example.com',
+        candidates: [{
+          inputKey: 'candidate-123',
+          linkedinUrl: 'https://www.linkedin.com/in/jane-doe/',
+          companyName: 'Acme',
+          companyDomain: 'acme.example',
+          companyLinkedinUrl: 'https://www.linkedin.com/company/acme/',
+        }],
+      })
+
+      expect(http.post).toHaveBeenCalledWith('/crm/account-context/batch', {
+        userId: 'owner@example.com',
+        candidates: [{
+          inputKey: 'candidate-123',
+          linkedinUrl: 'https://www.linkedin.com/in/jane-doe/',
+          companyName: 'Acme',
+          companyDomain: 'acme.example',
+          companyLinkedinUrl: 'https://www.linkedin.com/company/acme/',
+        }],
+      })
+      expect(result.results[0].salesState).toBe('active_pipeline')
+      expect(result.accounts[0].dealPreview[0].stageClass).toBe('active')
+      expect(result.providerCoverage[0].generation).toBe(3)
+    })
+  })
+
   describe('syncContacts', () => {
     it('posts to /crm/contacts/sync', async () => {
       const http = createMockHttp()
