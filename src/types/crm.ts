@@ -203,6 +203,11 @@ export type CrmAccountContextAssociationKind = 'direct' | 'via_contact'
 
 export type CrmAccountContextAssociationConfidence = 'high' | 'medium' | 'low'
 
+/** How precisely the deal-stage transition time was determined. */
+export type CrmAccountContextStageChangeTimePrecision
+  = | 'provider_timestamp'
+    | 'observed'
+
 /**
  * Stable candidate identity plus the best grounded current-company identity.
  *
@@ -266,8 +271,20 @@ export interface CrmAccountContextDealSummary {
   stageId: string
   stageLabel: string
   stageClass: CrmAccountContextStageClass
+  /** Previous native pipeline/stage values; absent on the first observation. */
+  previousPipelineId?: string | null
+  previousPipelineLabel?: string | null
+  previousStageId?: string | null
+  previousStageLabel?: string | null
+  /** ISO-8601 timestamp for the latest observed or provider-reported transition. */
+  stageChangedAt?: string | null
+  stageChangeTimePrecision?: CrmAccountContextStageChangeTimePrecision | null
   associationKind: CrmAccountContextAssociationKind
   associationConfidence: CrmAccountContextAssociationConfidence
+  /** Provider-native amount representation. */
+  amount?: string | null
+  /** ISO-8601 timestamp. */
+  closeDate?: string | null
   participantCount: number
   participantPreview: CrmAccountContextPersonPreview[]
 }
@@ -279,6 +296,12 @@ export interface CrmAccountContextDetail {
   accountId: string
   displayName: string
   recordUrl?: string | null
+  domains: string[]
+  linkedinUrl?: string | null
+  website?: string | null
+  industry?: string | null
+  location?: string | null
+  lifecycleStage?: string | null
   contactCount: number
   contactPreview: CrmAccountContextPersonPreview[]
   dealCount: number

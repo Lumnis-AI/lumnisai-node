@@ -218,6 +218,12 @@ describe('crm', () => {
           accountId: 'company-1',
           displayName: 'Acme',
           recordUrl: 'https://app.hubspot.com/contacts/1/company/company-1',
+          domains: ['acme.example'],
+          linkedinUrl: 'https://www.linkedin.com/company/acme/',
+          website: 'https://acme.example',
+          industry: 'Software',
+          location: 'New York, NY',
+          lifecycleStage: 'customer',
           contactCount: 1,
           contactPreview: [{
             personId: 'contact-1',
@@ -233,8 +239,16 @@ describe('crm', () => {
             stageId: 'appointmentscheduled',
             stageLabel: 'Appointment scheduled',
             stageClass: 'active',
+            previousPipelineId: 'default',
+            previousPipelineLabel: 'Sales Pipeline',
+            previousStageId: 'qualifiedtobuy',
+            previousStageLabel: 'Qualified to buy',
+            stageChangedAt: '2026-08-23T11:30:00Z',
+            stageChangeTimePrecision: 'provider_timestamp',
             associationKind: 'direct',
             associationConfidence: 'high',
+            amount: '25000',
+            closeDate: '2026-09-30T00:00:00Z',
             participantCount: 1,
             participantPreview: [{
               personId: 'contact-1',
@@ -275,7 +289,12 @@ describe('crm', () => {
         }],
       })
       expect(result.results[0].salesState).toBe('active_pipeline')
+      expect(result.accounts[0].domains).toEqual(['acme.example'])
+      expect(result.accounts[0].lifecycleStage).toBe('customer')
       expect(result.accounts[0].dealPreview[0].stageClass).toBe('active')
+      expect(result.accounts[0].dealPreview[0].previousStageId).toBe('qualifiedtobuy')
+      expect(result.accounts[0].dealPreview[0].stageChangeTimePrecision).toBe('provider_timestamp')
+      expect(result.accounts[0].dealPreview[0].amount).toBe('25000')
       expect(result.providerCoverage[0].generation).toBe(3)
     })
   })
