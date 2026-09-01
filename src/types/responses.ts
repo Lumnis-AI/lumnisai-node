@@ -422,8 +422,20 @@ export interface ValidatedCandidate {
    * influencer_engagement.
    */
   engagementData?: PostEngagementData[]
+  /**
+   * One row per checked signal: verdict, reason, proof, and the generic
+   * `presentation` card. Written by the selected `signalDefinitions`, and by
+   * the standalone job-signal lane (normalized into the same `hiring` row at
+   * delivery). This is the versioned evidence contract — read it instead of
+   * the underscore-prefixed compatibility fields such as `_jobSignalSummary`.
+   */
+  signalEvidence?: SignalEvidence[]
   /** Broader recent reaction history loaded for engagement-expansion finalists. */
   engagementHistory?: EngagementHistoryEntry[]
+  /** Recent comments the person wrote, when the `comments` feed was collected. */
+  engagementComments?: EngagementHistoryEntry[]
+  /** Recent posts the person authored, when the `authored_posts` feed was collected. */
+  authoredPosts?: EngagementHistoryEntry[]
   /** Number of history records found while preparing a later expansion hop. */
   engagementHistoryCount?: number
   /** True when a later hop found this person through an additional independent post. */
@@ -504,6 +516,13 @@ export interface DeepSearchStats {
   postsSearch?: PostsSearchStats | null
   /** Job signal pipeline stats (companies found, confirmed, decision makers), when job signal search ran */
   jobSignalPrefilterStats?: Record<string, unknown> | null
+  /**
+   * Measured signal-enrichment accounting, including the paid pool the
+   * dispatcher selected. Null when no signal ran.
+   */
+  enrichment?: SignalEnrichmentStats | null
+  /** Per-signal coverage and spend. Empty when no signal ran. */
+  signalFunnel?: SignalFunnel
 }
 
 /**
@@ -527,6 +546,14 @@ export interface DeepPeopleSearchOutput {
   criteriaDefinitions?: CriterionDefinition[]
   /** Distinct canonical values for each extraction column. */
   columnValues?: Record<string, string[]>
+  /** Version of the signal-evidence contract on these candidates. Currently 1. */
+  signalContractVersion?: number
+  /** The effective signal list — manual, or the one auto-selection resolved. */
+  signalDefinitions?: SignalDefinition[]
+  /** The intent-scoring direction the run used, or null. */
+  intentScoringInstructions?: string | null
+  /** Present only when `autoSelectLane` and/or `autoSelectSignals` ran. */
+  autoSearchSelection?: AutoSearchSelection
 }
 
 export interface StructuredResponse extends Record<string, any> {
@@ -537,6 +564,14 @@ export interface StructuredResponse extends Record<string, any> {
   /** Deep people search output (when using deep_people_search agent) */
   preview?: DeepSearchPreview
   candidates?: ValidatedCandidate[]
+  /** Version of the signal-evidence contract on these candidates. Currently 1. */
+  signalContractVersion?: number
+  /** The effective signal list — manual, or the one auto-selection resolved. */
+  signalDefinitions?: SignalDefinition[]
+  /** The intent-scoring direction the run used, or null. */
+  intentScoringInstructions?: string | null
+  /** Present only when `autoSelectLane` and/or `autoSelectSignals` ran. */
+  autoSearchSelection?: AutoSearchSelection
   /** Competitor post engagement output (when using competitor_post_engagement agent) */
   competitorsResolved?: ResolvedCompetitorTarget[]
   discoveredCompetitors?: string[]
@@ -594,25 +629,326 @@ export type SpecializedAgentType =
   | (string & {})
 
 /**
- * Shared posts date-range enum for LinkedIn post and engagement agents.
- *
- * The longer ranges (`past-6-months`, `past-2-years`, `past-3-years`) apply fully
- * only to the Fiber profile-history lanes (`competitor_rep_engagement` and
- * `influencer_engagement`, ~3 years). For KEYWORD post search (deep_people_search posts +
- * competitor_post_engagement), Crustdata's keyword-post API only supports up to
- * `past-year`: `past-6-months` is honored window-exact via a client-side cutoff
- * (may return fewer results), while `past-2-years`/`past-3-years` are CAPPED to
- * `past-year`.
+ * The one date-range vocabulary shared by every windowed parameter: post and
+ * engagement lanes (`postsDateRange`), the standalone job-signal discovery lane
+ * (`jobSignalDateRange`), and each signal's own `settings.dateRange` inside
+ * `signalDefinitions`.
  */
-export type PostsDateRange =
+export type DateRange =
   | 'past-24h'
   | 'past-week'
+  | 'past-2-weeks'
+  | 'past-3-weeks'
   | 'past-month'
   | 'past-quarter'
   | 'past-6-months'
   | 'past-year'
   | 'past-2-years'
   | 'past-3-years'
+
+/**
+ * Shared posts date-range enum for LinkedIn post and engagement agents.
+ * Identical to {@link DateRange}; the alias documents the post-lane caveats.
+ *
+ * The longer ranges (`past-6-months`, `past-2-years`, `past-3-years`) apply fully
+ * only to the Fiber profile-history lanes (`competitor_rep_engagement` and
+ * `influencer_engagement`, ~3 years). For KEYWORD post search (deep_people_search posts +
+ * competitor_post_engagement), Crustdata's keyword-post API only supports
+ * `past-24h`, `past-week`, `past-month`, `past-quarter` and `past-year`: the
+ * unsupported narrower windows (`past-2-weeks`, `past-3-weeks`, `past-6-months`)
+ * request the nearest supported BROADER window and are then honored
+ * window-exact via a client-side cutoff (may return fewer results), while
+ * `past-2-years`/`past-3-years` are CAPPED to `past-year`.
+ */
+export type PostsDateRange = DateRange
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Signal enrichment (deep_people_search and every standalone people lane)
+//
+// Signals are OPTIONAL evidence collected AFTER the lane's own discovery and
+// fast filter, on the survivors only, and before deep validation:
+//
+//   lane -> discovery -> merge -> fast filter -> realtime refresh
+//        -> selected enrichments -> deep validation -> results
+//
+// Selecting signals never chooses or changes the discovery lane, and never
+// hard-filters candidates: each signal writes evidence, and the existing deep
+// validator decides relevance and weight. Omitting `signalDefinitions` — or
+// sending `[]` — leaves the pre-signal search behavior untouched.
+//
+// The paid pool is bounded: with a non-empty list the backend ranks fast-filter
+// survivors by their existing fast-filter score and enriches at most
+// `ceil(1.5 × the actual requested count)`, so a request for 200 people
+// enriches and deep-validates at most 300.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Signals that can be selected in `signalDefinitions`.
+ *
+ * - `hiring` — the current employer has relevant open job postings (company scope).
+ * - `engagement` — the person's own recent LinkedIn activity (person scope).
+ * - `recently_joined` — they started the current role inside the window;
+ *   derived from profile data already collected, at zero extra vendor cost.
+ * - `funding` — the employer matches a requested funding stage or recently raised.
+ * - `events` — a relevant recent company event (acquisition, security incident,
+ *   migration, layoff, expansion, product launch); the same evidence serves
+ *   requirements that an event DID or did NOT happen.
+ *
+ * `competitor_tools` and `web_traffic` are implemented but temporarily disabled
+ * server-side (their shared company-record lookup measured $1.20 per employer);
+ * sending either fails validation before any paid work starts.
+ */
+export type SignalType =
+  | 'hiring'
+  | 'engagement'
+  | 'recently_joined'
+  | 'funding'
+  | 'events'
+
+/** Paid activity feeds the `engagement` signal can collect, once each. */
+export type EngagementActivity = 'reactions' | 'comments' | 'authored_posts'
+
+/** Settings accepted by every signal that only needs a look-back window. */
+export interface SignalDateRangeSettings {
+  /**
+   * Look-back window for THIS signal only. Omit to keep the signal's own
+   * default (hiring inherits the job planner's 90-365 days, engagement uses
+   * 30 days, `recently_joined` uses `past-quarter`, funding/events stay
+   * request-driven).
+   */
+  dateRange?: DateRange
+}
+
+/** Settings implemented specifically by the `engagement` signal. */
+export interface EngagementSignalSettings extends SignalDateRangeSettings {
+  /**
+   * Activity feeds to collect. Each selected feed is fetched once per person
+   * and can back several output views. Omit to keep the existing behavior:
+   * reuse any engagement the lane already collected, otherwise collect
+   * reactions.
+   */
+  activities?: EngagementActivity[]
+  /**
+   * Company names, domains, or LinkedIn company URLs whose posts (or proven
+   * employees' posts) matter. The signal derives the match from the SAME
+   * activity it already collected — it never fetches activity twice and never
+   * buys an author-profile lookup to guess an employer, so an unprovable
+   * author stays `unknown`. Omitting this disables the derived view and leaves
+   * the competitor discovery lanes unchanged.
+   */
+  targetCompanies?: string[]
+}
+
+/**
+ * One selected signal plus its optional, signal-local settings.
+ *
+ * Unknown names, duplicate names, bare strings, unknown settings, and invalid
+ * date ranges are rejected before any paid enrichment runs.
+ *
+ * @example
+ * ```ts
+ * const signalDefinitions: SignalDefinition[] = [
+ *   { name: 'hiring', settings: { dateRange: 'past-quarter' } },
+ *   { name: 'funding', settings: { dateRange: 'past-year' } },
+ *   { name: 'engagement', settings: {
+ *     dateRange: 'past-month',
+ *     activities: ['reactions', 'comments'],
+ *     targetCompanies: ['OpenAI', 'anthropic.com'],
+ *   } },
+ * ]
+ * ```
+ */
+export type SignalDefinition =
+  | { name: 'engagement', settings?: EngagementSignalSettings }
+  | { name: Exclude<SignalType, 'engagement'>, settings?: SignalDateRangeSettings }
+
+/**
+ * Discovery lanes the automatic selector can choose from when
+ * `autoSelectLane` is true. `lookalike` runs the `engagement_expansion` agent;
+ * the other standalone values map to their like-named specialized agents.
+ */
+export type SignalDiscoveryLane =
+  | 'profile'
+  | 'job_signal'
+  | 'posts_engagement'
+  | 'competitor_post_engagement'
+  | 'competitor_rep_engagement'
+  | 'influencer_engagement'
+  | 'lookalike'
+
+/**
+ * What automatic selection actually applied, echoed on the structured response
+ * whenever `autoSelectLane` and/or `autoSelectSignals` ran. Only the dimensions
+ * that were requested appear: `lane` is absent in signal-only mode, and
+ * `signalDefinitions` is absent in lane-only mode.
+ */
+export interface AutoSearchSelection {
+  /** Why the planner chose this lane and these signals. */
+  reasoning: string
+  /** True when the discovery lane was chosen automatically. */
+  autoSelectedLane?: boolean
+  /** True when the signal list was chosen automatically. */
+  autoSelectedSignals?: boolean
+  /** The chosen lane; present only when `autoSelectLane` was true. */
+  lane?: SignalDiscoveryLane
+  /** The chosen signals; present only when `autoSelectSignals` was true. */
+  signalDefinitions?: SignalDefinition[]
+  [key: string]: any
+}
+
+/**
+ * Outcome of one signal check.
+ *
+ * - `evidence_found` — the evidence was observed and is in the row.
+ * - `none_found` — the source was successfully read and affirmatively did not
+ *   match. Neutral, not an error.
+ * - `unknown` — coverage, identity, provider, date precision, or model
+ *   processing could not establish the answer. Never render it as a "no".
+ */
+export type SignalVerdict = 'evidence_found' | 'none_found' | 'unknown'
+
+/** Whether a signal row describes the person or their current employer. */
+export type SignalScope = 'person' | 'company'
+
+/** One label/value pair on a signal's presentation card. */
+export interface SignalPresentationFact {
+  label: string
+  value: string
+}
+
+/** One source link on a signal's presentation card. */
+export interface SignalPresentationLink {
+  label: string
+  url: string
+  date?: string
+}
+
+/**
+ * Code-derived, signal-agnostic projection of the evidence. Every signal fills
+ * the same shape, so one component renders them all; `evidence` and `outputs`
+ * remain the signal-specific detail behind it.
+ */
+export interface SignalPresentation {
+  summary: string
+  facts: SignalPresentationFact[]
+  links: SignalPresentationLink[]
+}
+
+/** Named views the `engagement` signal exposes under `outputs`. */
+export type EngagementSignalOutputName =
+  | 'reactions'
+  | 'comments'
+  | 'authoredPosts'
+  | 'competitorEngagement'
+  | 'competitorRepEngagement'
+  | 'companyRollup'
+
+/** One processed view inside a signal's `outputs` dictionary. */
+export interface SignalOutput {
+  verdict: SignalVerdict
+  /** Relevant in-window proof for this view. Not capped by record count. */
+  evidence: Array<Record<string, any>>
+  /** Why the view is `none_found` or `unknown`; absent when evidence was found. */
+  reason?: string
+  /** Measured 0-1 value where the view has one (e.g. the company roll-up share). */
+  strength?: number
+  /** Target companies this view matched, for the competitor views. */
+  matchedCompanies?: string[]
+  [key: string]: any
+}
+
+/**
+ * One signal's public evidence row, written onto every checked candidate.
+ *
+ * Keys arrive camelCased by the SDK, so the backend's `signal_evidence`,
+ * `signal_type`, and `detected_at` read as `signalEvidence`, `signalType`, and
+ * `detectedAt` here; verdict and signal-name VALUES keep their wire spelling
+ * (`evidence_found`, `recently_joined`).
+ */
+export interface SignalEvidence {
+  signalType: SignalType | (string & {})
+  verdict: SignalVerdict
+  /** Measured 0-1 value where the signal has one (hiring share); null otherwise. */
+  strength?: number | null
+  /** Date of the evidence, when the source supports one. */
+  detectedAt?: string | null
+  /** Where the evidence came from, e.g. `crustdata_job_search`, `exa`. */
+  source?: string | null
+  /** Plain-English collection or judgment result. */
+  reason: string
+  /** The generic card contract; render this for the default view. */
+  presentation: SignalPresentation
+  /** Signal-specific detail. Empty for `engagement`, whose proof lives in `outputs`. */
+  evidence: Array<Record<string, any>>
+  /** Effective non-default settings this row was collected under. */
+  settings?: Record<string, any>
+  scope: SignalScope
+  /** Current employer this row describes; company-scoped signals only. */
+  entity?: { name: string | null, domain: string | null }
+  /**
+   * Processed views, currently used by `engagement`: the selected activity
+   * feeds plus zero-cost derived views (`companyRollup`, and the competitor
+   * views when `targetCompanies` was configured).
+   */
+  outputs?: Partial<Record<EngagementSignalOutputName, SignalOutput>> & Record<string, SignalOutput>
+  [key: string]: any
+}
+
+/** Per-signal coverage and spend, keyed by signal name under `signalFunnel`. */
+export interface SignalFunnelRow {
+  candidatesChecked?: number
+  candidatesEvidenceFound?: number
+  candidatesNoneFound?: number
+  candidatesUnknown?: number
+  companiesChecked?: number
+  companiesEvidenceFound?: number
+  companiesNoneFound?: number
+  companiesUnknown?: number
+  /** Reason text → how many rows carried it. */
+  unknownReasons?: Record<string, number>
+  /** Company-scoped unknown reasons folded in by the engagement roll-up. */
+  companyUnknownReasons?: Record<string, number>
+  /** Vendor credits actually charged for this signal. */
+  creditsSpent?: number
+  /** Provider-reported dollar estimate (funding/events); absent when unreported. */
+  costUsd?: number
+  searchesRun?: number
+  /** Searches whose response reported no normalized cost. */
+  searchesWithoutCost?: number
+  /** Result rows returned per provider, e.g. `{ exa: 20 }`. */
+  providerResults?: Record<string, number>
+  [key: string]: any
+}
+
+/**
+ * `searchStats.signalFunnel`, keyed by signal name. Names arrive camelCased,
+ * so `recently_joined` reads as `recentlyJoined`.
+ */
+export type SignalFunnel =
+  & Partial<Record<'hiring' | 'engagement' | 'recentlyJoined' | 'funding' | 'events', SignalFunnelRow>>
+  & Record<string, SignalFunnelRow>
+
+/** How many fast-filter survivors the paid signal boundary actually enriched. */
+export interface SignalEnrichmentPool {
+  /** The customer-facing requested count the cap was derived from. */
+  requested?: number
+  availableAfterFastFilter?: number
+  /** `ceil(1.5 × requested)`. */
+  limit?: number
+  selected?: number
+  /** Survivors below the ranked paid boundary, never enriched. */
+  skipped?: number
+}
+
+/**
+ * Measured enrichment accounting for the run (`searchStats.enrichment`).
+ * Signal-specific keys are added by whichever signals ran, so the shape stays
+ * open; the fields below are the ones every run can carry.
+ */
+export interface SignalEnrichmentStats extends Record<string, any> {
+  signalEnrichmentPool?: SignalEnrichmentPool
+  signalFunnel?: SignalFunnel
+}
 
 /** @see {@link ./competitor-post-engagement.ts} for full agent reference (invocation, pipeline, output shape, costs). */
 
@@ -1054,6 +1390,72 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search.
    */
   maxCandidatesPerCompany?: number
+
+  /**
+   * Job-posting window for the STANDALONE job-signal discovery lane
+   * (`searchJobSignal`). Omit to keep the existing job planner's automatic
+   * 90-365 day window. Stacked hiring is configured separately, through its own
+   * `signalDefinitions` entry's `settings.dateRange`.
+   * Used by deep_people_search.
+   */
+  jobSignalDateRange?: DateRange
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Signal enrichment and automatic selection
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Signal enrichments to run on fast-filter survivors, before deep validation.
+   * One list, no weights, no required flags, no OR groups — each entry is a
+   * signal name plus optional signal-local settings.
+   *
+   * Omitting the field, or sending `[]`, runs no enrichment and preserves the
+   * existing search flow exactly. A non-empty list bounds paid work to the
+   * top `ceil(1.5 × requested count)` survivors and sends every enriched person
+   * through deep validation so the new evidence is judged.
+   *
+   * Selecting a signal the chosen lane already collected (job-signal lane +
+   * `hiring`, an engagement lane + `engagement`) reuses that evidence rather
+   * than buying it twice.
+   *
+   * Used by deep_people_search, competitor_post_engagement,
+   * competitor_rep_engagement, influencer_engagement, and engagement_expansion.
+   *
+   * @example [{ name: 'hiring', settings: { dateRange: 'past-quarter' } }, { name: 'funding' }]
+   */
+  signalDefinitions?: SignalDefinition[]
+
+  /**
+   * Choose the signal enrichments automatically from the request. Ignores any
+   * `signalDefinitions` you send; the discovery lane is left untouched unless
+   * `autoSelectLane` is also true.
+   * @default false
+   */
+  autoSelectSignals?: boolean
+
+  /**
+   * Choose the discovery lane automatically from the request. Ignores the
+   * requested agent as a lane choice, the manual lane booleans, Sales
+   * Navigator, and direct-post sources; manual `signalDefinitions` survive
+   * unless `autoSelectSignals` is also true. Lane inputs the chosen lane needs
+   * (`company`, `competitors`, `seedProfiles`, `expandFromResponse`) are
+   * preserved — the selector picks workflows, it does not invent targets.
+   * @default false
+   */
+  autoSelectLane?: boolean
+
+  /**
+   * Plain-English direction for how every intent-scoring stage should
+   * prioritize and combine the available evidence — post selection, reactor
+   * pre-ranking, the light pre-ranker, the job-signal relevance gate, the
+   * funding/events extractor, fast filter, and deep validation all receive the
+   * same sentence. It never changes fit criteria, filtering, lane routing,
+   * collection, or any ranking formula. Omit it to keep existing scoring
+   * behavior byte-for-byte.
+   *
+   * @example 'Prioritize direct engagement over company-level evidence.'
+   */
+  intentScoringInstructions?: string
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Competitor Post Engagement (competitor_post_engagement)

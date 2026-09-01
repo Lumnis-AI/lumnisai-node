@@ -2,6 +2,7 @@ import type { PostEngagementType } from './competitor-post-engagement'
 import type {
   CriteriaMetadata,
   PostsDateRange,
+  SignalDefinition,
   ValidatedCandidate,
 } from './responses'
 
@@ -38,6 +39,14 @@ export interface InfluencerEngagementOptions {
   excludeUrls?: string[]
   /** Maximum validated candidates returned. @default 50 @minimum 1 @maximum 1000 */
   limit?: number
+  /**
+   * Signal enrichments to run on fast-filter survivors before validation.
+   * Omitted or `[]` keeps this lane's existing behavior; the engagement this
+   * lane already collected is reused rather than repurchased.
+   */
+  signalDefinitions?: SignalDefinition[]
+  /** Plain-English direction for the intent-scoring stages. */
+  intentScoringInstructions?: string
 }
 
 /** Resolved parameters echoed in `structuredResponse.agentParams`. */

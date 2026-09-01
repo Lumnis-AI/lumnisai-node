@@ -1,5 +1,11 @@
 import type { ContentIntelligencePackage } from './content-intelligence'
-import type { CriteriaMetadata, ValidatedCandidate } from './responses'
+import type {
+  CriteriaMetadata,
+  DateRange,
+  EngagementActivity,
+  SignalDefinition,
+  ValidatedCandidate,
+} from './responses'
 
 /** Options accepted by {@link ResponsesResource.engagementExpansion}. */
 export interface EngagementExpansionOptions {
@@ -29,6 +35,14 @@ export interface EngagementExpansionOptions {
   excludeUrls?: string[]
   /** SLM relevance reranker for surfaced candidates. @default true */
   deepValidationUseRelevanceReranker?: boolean
+  /**
+   * Signal enrichments to run on fast-filter survivors before validation.
+   * Omitted or `[]` keeps this lane's existing behavior. Engagement evidence
+   * the walk already collected is reused rather than repurchased.
+   */
+  signalDefinitions?: SignalDefinition[]
+  /** Plain-English direction for the intent-scoring stages. */
+  intentScoringInstructions?: string
 }
 
 /** Resolved parameters echoed in `structuredResponse.agentParams`. */
@@ -73,15 +87,66 @@ export interface EngagementExpansionStats {
   finalistHistoryCredits?: number
   /** Finalists for whom broader engagement history was available. */
   finalistsWithHistory?: number
+  /** Effective look-back window used when loading finalist activity. */
+  finalistHistoryWindowDays?: number
+  /** The `dateRange` that produced `finalistHistoryWindowDays`, when one was set. */
+  finalistHistoryDateRange?: DateRange | null
+  /** Fiber credits charged per collected activity feed. */
+  engagementActivityCredits?: Record<string, number>
+  /** Run-wide runaway guard derived per activity feed. */
+  engagementActivityBudgets?: Record<string, number>
+  /** Per-person collection outcome for every activity feed that ran. */
+  engagementActivityCoverage?: EngagementActivityCoverage[]
+  /** The reaction subset of `engagementActivityCoverage`, kept for compatibility. */
+  finalistHistoryCoverage?: EngagementActivityCoverage[]
 }
 
-/** A recent LinkedIn reaction used to give validation broader behavioral context. */
+/**
+ * What one person's activity collection actually did. A dormant person is
+ * reported with zero records rather than dropped.
+ */
+export interface EngagementActivityCoverage {
+  /** LinkedIn identifier the pull was made for. */
+  person?: string | null
+  /** Which feed this row covers, e.g. `reactions`. */
+  activity?: EngagementActivity
+  /** Paid pages fetched. */
+  pages?: number
+  /** In-window records retained. */
+  records?: number
+  newest?: string | null
+  oldest?: string | null
+  /**
+   * Why paging stopped: `window`, `no_more_pages`, `empty_page`, `budget`,
+   * `error`, `no_identifier`, or `resumed`.
+   */
+  stopReason?: string
+  /** Fiber credits charged for this person's feed. */
+  credits?: number
+  /** Exception type when `stopReason` is `error`; never the raw provider message. */
+  errorType?: string
+  [key: string]: any
+}
+
+/**
+ * One collected LinkedIn activity record used to give validation broader
+ * behavioral context. The same shape carries reactions
+ * (`candidate.engagementHistory`), comments (`candidate.engagementComments`),
+ * and authored posts (`candidate.authoredPosts`); the fields a feed cannot
+ * supply are absent — an authored post has no `reactionType`, a reaction has a
+ * `commentText` only when the person left one with it.
+ */
 export interface EngagementHistoryEntry {
   when?: string | null
   reactionType?: string | null
+  /** The person's own words: their comment, or the note left with a reaction. */
+  commentText?: string | null
   postAuthor?: string | null
+  /** Profile URL of the post's author, when the provider returned one. */
+  postAuthorLinkedinUrl?: string | null
   postUrl?: string | null
   postText?: string | null
+  [key: string]: any
 }
 
 /** Full structured output from a succeeded `engagement_expansion` run. */

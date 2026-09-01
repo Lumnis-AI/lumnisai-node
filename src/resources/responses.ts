@@ -31,14 +31,55 @@ import type {
   CriteriaClassification,
   CriterionDefinition,
   CriterionType,
+  DateRange,
+  EngagementActivity,
   FeedbackListResponse,
   PostEngagementType,
   PostsDateRange,
   ResponseListResponse,
   ResponseObject,
+  SignalDefinition,
+  SignalType,
   SpecializedAgentParams,
 } from '../types/responses'
 import { LocalFileNotSupportedError, ValidationError } from '../errors'
+
+/** Every window accepted by `postsDateRange`, `jobSignalDateRange`, and a signal's `settings.dateRange`. */
+const DATE_RANGES: DateRange[] = [
+  'past-24h',
+  'past-week',
+  'past-2-weeks',
+  'past-3-weeks',
+  'past-month',
+  'past-quarter',
+  'past-6-months',
+  'past-year',
+  'past-2-years',
+  'past-3-years',
+]
+
+/** Signal names the API accepts today. */
+const SIGNAL_TYPES: SignalType[] = [
+  'hiring',
+  'engagement',
+  'recently_joined',
+  'funding',
+  'events',
+]
+
+/**
+ * Implemented but temporarily disabled server-side: their shared company-record
+ * lookup measured $1.20 per employer. Named separately so the SDK can say why
+ * rather than reporting them as unknown.
+ */
+const DISABLED_SIGNAL_TYPES = ['competitor_tools', 'web_traffic']
+
+/** Activity feeds the `engagement` signal can collect. */
+const ENGAGEMENT_ACTIVITIES: EngagementActivity[] = [
+  'reactions',
+  'comments',
+  'authored_posts',
+]
 
 export class ResponsesResource {
   constructor(private readonly http: Http) {}
@@ -209,6 +250,185 @@ export class ResponsesResource {
     }
   }
 
+  private _validateDateRange(value: unknown, field: string): void {
+    if (value === undefined || value === null)
+      return
+    if (typeof value !== 'string' || !DATE_RANGES.includes(value as DateRange)) {
+      throw new ValidationError(
+        `Invalid ${field} value: ${String(value)}. Choose from: ${DATE_RANGES.join(', ')}.`,
+      )
+    }
+  }
+
+  /** Company targets are compared the way the backend compares them: trimmed, case-folded, no trailing slash. */
+  private _targetCompanyKey(value: string): string {
+    return value.trim().toLowerCase().replace(/\/+$/, '')
+  }
+
+  private _validateEngagementSettings(settings: Record<string, any>): void {
+    const activities = this._getParamValue<unknown>(settings, 'activities', 'activities')
+    if (activities !== undefined && activities !== null) {
+      if (!Array.isArray(activities) || activities.length === 0)
+        throw new ValidationError('engagement settings.activities cannot be empty')
+      for (const activity of activities) {
+        if (typeof activity !== 'string' || !ENGAGEMENT_ACTIVITIES.includes(activity as EngagementActivity)) {
+          throw new ValidationError(
+            `Invalid engagement activity: ${String(activity)}. `
+            + `Choose from: ${ENGAGEMENT_ACTIVITIES.join(', ')}.`,
+          )
+        }
+      }
+      if (new Set(activities).size !== activities.length)
+        throw new ValidationError('engagement settings.activities must not contain duplicates')
+    }
+
+    const targetCompanies = this._getParamValue<unknown>(
+      settings,
+      'targetCompanies',
+      'target_companies',
+    )
+    if (targetCompanies !== undefined && targetCompanies !== null) {
+      if (!Array.isArray(targetCompanies)
+        || targetCompanies.length === 0
+        || targetCompanies.some(company => typeof company !== 'string' || !company.trim())) {
+        throw new ValidationError(
+          'engagement settings.targetCompanies must contain at least one non-empty '
+          + 'company name, domain, or LinkedIn company URL',
+        )
+      }
+      const keys = (targetCompanies as string[]).map(company => this._targetCompanyKey(company))
+      if (new Set(keys).size !== keys.length)
+        throw new ValidationError('engagement settings.targetCompanies must not contain duplicates')
+    }
+  }
+
+  private _validateSignalSettings(name: SignalType, settings: unknown): void {
+    if (settings === undefined || settings === null)
+      return
+    if (!this._isPlainObject(settings))
+      throw new ValidationError(`signalDefinitions '${name}' settings must be an object`)
+
+    // Unknown settings fail rather than being silently ignored — a misspelling
+    // must never quietly trigger different paid work.
+    const allowed = name === 'engagement'
+      ? ['dateRange', 'date_range', 'activities', 'targetCompanies', 'target_companies']
+      : ['dateRange', 'date_range']
+    for (const key of Object.keys(settings)) {
+      if (!allowed.includes(key)) {
+        throw new ValidationError(
+          `Unknown setting '${key}' for the '${name}' signal. `
+          + `Supported settings: ${allowed.filter(setting => !setting.includes('_')).join(', ')}.`,
+        )
+      }
+    }
+
+    this._validateDateRange(
+      this._getParamValue<unknown>(settings, 'dateRange', 'date_range'),
+      `signalDefinitions '${name}' settings.dateRange`,
+    )
+
+    if (name === 'engagement')
+      this._validateEngagementSettings(settings)
+  }
+
+  /**
+   * Validate the one manual signal-enrichment input before anything paid runs.
+   * Mirrors the backend registry: object entries only, known enabled names, no
+   * duplicates, no unknown settings.
+   */
+  private _validateSignalDefinitions(value: unknown): void {
+    if (value === undefined || value === null)
+      return
+    if (!Array.isArray(value))
+      throw new ValidationError('signalDefinitions must be an array')
+
+    const seen = new Set<string>()
+    for (const entry of value) {
+      if (!this._isPlainObject(entry)) {
+        throw new ValidationError(
+          'Each signalDefinitions entry must be an object like '
+          + `{ name: 'hiring', settings: { dateRange: 'past-month' } }`,
+        )
+      }
+
+      const rawName = this._getParamValue<unknown>(entry, 'name', 'name')
+      const name = typeof rawName === 'string' ? rawName.trim().toLowerCase() : rawName
+      if (typeof name !== 'string' || !name)
+        throw new ValidationError('Each signalDefinitions entry requires a signal name')
+      if (DISABLED_SIGNAL_TYPES.includes(name)) {
+        throw new ValidationError(
+          `The '${name}' signal is temporarily disabled because of company-record cost. `
+          + `Choose from the enabled signals: ${SIGNAL_TYPES.join(', ')}.`,
+        )
+      }
+      if (!SIGNAL_TYPES.includes(name as SignalType)) {
+        throw new ValidationError(
+          `'${name}' is not a signal we know. Choose from: ${SIGNAL_TYPES.join(', ')}.`,
+        )
+      }
+      if (seen.has(name)) {
+        throw new ValidationError(
+          `The '${name}' signal appears more than once in signalDefinitions — send each signal once.`,
+        )
+      }
+      seen.add(name)
+
+      for (const key of Object.keys(entry)) {
+        if (key !== 'name' && key !== 'settings') {
+          throw new ValidationError(
+            `Unknown signalDefinitions field '${key}'. Each entry accepts only name and settings.`,
+          )
+        }
+      }
+
+      this._validateSignalSettings(
+        name as SignalType,
+        this._getParamValue<unknown>(entry, 'settings', 'settings'),
+      )
+    }
+  }
+
+  /**
+   * Validate the signal-enrichment, automatic-selection and intent-scoring
+   * params. These apply to every people agent, so they are checked on the
+   * request rather than per agent.
+   */
+  private _validateSignalParams(params: Record<string, any>): void {
+    this._validateSignalDefinitions(
+      this._getParamValue<unknown>(params, 'signalDefinitions', 'signal_definitions'),
+    )
+
+    for (const [camel, snake] of [
+      ['autoSelectLane', 'auto_select_lane'],
+      ['autoSelectSignals', 'auto_select_signals'],
+    ] as const) {
+      const value = this._getParamValue<unknown>(params, camel, snake)
+      if (value !== undefined && value !== null && typeof value !== 'boolean')
+        throw new ValidationError(`${camel} must be true or false`)
+    }
+
+    const intentScoringInstructions = this._getParamValue<unknown>(
+      params,
+      'intentScoringInstructions',
+      'intent_scoring_instructions',
+    )
+    if (intentScoringInstructions !== undefined
+      && intentScoringInstructions !== null
+      && typeof intentScoringInstructions !== 'string') {
+      throw new ValidationError('intentScoringInstructions must be a string')
+    }
+
+    this._validateDateRange(
+      this._getParamValue<unknown>(params, 'jobSignalDateRange', 'job_signal_date_range'),
+      'jobSignalDateRange',
+    )
+
+    this._validateDateRange(
+      this._getParamValue<unknown>(params, 'postsDateRange', 'posts_date_range'),
+      'postsDateRange',
+    )
+  }
+
   private _validateCompetitorRepEngagementParams(params: Record<string, any>): void {
     const company = this._getParamValue<string>(params, 'company', 'company')
     const competitors = this._getParamValue<string[]>(params, 'competitors', 'competitors')
@@ -364,25 +584,10 @@ export class ResponsesResource {
       }
     }
 
-    const postsDateRange = this._getParamValue<PostsDateRange>(
-      params,
+    this._validateDateRange(
+      this._getParamValue<PostsDateRange>(params, 'postsDateRange', 'posts_date_range'),
       'postsDateRange',
-      'posts_date_range',
     )
-    if (postsDateRange !== undefined) {
-      const validRanges: PostsDateRange[] = [
-        'past-24h',
-        'past-week',
-        'past-month',
-        'past-quarter',
-        'past-6-months',
-        'past-year',
-        'past-2-years',
-        'past-3-years',
-      ]
-      if (!validRanges.includes(postsDateRange))
-        throw new ValidationError(`Invalid postsDateRange value: ${String(postsDateRange)}`)
-    }
 
     for (const [camel, snake, maximum] of [
       ['limit', 'limit', 1000],
@@ -472,6 +677,30 @@ export class ResponsesResource {
     }
   }
 
+  /**
+   * Every place a caller may put specialized-agent params: the dedicated field
+   * and the legacy nested copy inside `options`. Both are validated so a nested
+   * request cannot smuggle an unknown signal past the SDK.
+   */
+  private _specializedParamSources(request: CreateResponseRequest): Array<Record<string, any>> {
+    const sources: Array<Record<string, any>> = []
+    if (this._isPlainObject(request.specializedAgentParams))
+      sources.push(request.specializedAgentParams as Record<string, any>)
+
+    const requestOptions = request.options as Record<string, any> | undefined
+    const nested = requestOptions
+      ? this._getParamValue<unknown>(
+          requestOptions,
+          'specializedAgentParams',
+          'specialized_agent_params',
+        )
+      : undefined
+    if (this._isPlainObject(nested))
+      sources.push(nested)
+
+    return sources
+  }
+
   private _validateSalesNavigatorRequest(request: CreateResponseRequest): void {
     const directParams = request.specializedAgentParams as Record<string, any> | undefined
     const directUrl = directParams
@@ -547,6 +776,16 @@ export class ResponsesResource {
         'salesNavigatorUrl must be a Sales Navigator people-search or people-list URL',
       )
     }
+
+    // Automatic lane selection discards Sales Navigator as a manual source
+    // before any graph runs, so its connection-specific user requirement must
+    // not reject the request first. Automatic SIGNAL selection preserves the
+    // lane, so it does not bypass this.
+    const autoSelectLane = this._specializedParamSources(request).some(
+      params => this._getParamValue<unknown>(params, 'autoSelectLane', 'auto_select_lane') === true,
+    )
+    if (autoSelectLane)
+      return
 
     if (typeof request.userId !== 'string' || !request.userId.trim())
       throw new ValidationError('userId is required when salesNavigatorUrl is provided')
@@ -756,6 +995,8 @@ export class ResponsesResource {
         this._validateFileReference(file.uri)
     }
     this._validateSalesNavigatorRequest(request)
+    for (const params of this._specializedParamSources(request))
+      this._validateSignalParams(params)
     if (request.specializedAgentParams)
       this._validateCriteriaParams(request.specializedAgentParams, request.specializedAgent)
     return this.http.post<CreateResponseResponse>('/responses', request)
@@ -938,10 +1179,16 @@ export class ResponsesResource {
    * @param options.deepValidationBackfillBelowCriteria - Pad with criteria-failed candidates when under count; @default true
    * @param options.enrichEngagementHistory - Add recent LinkedIn engagement evidence before validation; forced off for Sales Navigator V1
    * @param options.deepSearchCriteriaModel - Override criteria decomposition model (e.g. 'openai:gpt-5.4')
+   * @param options.jobSignalDateRange - Posting window for the standalone job-signal lane; omit for the planner's 90-365 days
+   * @param options.signalDefinitions - Signal enrichments to run on fast-filter survivors before validation; omit or `[]` for none
+   * @param options.autoSelectLane - Let the backend choose the discovery lane; ignores the manual lane controls; @default false
+   * @param options.autoSelectSignals - Let the backend choose the signals; ignores `signalDefinitions`; @default false
+   * @param options.intentScoringInstructions - Plain-English direction for every intent-scoring stage (never changes fit or filtering)
    * @returns Response with structured_response containing:
-   *   - candidates: Validated and scored candidates
+   *   - candidates: Validated and scored candidates, each with `signalEvidence` for the selected signals
    *   - criteria: Generated/reused criteria definitions and classification
-   *   - searchStats: Search execution statistics
+   *   - searchStats: Search execution statistics, including `enrichment` and `signalFunnel`
+   *   - autoSearchSelection: What automatic selection applied, when either auto flag ran
    */
   async deepPeopleSearch(
     query: string,
@@ -989,6 +1236,12 @@ export class ResponsesResource {
       deepValidationBackfillBelowCriteria?: boolean
       enrichEngagementHistory?: boolean
       deepSearchCriteriaModel?: string
+      jobSignalDateRange?: DateRange
+      // Signal enrichment and automatic selection
+      signalDefinitions?: SignalDefinition[]
+      autoSelectLane?: boolean
+      autoSelectSignals?: boolean
+      intentScoringInstructions?: string
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -1074,8 +1327,20 @@ export class ResponsesResource {
         params.enrichEngagementHistory = options.enrichEngagementHistory
       if (options.deepSearchCriteriaModel)
         params.deepSearchCriteriaModel = options.deepSearchCriteriaModel
+      if (options.jobSignalDateRange !== undefined)
+        params.jobSignalDateRange = options.jobSignalDateRange
+      if (options.signalDefinitions !== undefined)
+        params.signalDefinitions = options.signalDefinitions
+      if (options.autoSelectLane !== undefined)
+        params.autoSelectLane = options.autoSelectLane
+      if (options.autoSelectSignals !== undefined)
+        params.autoSelectSignals = options.autoSelectSignals
+      if (options.intentScoringInstructions !== undefined)
+        params.intentScoringInstructions = options.intentScoringInstructions
 
-      if (options.salesNavigatorUrl !== undefined) {
+      // Automatic lane selection discards Sales Navigator as a source, so the
+      // fixed-lane overrides below would only mis-describe the run.
+      if (options.salesNavigatorUrl !== undefined && options.autoSelectLane !== true) {
         // Sales Navigator V1 is a fixed source/cost lane. Keep the outgoing
         // request consistent with the backend's authoritative overrides.
         params.searchProfiles = false
@@ -1136,6 +1401,8 @@ export class ResponsesResource {
       deepValidationUseRelevanceReranker?: boolean
       deepValidationBackfillBelowCriteria?: boolean
       deepSearchCriteriaModel?: string
+      /** Plain-English direction for the intent-scoring stages. */
+      intentScoringInstructions?: string
     },
   ): Promise<CreateResponseResponse> {
     const request: CreateResponseRequest = {
@@ -1163,6 +1430,8 @@ export class ResponsesResource {
         request.specializedAgentParams!.addAndRunCriterion = options.addAndRunCriterion
       if (options.deepSearchCriteriaModel)
         request.specializedAgentParams!.deepSearchCriteriaModel = options.deepSearchCriteriaModel
+      if (options.intentScoringInstructions !== undefined)
+        request.specializedAgentParams!.intentScoringInstructions = options.intentScoringInstructions
     }
 
     return this.create(request)
@@ -1255,6 +1524,10 @@ export class ResponsesResource {
       params.deepValidationUseRelevanceReranker
         = options.deepValidationUseRelevanceReranker
     }
+    if (options.signalDefinitions !== undefined)
+      params.signalDefinitions = options.signalDefinitions
+    if (options.intentScoringInstructions !== undefined)
+      params.intentScoringInstructions = options.intentScoringInstructions
 
     return this.create({
       messages: [{ role: 'user', content: query }],
@@ -1308,6 +1581,10 @@ export class ResponsesResource {
       params.excludeUrls = options.excludeUrls
     if (options.limit !== undefined)
       params.limit = options.limit
+    if (options.signalDefinitions !== undefined)
+      params.signalDefinitions = options.signalDefinitions
+    if (options.intentScoringInstructions !== undefined)
+      params.intentScoringInstructions = options.intentScoringInstructions
 
     return this.create({
       messages: [{ role: 'user', content: query }],
@@ -1386,6 +1663,14 @@ export class ResponsesResource {
       maxCommentsPerPost?: number
       /** SLM relevance reranker for surfaced candidates (ranking-only); @default true */
       deepValidationUseRelevanceReranker?: boolean
+      /**
+       * Signal enrichments to run on fast-filter survivors before validation.
+       * Omitted or `[]` keeps this lane's existing behavior; engagement this
+       * lane already collected is reused rather than repurchased.
+       */
+      signalDefinitions?: SignalDefinition[]
+      /** Plain-English direction for the intent-scoring stages. */
+      intentScoringInstructions?: string
     },
   ): Promise<CreateResponseResponse> {
     const hasCompany = typeof options.company === 'string' && options.company.trim().length > 0
@@ -1436,6 +1721,10 @@ export class ResponsesResource {
       params.maxReactorsPerPost = options.maxReactorsPerPost
     if (options.maxCommentsPerPost !== undefined)
       params.maxCommentsPerPost = options.maxCommentsPerPost
+    if (options.signalDefinitions !== undefined)
+      params.signalDefinitions = options.signalDefinitions
+    if (options.intentScoringInstructions !== undefined)
+      params.intentScoringInstructions = options.intentScoringInstructions
 
     request.specializedAgentParams = params
     return this.create(request)
@@ -1526,6 +1815,14 @@ export class ResponsesResource {
       thoroughEnrichment?: boolean
       /** SLM relevance reranker for surfaced candidates (ranking-only); @default true */
       deepValidationUseRelevanceReranker?: boolean
+      /**
+       * Signal enrichments to run on fast-filter survivors before validation.
+       * Omitted or `[]` keeps this lane's existing behavior; engagement this
+       * lane already collected is reused rather than repurchased.
+       */
+      signalDefinitions?: SignalDefinition[]
+      /** Plain-English direction for the intent-scoring stages. */
+      intentScoringInstructions?: string
     },
   ): Promise<CreateResponseResponse> {
     const hasCompany = typeof options.company === 'string' && options.company.trim().length > 0
@@ -1574,6 +1871,10 @@ export class ResponsesResource {
       params.maxCompetitors = options.maxCompetitors
     if (options.thoroughEnrichment !== undefined)
       params.thoroughEnrichment = options.thoroughEnrichment
+    if (options.signalDefinitions !== undefined)
+      params.signalDefinitions = options.signalDefinitions
+    if (options.intentScoringInstructions !== undefined)
+      params.intentScoringInstructions = options.intentScoringInstructions
 
     request.specializedAgentParams = params
     return this.create(request)
