@@ -30,6 +30,29 @@ export interface ContentIntelligenceOptions {
   reusePackageFrom?: string
   /** Outputs to produce. Omit to use the backend's current default set. */
   outputs?: ContentIntelligenceOutputName[]
+  /**
+   * Up to five competitor names or domains. When present, the response also
+   * contains a separate report about what those companies and their executives
+   * published in the same window. Competitor posts never enter audience metrics.
+   */
+  competitors?: string[]
+  /**
+   * Own company name or domain to compare with `competitors`. It is read through
+   * the same sources, tagged as `self`, and does not count toward the five-company
+   * competitor limit. Only meaningful when `competitors` is present.
+   */
+  company?: string
+  /** Read each competitor's company-page posts. @default true */
+  includeCompanyPosts?: boolean
+  /** Read posts from each competitor's executives. @default true */
+  includeExecPosts?: boolean
+  /**
+   * Executive title stems, most senior first. Supplying this list replaces the
+   * backend's default title list.
+   */
+  execTitles?: string[]
+  /** Executives read per competitor, most senior first. @default 10 @minimum 1 @maximum 20 */
+  maxExecsPerTarget?: number
 }
 
 export interface ContentIntelligenceResolvedParams {
@@ -41,6 +64,18 @@ export interface ContentIntelligenceResolvedParams {
   contentDirection?: string | null
   reusePackageFrom?: string | null
   outputs: ContentIntelligenceOutputName[]
+  /** Present on responses produced by competitor-aware backend versions. */
+  competitors?: string[] | null
+  /** Own-company comparison target; null when none was supplied. */
+  company?: string | null
+  /** @default true */
+  includeCompanyPosts?: boolean
+  /** @default true */
+  includeExecPosts?: boolean
+  /** Null means the backend's default executive-title list was used. */
+  execTitles?: string[] | null
+  /** @default 10 */
+  maxExecsPerTarget?: number
 }
 
 export interface ContentIntelligenceDateValue {
@@ -282,6 +317,8 @@ export interface ContentIntelligenceOutputs {
   topPosts?: TopPostsOutput
   postIdeas?: PostIdeasOutput
   engagementAnalysis?: EngagementAnalysisOutput
+  /** Automatically produced when competitors were requested; not selectable in `outputs`. */
+  competitorAnalysis?: ContentIntelligenceCompetitorAnalysis
 }
 
 export interface ContentIntelligenceCoveragePerson {
@@ -321,6 +358,8 @@ export interface ContentIntelligenceSummary {
   posts: number
   postsKept: number
   postsRemoved: number
+  /** Present only when competitors were requested. */
+  competitors?: ContentIntelligenceCompetitorSummary
 }
 
 export interface ContentIntelligenceAudienceStats {
@@ -336,6 +375,298 @@ export interface ContentIntelligenceAudienceStats {
   durationMs: number
 }
 
+// ═════════════════════════════════════════════════════════════════════════════════
+// Competitor content output (separate from audience engagement output)
+// ═════════════════════════════════════════════════════════════════════════════════
+
+export type ContentIntelligenceCompetitorStatus
+  = | 'complete'
+    | 'partial'
+    | 'unresolved'
+    | 'empty'
+
+export type ContentIntelligenceCompetitorPostAuthorType = 'company' | 'exec'
+export type ContentIntelligenceCompetitorPostSource = 'competitor_company' | 'competitor_exec'
+export type ContentIntelligenceCompetitorRole = 'self' | 'competitor'
+
+export interface ContentIntelligenceCompetitorSource {
+  /** The caller's original competitor or own-company input. */
+  competitor: string
+  competitorName: string
+  competitorDomain?: string | null
+  /** Missing on packages saved before own-company comparisons were introduced. */
+  role?: ContentIntelligenceCompetitorRole
+  postAuthorType: ContentIntelligenceCompetitorPostAuthorType
+  postAuthorName: string
+  postAuthorUrl?: string | null
+}
+
+export interface ContentIntelligenceCompetitorPost {
+  key: string
+  ids: string[]
+  text?: string | null
+  author?: ContentIntelligenceAuthor | null
+  published?: ContentIntelligenceDateValue | null
+  /** Exact publication instant used for time bucketing; null when unknown. */
+  publishedAt: string | null
+  url?: string | null
+  sources: ContentIntelligenceCompetitorPostSource[]
+  /** Aggregate LinkedIn reactions; null means unknown, not zero. */
+  totalReactions: number | null
+  /** Aggregate LinkedIn comments; null means unknown, not zero. */
+  totalComments: number | null
+  competitorSources: ContentIntelligenceCompetitorSource[]
+  missing: string[]
+  reasoning?: string
+  removalClass?: 'hiring' | 'personal' | 'promo' | 'bait' | 'no_substance' | 'unclassified'
+  relevance?: number | null
+  hybridScore?: number
+}
+
+export interface ContentIntelligenceCompetitorPackage {
+  posts: ContentIntelligenceCompetitorPost[]
+  uncopiedFields: Record<string, number>
+}
+
+export interface ContentIntelligenceResolvedCompetitor {
+  input: string
+  name: string
+  domain?: string | null
+  linkedinUrl?: string | null
+}
+
+export type ContentIntelligenceCompetitorResolutionReason
+  = | 'not_resolved'
+    | 'provider_error'
+    | 'no_provider'
+
+export interface ContentIntelligenceUnresolvedCompetitor {
+  input: string
+  reason: ContentIntelligenceCompetitorResolutionReason
+}
+
+export type ContentIntelligenceCompetitorStopReason
+  = | 'fetched'
+    | 'empty'
+    | 'error'
+    | 'not_attempted'
+
+export interface ContentIntelligenceCompetitorTargetCoverage {
+  input: string
+  name: string
+  companyPosts: number
+  execPosts: number
+  execsConsidered: number
+  execsFetched: number
+  pagesFiber: number
+  pagesCrust: number
+  stopReason: ContentIntelligenceCompetitorStopReason
+  error?: unknown
+}
+
+/** Resolution and collection coverage for the caller's own comparison company. */
+export interface ContentIntelligenceOwnCompanyCoverage {
+  input: string
+  resolved: ContentIntelligenceResolvedCompetitor | null
+  reason: ContentIntelligenceCompetitorResolutionReason | null
+  target: ContentIntelligenceCompetitorTargetCoverage | null
+}
+
+export interface ContentIntelligenceCompetitorCoverage {
+  requested: string[]
+  resolved: ContentIntelligenceResolvedCompetitor[]
+  unresolved: ContentIntelligenceUnresolvedCompetitor[]
+  targets: ContentIntelligenceCompetitorTargetCoverage[]
+  /** Absent on responses saved before own-company comparison support. */
+  own?: ContentIntelligenceOwnCompanyCoverage | null
+  requestedWindow: PostsDateRange
+  requestedDays: number
+  datedPosts: number
+  undatedPosts: number
+  /** Earliest dated post actually observed, which may be narrower than the request. */
+  observedStart?: string | null
+  /** Latest dated post actually observed, which may be narrower than the request. */
+  observedEnd?: string | null
+  status: ContentIntelligenceCompetitorStatus
+}
+
+export interface ContentIntelligenceCompetitorSummary {
+  requested: number
+  resolved: number
+  posts: number
+  status?: ContentIntelligenceCompetitorStatus | null
+  /** Resolved display name of the own-company comparison target. */
+  own?: string | null
+}
+
+export type ContentIntelligenceCompetitorBucket
+  = | 'snapshot'
+    | 'day'
+    | 'week'
+    | 'month'
+    | 'quarter'
+
+export interface ContentIntelligenceCompetitorAnalysisScope {
+  windowPreset: PostsDateRange
+  requestedDays: number
+  windowStart: string
+  windowEnd: string
+  bucket: ContentIntelligenceCompetitorBucket
+  posts: number
+  datedPosts: number
+  undatedPosts: number
+  /** Actual span covered by dated posts. */
+  observedWindowStart: string | null
+  /** Actual span covered by dated posts. */
+  observedWindowEnd: string | null
+  curatedPosts: number
+  competitorsRequested: number
+  competitorsResolved: number
+}
+
+export interface ContentIntelligenceCompetitorPeriodPoint {
+  text: string
+  postKeys: string[]
+  keysCited: number
+  keysExist: number
+}
+
+export interface ContentIntelligenceCompetitorPeriodTheme {
+  theme: string
+  posts: number
+  share: number
+}
+
+export interface ContentIntelligenceCompetitorPeriod {
+  start: string
+  end: string
+  durationDays: number
+  isPartial: boolean
+  headline?: string
+  points?: ContentIntelligenceCompetitorPeriodPoint[]
+  whatChanged?: string | null
+  standoutPostKey?: string | null
+  standoutKeyExists?: boolean
+  whyItStandsOut?: string | null
+  posts: number
+  companyPosts: number
+  execPosts: number
+  activeAuthors: number
+  reactionsKnownSum: number
+  commentsKnownSum: number
+  reactionsKnownPosts: number
+  /** Posts from the caller's own company; absent on historical reports. */
+  ownPosts?: number
+  /** Known reactions on own-company posts; absent on historical reports. */
+  ownReactionsKnownSum?: number
+  perCompetitor: Record<string, number>
+  themes: ContentIntelligenceCompetitorPeriodTheme[]
+}
+
+export interface ContentIntelligenceCompetitorAdjacentDelta {
+  from: number
+  to: number
+  postsDelta: number
+  reactionsDelta: number
+}
+
+export interface ContentIntelligenceCompetitorDelta {
+  postsDelta: number
+  reactionsDelta: number
+}
+
+export interface ContentIntelligenceCompetitorDeltas {
+  adjacent: ContentIntelligenceCompetitorAdjacentDelta[]
+  firstToLast: ContentIntelligenceCompetitorDelta | null
+}
+
+export interface ContentIntelligenceCompetitorThemePeriod {
+  period: number
+  posts: number
+  share: number
+}
+
+export interface ContentIntelligenceCompetitorThemeStats {
+  theme: string
+  posts: number
+  share: number
+  /** Own-company themed posts and share; absent on historical reports. */
+  ownPosts?: number
+  ownShare?: number
+  /** Competitor-only themed posts and share; absent on historical reports. */
+  competitorPosts?: number
+  competitorShare?: number
+  reactionsKnownSum: number
+  perPeriod: ContentIntelligenceCompetitorThemePeriod[]
+  examplePostKeys: string[]
+}
+
+export interface ContentIntelligenceCompetitorRow {
+  name: string
+  input: string
+  /** Missing on reports saved before own-company comparisons were introduced. */
+  role?: ContentIntelligenceCompetitorRole
+  posts: number
+  companyPosts: number
+  execPosts: number
+  reactionsKnownSum: number
+  commentsKnownSum: number
+  topThemes: string[]
+  examplePostKey: string | null
+}
+
+export interface ContentIntelligenceCompetitorComparisonTotals {
+  posts: number
+  companyPosts: number
+  execPosts: number
+  reactionsKnownSum: number
+  commentsKnownSum: number
+}
+
+export interface ContentIntelligenceCompetitorComparison {
+  ownResolved: boolean
+  ownName: string | null
+  sharedThemes: string[]
+  ownOnlyThemes: string[]
+  competitorOnlyThemes: string[]
+  own: ContentIntelligenceCompetitorComparisonTotals
+  competitors: ContentIntelligenceCompetitorComparisonTotals
+}
+
+export interface ContentIntelligenceCompetitorHighlight {
+  reasoning: string
+  insight: string
+  examplePostKeys: string[]
+  keysCited: number
+  keysExist: number
+}
+
+export interface ContentIntelligenceCompetitorTakeaway {
+  reasoning: string
+  finding: string
+  action: string
+  examplePostKeys: string[]
+  keysCited: number
+  keysExist: number
+}
+
+export interface ContentIntelligenceCompetitorAnalysis {
+  artifact: 'competitor_analysis'
+  status: ContentIntelligenceCompetitorStatus
+  scope: ContentIntelligenceCompetitorAnalysisScope
+  periods: ContentIntelligenceCompetitorPeriod[]
+  deltas: ContentIntelligenceCompetitorDeltas
+  themeStats: ContentIntelligenceCompetitorThemeStats[]
+  competitors: ContentIntelligenceCompetitorRow[]
+  /** Absent on reports saved before own-company comparisons were introduced. */
+  comparison?: ContentIntelligenceCompetitorComparison
+  highlights: ContentIntelligenceCompetitorHighlight[]
+  takeaways: ContentIntelligenceCompetitorTakeaway[]
+  summary: string
+  note?: string
+  invalidCitations: number
+}
+
 /** Full structured response returned by the content_intelligence agent. */
 export interface ContentIntelligenceOutput {
   package: ContentIntelligencePackage
@@ -344,4 +675,8 @@ export interface ContentIntelligenceOutput {
   coverage: ContentIntelligenceCoverage
   audienceStats: ContentIntelligenceAudienceStats | Record<string, never>
   agentParams: ContentIntelligenceResolvedParams
+  /** Present only when competitors were requested. */
+  competitorPackage?: ContentIntelligenceCompetitorPackage
+  /** Present only when competitors were requested. */
+  competitorCoverage?: ContentIntelligenceCompetitorCoverage
 }

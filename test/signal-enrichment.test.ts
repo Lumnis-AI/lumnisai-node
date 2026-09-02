@@ -24,7 +24,11 @@ describe('signal enrichment request contract', () => {
 
   it('forwards signal definitions, auto selection, and intent direction', async () => {
     const signalDefinitions: SignalDefinition[] = [
-      { name: 'hiring', settings: { dateRange: 'past-quarter' } },
+      {
+        name: 'hiring',
+        settings: { dateRange: 'past-quarter' },
+        context: 'Count revenue-team roles and ignore engineering backfills.',
+      },
       { name: 'funding', settings: { dateRange: 'past-year' } },
       { name: 'recently_joined', settings: { dateRange: 'past-2-weeks' } },
       {
@@ -104,6 +108,16 @@ describe('signal enrichment request contract', () => {
     await expect(responses.deepPeopleSearch('VPs of Sales', {
       signalDefinitions: [{ name: 'hiring', weight: 0.5 } as any],
     })).rejects.toThrow(/Unknown signalDefinitions field 'weight'/)
+  })
+
+  it('validates signal context briefs', async () => {
+    await expect(responses.deepPeopleSearch('VPs of Sales', {
+      signalDefinitions: [{ name: 'hiring', context: { note: 'not text' } as any }],
+    })).rejects.toThrow(/context must be plain text/)
+
+    await expect(responses.deepPeopleSearch('VPs of Sales', {
+      signalDefinitions: [{ name: 'hiring', context: 'x'.repeat(4001) }],
+    })).rejects.toThrow(/context must be at most 4000 characters/)
   })
 
   it('rejects unknown settings instead of ignoring them', async () => {
@@ -292,15 +306,25 @@ describe('signal evidence response contract', () => {
     const wire = {
       signal_contract_version: 1,
       signal_definitions: [
-        { name: 'recently_joined', settings: { date_range: 'past-quarter' } },
+        {
+          name: 'recently_joined',
+          settings: { date_range: 'past-quarter' },
+          context: 'Treat a role change as relevant only when it created budget ownership.',
+        },
       ],
       intent_scoring_instructions: 'Prioritize direct engagement.',
       auto_search_selection: {
         reasoning: 'Hiring defines the company pool.',
+        planner_failed: false,
         auto_selected_lane: true,
         auto_selected_signals: true,
-        lane: 'job_signal',
-        signal_definitions: [{ name: 'hiring', settings: { date_range: 'past-quarter' } }],
+        primary_lane: 'job_signal',
+        secondary_lane: null,
+        signal_definitions: [{
+          name: 'hiring',
+          settings: { date_range: 'past-quarter' },
+          context: 'Count revenue hiring and ignore unrelated technical roles.',
+        }],
       },
       candidates: [{
         candidate_id: 'c1',
@@ -308,6 +332,16 @@ describe('signal evidence response contract', () => {
         overall_score: 8,
         overall_confidence: 0.9,
         summary: 'Strong fit.',
+        intent_signals: [{
+          signal_type: 'person_authored_post',
+          source: 'Ada Chen authored a relevant post',
+          score: 8,
+          weight: 0.9,
+          recency: '3d ago',
+          reasoning: 'Recent first-party discussion signals active evaluation.',
+          post_url: 'https://linkedin.com/posts/intent-1',
+          post_text: 'We are evaluating agent tooling.',
+        }],
         signal_evidence: [
           {
             signal_type: 'hiring',
@@ -319,6 +353,7 @@ describe('signal evidence response contract', () => {
             scope: 'company',
             entity: { name: 'Acme', domain: 'acme.com' },
             settings: { date_range: 'past-quarter' },
+            context: 'Count revenue hiring and ignore unrelated technical roles.',
             presentation: {
               summary: 'Acme is adding quota capacity.',
               facts: [{ label: 'Relevant hiring', value: '4 of 12 recent postings' }],
@@ -375,13 +410,21 @@ describe('signal evidence response contract', () => {
       skipped: 97,
     })
 
-    expect(output.autoSearchSelection?.lane).toBe('job_signal')
+    expect(output.autoSearchSelection?.primaryLane).toBe('job_signal')
+    expect(output.autoSearchSelection?.plannerFailed).toBe(false)
     expect(output.autoSearchSelection?.autoSelectedSignals).toBe(true)
+
+    expect(output.candidates[0].intentSignals?.[0]).toMatchObject({
+      signalType: 'person_authored_post',
+      postUrl: 'https://linkedin.com/posts/intent-1',
+      postText: 'We are evaluating agent tooling.',
+    })
 
     const [hiring, engagement] = output.candidates[0].signalEvidence!
     expect(hiring.verdict).toBe('evidence_found')
     expect(hiring.scope).toBe('company')
     expect(hiring.entity?.domain).toBe('acme.com')
+    expect(hiring.context).toBe('Count revenue hiring and ignore unrelated technical roles.')
     expect(hiring.presentation.links[0].url).toBe('https://jobs.acme.com/ae')
 
     // Engagement keeps its proof once, under outputs.

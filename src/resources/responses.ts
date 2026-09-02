@@ -81,6 +81,10 @@ const ENGAGEMENT_ACTIVITIES: EngagementActivity[] = [
   'authored_posts',
 ]
 
+const MAX_SIGNAL_CONTEXT_CHARS = 4000
+const MAX_CONTENT_INTELLIGENCE_COMPETITORS = 5
+const MAX_CONTENT_INTELLIGENCE_COMPETITOR_CHARS = 200
+
 export class ResponsesResource {
   constructor(private readonly http: Http) {}
 
@@ -374,12 +378,17 @@ export class ResponsesResource {
       seen.add(name)
 
       for (const key of Object.keys(entry)) {
-        if (key !== 'name' && key !== 'settings') {
+        if (key !== 'name' && key !== 'settings' && key !== 'context') {
           throw new ValidationError(
-            `Unknown signalDefinitions field '${key}'. Each entry accepts only name and settings.`,
+            `Unknown signalDefinitions field '${key}'. Each entry accepts only name, settings, and context.`,
           )
         }
       }
+
+      this._validateContextBrief(
+        this._getParamValue<unknown>(entry, 'context', 'context'),
+        `signalDefinitions '${name}' context`,
+      )
 
       this._validateSignalSettings(
         name as SignalType,
@@ -427,6 +436,15 @@ export class ResponsesResource {
       this._getParamValue<unknown>(params, 'postsDateRange', 'posts_date_range'),
       'postsDateRange',
     )
+  }
+
+  private _validateContextBrief(value: unknown, field: string): void {
+    if (value === undefined || value === null)
+      return
+    if (typeof value !== 'string')
+      throw new ValidationError(`${field} must be plain text`)
+    if ([...value.trim()].length > MAX_SIGNAL_CONTEXT_CHARS)
+      throw new ValidationError(`${field} must be at most ${MAX_SIGNAL_CONTEXT_CHARS} characters`)
   }
 
   private _validateCompetitorRepEngagementParams(params: Record<string, any>): void {
@@ -522,6 +540,103 @@ export class ResponsesResource {
         }
       }
     }
+
+    const rawCompetitors = this._getParamValue<unknown>(params, 'competitors', 'competitors')
+    const competitors = this._normalizedContentIntelligenceCompetitors(rawCompetitors)
+    if (competitors.length > MAX_CONTENT_INTELLIGENCE_COMPETITORS) {
+      throw new ValidationError(
+        `competitors must contain at most ${MAX_CONTENT_INTELLIGENCE_COMPETITORS} distinct values`,
+      )
+    }
+
+    const rawCompany = this._getParamValue<unknown>(params, 'company', 'company')
+    let company: string | undefined
+    if (rawCompany !== undefined && rawCompany !== null) {
+      if (typeof rawCompany !== 'string')
+        throw new ValidationError('company must be a string for content_intelligence')
+      company = rawCompany.trim() || undefined
+      if (company && [...company].length > MAX_CONTENT_INTELLIGENCE_COMPETITOR_CHARS) {
+        throw new ValidationError(
+          `company must be at most ${MAX_CONTENT_INTELLIGENCE_COMPETITOR_CHARS} characters`,
+        )
+      }
+    }
+    const normalizedCompany = company?.toLowerCase()
+    if (normalizedCompany
+      && competitors.some(competitor => competitor.toLowerCase() === normalizedCompany)) {
+      throw new ValidationError(
+        `company '${company}' is also listed in competitors; name it on one side only`,
+      )
+    }
+
+    for (const [camel, snake] of [
+      ['includeCompanyPosts', 'include_company_posts'],
+      ['includeExecPosts', 'include_exec_posts'],
+    ] as const) {
+      const value = this._getParamValue<unknown>(params, camel, snake)
+      if (value !== undefined && typeof value !== 'boolean')
+        throw new ValidationError(`${camel} must be true or false`)
+    }
+
+    const includeCompanyPosts = this._getParamValue<boolean>(
+      params,
+      'includeCompanyPosts',
+      'include_company_posts',
+    )
+    const includeExecPosts = this._getParamValue<boolean>(
+      params,
+      'includeExecPosts',
+      'include_exec_posts',
+    )
+    if (competitors.length > 0 && includeCompanyPosts === false && includeExecPosts === false) {
+      throw new ValidationError(
+        'competitors were provided but includeCompanyPosts and includeExecPosts are both false',
+      )
+    }
+
+    const execTitles = this._getParamValue<unknown>(params, 'execTitles', 'exec_titles')
+    if (execTitles !== undefined
+      && (!Array.isArray(execTitles) || execTitles.some(title => typeof title !== 'string'))) {
+      throw new ValidationError('execTitles must be an array of strings')
+    }
+
+    const maxExecsPerTarget = this._getParamValue<unknown>(
+      params,
+      'maxExecsPerTarget',
+      'max_execs_per_target',
+    )
+    if (maxExecsPerTarget !== undefined
+      && (!Number.isInteger(maxExecsPerTarget) || (maxExecsPerTarget as number) < 1
+        || (maxExecsPerTarget as number) > 20)) {
+      throw new ValidationError('maxExecsPerTarget must be an integer between 1 and 20')
+    }
+  }
+
+  private _normalizedContentIntelligenceCompetitors(value: unknown): string[] {
+    if (value === undefined || value === null)
+      return []
+    const values = typeof value === 'string' ? [value] : value
+    if (!Array.isArray(values) || values.some(entry => typeof entry !== 'string'))
+      throw new ValidationError('competitors must be an array of strings')
+
+    const seen = new Set<string>()
+    const normalized: string[] = []
+    for (const entry of values as string[]) {
+      const competitor = entry.trim()
+      if (!competitor)
+        continue
+      if ([...competitor].length > MAX_CONTENT_INTELLIGENCE_COMPETITOR_CHARS) {
+        throw new ValidationError(
+          `each competitor must be at most ${MAX_CONTENT_INTELLIGENCE_COMPETITOR_CHARS} characters`,
+        )
+      }
+      const key = competitor.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        normalized.push(competitor)
+      }
+    }
+    return normalized
   }
 
   private _validateEngagementExpansionParams(params: Record<string, any>): void {
@@ -1445,6 +1560,10 @@ export class ResponsesResource {
    * `reusePackageFrom` to re-cook a saved package without collecting again.
    * `companyContext` and `contentDirection` steer post ideas only; collection,
    * curation, and engagement analysis remain an unbiased read of the audience.
+   * Add `competitors` to receive a separate publication report over the same
+   * window; competitor posts never enter the audience package or metrics. Add
+   * `company` to put the caller's own publication activity beside those
+   * competitors in the report.
    *
    * @param query - Natural-language description of the audience. A nonblank
    *   message is required even when reusing a package.
@@ -1475,6 +1594,18 @@ export class ResponsesResource {
       params.reusePackageFrom = options.reusePackageFrom
     if (options.outputs !== undefined)
       params.outputs = options.outputs
+    if (options.competitors !== undefined)
+      params.competitors = options.competitors
+    if (options.company !== undefined)
+      params.company = options.company
+    if (options.includeCompanyPosts !== undefined)
+      params.includeCompanyPosts = options.includeCompanyPosts
+    if (options.includeExecPosts !== undefined)
+      params.includeExecPosts = options.includeExecPosts
+    if (options.execTitles !== undefined)
+      params.execTitles = options.execTitles
+    if (options.maxExecsPerTarget !== undefined)
+      params.maxExecsPerTarget = options.maxExecsPerTarget
 
     return this.create({
       messages: [{ role: 'user', content: query }],

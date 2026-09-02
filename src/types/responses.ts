@@ -16,6 +16,8 @@ import type {
 import type { RepEngagementStats } from './competitor-rep-engagement'
 import type {
   ContentIntelligenceAudienceStats,
+  ContentIntelligenceCompetitorCoverage,
+  ContentIntelligenceCompetitorPackage,
   ContentIntelligenceCoverage,
   ContentIntelligenceOutputName,
   ContentIntelligenceOutputs,
@@ -259,10 +261,11 @@ export interface CriterionResult {
  */
 export interface IntentSignal {
   /**
-   * Category of the signal, e.g. 'competitor_rep_engagement' (a competitor's rep
-   * engaged with this person's post), 'person_post_engagement' (they
-   * authored/reacted/commented), or 'company_hiring' (their employer is hiring
-   * for the initiative).
+   * Scope and category of the signal. Company rows use `company_<type>` such as
+   * `company_hiring`, `company_funding`, or `company_events`; observed activity
+   * uses `person_<activity>` such as `person_authored_post` or
+   * `person_post_engagement`. Existing specialized values such as
+   * `competitor_rep_engagement` are also returned.
    */
   signalType: string
   /** Concise who/what for this signal — e.g. 'AE @ Mercor commented on their post'. */
@@ -278,6 +281,10 @@ export interface IntentSignal {
   recency: string
   /** One sentence on why THIS signal suggests they're in-market now. */
   reasoning: string
+  /** Stored post URL copied from the evidence row when this is a post-based signal. */
+  postUrl?: string | null
+  /** Stored post text copied from the evidence row when this is a post-based signal. */
+  postText?: string | null
   [key: string]: any
 }
 
@@ -584,6 +591,10 @@ export interface StructuredResponse extends Record<string, any> {
   repEngagementStats?: RepEngagementStats
   /** Saved content package from content_intelligence or engagement_expansion. */
   package?: ContentIntelligencePackage
+  /** Competitor and optional own-company posts, separate from the audience package. */
+  competitorPackage?: ContentIntelligenceCompetitorPackage
+  /** Collection and resolution coverage for the competitor content lane. */
+  competitorCoverage?: ContentIntelligenceCompetitorCoverage
   summary?: ContentIntelligenceSummary | IntelligenceReportSummary
   outputs?: ContentIntelligenceOutputs
   coverage?: ContentIntelligenceCoverage
@@ -759,8 +770,18 @@ export interface EngagementSignalSettings extends SignalDateRangeSettings {
  * ```
  */
 export type SignalDefinition =
-  | { name: 'engagement', settings?: EngagementSignalSettings }
-  | { name: Exclude<SignalType, 'engagement'>, settings?: SignalDateRangeSettings }
+  | {
+    name: 'engagement'
+    settings?: EngagementSignalSettings
+    /** Detailed evidence brief appended to, never substituted for, the request. @maxLength 4000 */
+    context?: string | null
+  }
+  | {
+    name: Exclude<SignalType, 'engagement'>
+    settings?: SignalDateRangeSettings
+    /** Detailed evidence brief appended to, never substituted for, the request. @maxLength 4000 */
+    context?: string | null
+  }
 
 /**
  * Discovery lanes the automatic selector can choose from when
@@ -779,18 +800,24 @@ export type SignalDiscoveryLane =
 /**
  * What automatic selection actually applied, echoed on the structured response
  * whenever `autoSelectLane` and/or `autoSelectSignals` ran. Only the dimensions
- * that were requested appear: `lane` is absent in signal-only mode, and
- * `signalDefinitions` is absent in lane-only mode.
+ * that were requested appear: primary/secondary lane fields are absent in
+ * signal-only mode, and `signalDefinitions` is absent in lane-only mode.
  */
 export interface AutoSearchSelection {
   /** Why the planner chose this lane and these signals. */
   reasoning: string
+  /** True when automatic planning failed and the backend used its standard fallback. */
+  plannerFailed?: boolean
   /** True when the discovery lane was chosen automatically. */
   autoSelectedLane?: boolean
   /** True when the signal list was chosen automatically. */
   autoSelectedSignals?: boolean
-  /** The chosen lane; present only when `autoSelectLane` was true. */
+  /** Legacy single-lane field retained for older responses. */
   lane?: SignalDiscoveryLane
+  /** Primary lane chosen by the current two-lane planner. */
+  primaryLane?: SignalDiscoveryLane
+  /** Optional second lane chosen by the current two-lane planner. */
+  secondaryLane?: SignalDiscoveryLane | null
   /** The chosen signals; present only when `autoSelectSignals` was true. */
   signalDefinitions?: SignalDefinition[]
   [key: string]: any
@@ -882,6 +909,8 @@ export interface SignalEvidence {
   evidence: Array<Record<string, any>>
   /** Effective non-default settings this row was collected under. */
   settings?: Record<string, any>
+  /** Detailed collection brief applied to this signal, when one was supplied. */
+  context?: string | null
   scope: SignalScope
   /** Current employer this row describes; company-scoped signals only. */
   entity?: { name: string | null, domain: string | null }
@@ -1477,10 +1506,13 @@ export interface SpecializedAgentParams {
    *
    * For competitor_post_engagement / competitor_rep_engagement this is the seed
    * whose competitors are discovered; exactly one of `company` or `competitors`
-   * is required. For company_intelligence it is the REQUIRED target domain (the
-   * one the company uses on LinkedIn when they differ). For person_intelligence
-   * it is the EMPLOYER's domain — required on the name door, optional context on
-   * the LinkedIn-URL door.
+   * is required. For content_intelligence it is the caller's own company, read
+   * through the competitor sources and presented as `self` beside the requested
+   * competitors; it is only meaningful when `competitors` is supplied. For
+   * company_intelligence it is the REQUIRED target domain (the one the company
+   * uses on LinkedIn when they differ). For person_intelligence it is the
+   * EMPLOYER's domain — required on the name door, optional context on the
+   * LinkedIn-URL door.
    *
    * The intelligence agents normalize a pasted URL: `https://www.acme.com/about`
    * resolves to `acme.com`.
@@ -1488,8 +1520,9 @@ export interface SpecializedAgentParams {
   company?: string
 
   /**
-   * Explicit list of competitor companies (domains or names). Skips discovery.
-   * Exactly one of `company` or `competitors` is required.
+   * Explicit list of competitor companies (domains or names). Skips discovery
+   * in the competitor prospecting agents. For content_intelligence, up to five
+   * values add a separate competitor-publication report to the audience report.
    */
   competitors?: string[]
 
@@ -1558,8 +1591,8 @@ export interface SpecializedAgentParams {
   excludeCompetitorEmployees?: boolean
 
   /**
-   * Titles to count as 'executive' when searching exec posts via CrustData.
-   * OR-fanned as fuzzy title matches under the company LinkedIn URL.
+   * Titles to count as 'executive' when searching exec posts. Supplying the
+   * list replaces the agent's defaults outright.
    * @default ['Founder', 'Co-Founder', 'CEO', 'CTO', 'COO', 'CFO', 'CRO', 'CMO', 'VP', 'Chief']
    */
   execTitles?: string[]
@@ -1574,8 +1607,10 @@ export interface SpecializedAgentParams {
   maxCompetitors?: number
 
   /**
-   * Max executives per competitor, ranked by total post engagement in window.
-   * @default 5
+   * Max executives per competitor. The competitor prospecting lane defaults to
+   * five and ranks by post engagement; content_intelligence defaults to ten and
+   * selects by title seniority before reading histories.
+   * @default 5 for competitor_post_engagement; 10 for content_intelligence
    * @minimum 1
    * @maximum 20
    */
