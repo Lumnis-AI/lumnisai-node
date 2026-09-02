@@ -314,17 +314,14 @@ describe('signal evidence response contract', () => {
       ],
       intent_scoring_instructions: 'Prioritize direct engagement.',
       auto_search_selection: {
-        reasoning: 'Hiring defines the company pool.',
-        planner_failed: false,
+        reasoning: 'Automatic planning failed; the safe default was applied.',
+        planner_failed: true,
+        planner_error: 'RuntimeError: provider unavailable',
         auto_selected_lane: true,
         auto_selected_signals: true,
-        primary_lane: 'job_signal',
+        primary_lane: 'profile',
         secondary_lane: null,
-        signal_definitions: [{
-          name: 'hiring',
-          settings: { date_range: 'past-quarter' },
-          context: 'Count revenue hiring and ignore unrelated technical roles.',
-        }],
+        signal_definitions: [],
       },
       candidates: [{
         candidate_id: 'c1',
@@ -410,8 +407,9 @@ describe('signal evidence response contract', () => {
       skipped: 97,
     })
 
-    expect(output.autoSearchSelection?.primaryLane).toBe('job_signal')
-    expect(output.autoSearchSelection?.plannerFailed).toBe(false)
+    expect(output.autoSearchSelection?.primaryLane).toBe('profile')
+    expect(output.autoSearchSelection?.plannerFailed).toBe(true)
+    expect(output.autoSearchSelection?.plannerError).toBe('RuntimeError: provider unavailable')
     expect(output.autoSearchSelection?.autoSelectedSignals).toBe(true)
 
     expect(output.candidates[0].intentSignals?.[0]).toMatchObject({

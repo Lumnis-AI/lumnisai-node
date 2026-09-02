@@ -808,6 +808,8 @@ export interface AutoSearchSelection {
   reasoning: string
   /** True when automatic planning failed and the backend used its standard fallback. */
   plannerFailed?: boolean
+  /** Last planner failure, present when `plannerFailed` is true. */
+  plannerError?: string
   /** True when the discovery lane was chosen automatically. */
   autoSelectedLane?: boolean
   /** True when the signal list was chosen automatically. */
