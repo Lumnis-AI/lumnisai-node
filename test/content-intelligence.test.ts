@@ -43,6 +43,8 @@ describe('contentIntelligence', () => {
       company: 'ourco.example',
       includeCompanyPosts: false,
       includeExecPosts: true,
+      includeMentionPosts: false,
+      maxMentionsPerTarget: 75,
       execTitles: ['Founder', 'CMO'],
       maxExecsPerTarget: 4,
     })
@@ -62,6 +64,8 @@ describe('contentIntelligence', () => {
         company: 'ourco.example',
         includeCompanyPosts: false,
         includeExecPosts: true,
+        includeMentionPosts: false,
+        maxMentionsPerTarget: 75,
         execTitles: ['Founder', 'CMO'],
         maxExecsPerTarget: 4,
       },
@@ -77,7 +81,13 @@ describe('contentIntelligence', () => {
       competitors: ['Acme'],
       includeCompanyPosts: false,
       includeExecPosts: false,
-    })).rejects.toThrow('includeCompanyPosts and includeExecPosts are both false')
+      includeMentionPosts: false,
+    })).rejects.toThrow('includeCompanyPosts, includeExecPosts, and includeMentionPosts are all false')
+
+    await expect(responses.contentIntelligence('Audience', {
+      competitors: ['Acme'],
+      maxMentionsPerTarget: 501,
+    })).rejects.toThrow('maxMentionsPerTarget must be an integer between 1 and 500')
 
     await expect(responses.contentIntelligence('Audience', {
       competitors: ['Acme'],
@@ -104,6 +114,20 @@ describe('contentIntelligence', () => {
     expect(postMock).toHaveBeenCalledTimes(1)
   })
 
+  it('allows mention posts to be the only competitor source', async () => {
+    await responses.contentIntelligence('Audience', {
+      competitors: ['Acme'],
+      includeCompanyPosts: false,
+      includeExecPosts: false,
+    })
+
+    expect(postMock.mock.calls[0][1].specializedAgentParams).toEqual({
+      competitors: ['Acme'],
+      includeCompanyPosts: false,
+      includeExecPosts: false,
+    })
+  })
+
   it('validates content intelligence params through low-level create', async () => {
     await expect(responses.create({
       messages: [{ role: 'user', content: 'Audience' }],
@@ -116,6 +140,18 @@ describe('contentIntelligence', () => {
       specializedAgent: 'content_intelligence',
       specializedAgentParams: { exa_results_per_query: 0 },
     })).rejects.toThrow('exaResultsPerQuery must be a positive integer')
+
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Audience' }],
+      specializedAgent: 'content_intelligence',
+      specializedAgentParams: { include_mention_posts: 'yes' as any },
+    })).rejects.toThrow('includeMentionPosts must be true or false')
+
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'Audience' }],
+      specializedAgent: 'content_intelligence',
+      specializedAgentParams: { max_mentions_per_target: 0 },
+    })).rejects.toThrow('maxMentionsPerTarget must be an integer between 1 and 500')
   })
 
   it('rejects unsupported outputs and blank audience prompts', async () => {
@@ -310,6 +346,8 @@ describe('contentIntelligence', () => {
         },
         agent_params: {
           company: 'ourco.example',
+          include_mention_posts: true,
+          max_mentions_per_target: 50,
         },
       },
     })
@@ -389,6 +427,10 @@ describe('contentIntelligence', () => {
       role: 'self',
     })
     expect(structured.summary?.competitors).toMatchObject({ own: 'OurCo' })
-    expect(structured.agentParams).toMatchObject({ company: 'ourco.example' })
+    expect(structured.agentParams).toMatchObject({
+      company: 'ourco.example',
+      includeMentionPosts: true,
+      maxMentionsPerTarget: 50,
+    })
   })
 })

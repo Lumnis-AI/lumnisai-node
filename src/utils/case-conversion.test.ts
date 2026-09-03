@@ -52,6 +52,48 @@ describe('case-conversion', () => {
 
       expect(result.outerKey.innerKey[uuid]).toEqual({ someValue: 'test' })
     })
+
+    it('preserves label keys inside engagement_profile', () => {
+      const input = {
+        structured_response: {
+          person_name: 'Jane Doe',
+          engagement_profile: {
+            post_formats: {
+              list_or_framework: 0.4,
+              announcement_or_launch: 0.2,
+            },
+            top_topics: {
+              finance_investing: 3,
+            },
+            comment_styles: {
+              agree_or_amplify: 5,
+              story_or_lesson: 2,
+            },
+          },
+          confidence_score: 0.9,
+        },
+      }
+      const result = toCamelCase<any>(input)
+
+      // Sibling keys outside the exempt subtree are still camelised.
+      expect(result.structuredResponse.personName).toBe('Jane Doe')
+      expect(result.structuredResponse.confidenceScore).toBe(0.9)
+
+      // The container key converts, everything inside it stays verbatim.
+      expect(result.structuredResponse.engagementProfile).toEqual({
+        post_formats: {
+          list_or_framework: 0.4,
+          announcement_or_launch: 0.2,
+        },
+        top_topics: {
+          finance_investing: 3,
+        },
+        comment_styles: {
+          agree_or_amplify: 5,
+          story_or_lesson: 2,
+        },
+      })
+    })
   })
 
   describe('toSnakeCase', () => {

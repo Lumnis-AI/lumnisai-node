@@ -572,6 +572,7 @@ export class ResponsesResource {
     for (const [camel, snake] of [
       ['includeCompanyPosts', 'include_company_posts'],
       ['includeExecPosts', 'include_exec_posts'],
+      ['includeMentionPosts', 'include_mention_posts'],
     ] as const) {
       const value = this._getParamValue<unknown>(params, camel, snake)
       if (value !== undefined && typeof value !== 'boolean')
@@ -588,10 +589,29 @@ export class ResponsesResource {
       'includeExecPosts',
       'include_exec_posts',
     )
-    if (competitors.length > 0 && includeCompanyPosts === false && includeExecPosts === false) {
+    const includeMentionPosts = this._getParamValue<boolean>(
+      params,
+      'includeMentionPosts',
+      'include_mention_posts',
+    )
+    if (competitors.length > 0
+      && includeCompanyPosts === false
+      && includeExecPosts === false
+      && includeMentionPosts === false) {
       throw new ValidationError(
-        'competitors were provided but includeCompanyPosts and includeExecPosts are both false',
+        'competitors were provided but includeCompanyPosts, includeExecPosts, and includeMentionPosts are all false',
       )
+    }
+
+    const maxMentionsPerTarget = this._getParamValue<unknown>(
+      params,
+      'maxMentionsPerTarget',
+      'max_mentions_per_target',
+    )
+    if (maxMentionsPerTarget !== undefined
+      && (!Number.isInteger(maxMentionsPerTarget) || (maxMentionsPerTarget as number) < 1
+        || (maxMentionsPerTarget as number) > 500)) {
+      throw new ValidationError('maxMentionsPerTarget must be an integer between 1 and 500')
     }
 
     const execTitles = this._getParamValue<unknown>(params, 'execTitles', 'exec_titles')
@@ -1602,6 +1622,10 @@ export class ResponsesResource {
       params.includeCompanyPosts = options.includeCompanyPosts
     if (options.includeExecPosts !== undefined)
       params.includeExecPosts = options.includeExecPosts
+    if (options.includeMentionPosts !== undefined)
+      params.includeMentionPosts = options.includeMentionPosts
+    if (options.maxMentionsPerTarget !== undefined)
+      params.maxMentionsPerTarget = options.maxMentionsPerTarget
     if (options.execTitles !== undefined)
       params.execTitles = options.execTitles
     if (options.maxExecsPerTarget !== undefined)

@@ -29,16 +29,27 @@ function toSnake(s: string): string {
 
 interface CaseObject { [key: string]: any }
 
+// Keys whose *values* are exempt from case conversion. The keys nested inside
+// these subtrees are data rather than Lumnis API field names -- external
+// provider-native property names for customFields, and label values such as
+// `list_or_framework` or `announcement_or_launch` for engagementProfile.
+// Rewriting them would corrupt the data itself, so the value passes through
+// verbatim while the container key is still converted. Both spellings are
+// listed so the exemption holds in either conversion direction.
+const PASSTHROUGH_VALUE_KEYS = new Set([
+  'customFields',
+  'custom_fields',
+  'engagementProfile',
+  'engagement_profile',
+])
+
 function convertCase(obj: any, converter: (s: string) => string): any {
   if (Array.isArray(obj)) {
     return obj.map(v => convertCase(v, converter))
   }
   else if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((acc: CaseObject, key: string) => {
-      // Values inside customFields/custom_fields are keyed by external
-      // provider-native property names, not by Lumnis API field names.
-      // Preserve those keys verbatim while still converting the container key.
-      const value = key === 'customFields' || key === 'custom_fields'
+      const value = PASSTHROUGH_VALUE_KEYS.has(key)
         ? obj[key]
         : convertCase(obj[key], converter)
       acc[converter(key)] = value

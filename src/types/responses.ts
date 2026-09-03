@@ -1585,6 +1585,25 @@ export interface SpecializedAgentParams {
   includeExecPosts?: boolean
 
   /**
+   * Include posts by other people that tag each competitor's LinkedIn page,
+   * plus the caller's own company when named. Page identity is used for
+   * matching, so namesakes are excluded. This costs one CrustData call per
+   * target and one credit per returned post.
+   * Used by content_intelligence.
+   * @default true
+   */
+  includeMentionPosts?: boolean
+
+  /**
+   * Mentions read per content-intelligence target, in vendor relevance order.
+   * This is also the worst-case per-target credit charge for mention collection.
+   * @default 50
+   * @minimum 1
+   * @maximum 500
+   */
+  maxMentionsPerTarget?: number
+
+  /**
    * Drop candidates whose current employer is one of the analyzed competitors.
    * Competitor employees reacting to their own company's posts are noise.
    * Set false for poaching / hiring use cases.

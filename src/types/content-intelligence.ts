@@ -47,6 +47,19 @@ export interface ContentIntelligenceOptions {
   /** Read posts from each competitor's executives. @default true */
   includeExecPosts?: boolean
   /**
+   * Read posts by other people that tag each competitor's LinkedIn page, plus
+   * the caller's own company when provided. Targets are matched by page rather
+   * than name. This incurs one CrustData call per target and one credit per post.
+   * @default true
+   */
+  includeMentionPosts?: boolean
+  /**
+   * Mentions read per target, returned in vendor relevance order.
+   * This is also the worst-case per-target credit charge for mention collection.
+   * @default 50 @minimum 1 @maximum 500
+   */
+  maxMentionsPerTarget?: number
+  /**
    * Executive title stems, most senior first. Supplying this list replaces the
    * backend's default title list.
    */
@@ -72,6 +85,10 @@ export interface ContentIntelligenceResolvedParams {
   includeCompanyPosts?: boolean
   /** @default true */
   includeExecPosts?: boolean
+  /** @default true */
+  includeMentionPosts?: boolean
+  /** @default 50 */
+  maxMentionsPerTarget?: number
   /** Null means the backend's default executive-title list was used. */
   execTitles?: string[] | null
   /** @default 10 */
