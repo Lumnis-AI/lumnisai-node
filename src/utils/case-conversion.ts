@@ -41,6 +41,11 @@ const PASSTHROUGH_VALUE_KEYS = new Set([
   'custom_fields',
   'engagementProfile',
   'engagement_profile',
+  // account_monitor's committee: its own fields (`people`, `groups`) are
+  // spelled the same in both cases, while the group labels underneath
+  // `groups` are caller-chosen names such as 'Security team'. Converting
+  // those would rename the customer's own groups.
+  'committee',
 ])
 
 function convertCase(obj: any, converter: (s: string) => string): any {

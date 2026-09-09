@@ -66,6 +66,7 @@ export type { ThreadsResource } from './resources/threads'
 export type { UsersResource } from './resources/users'
 
 // Export types
+export * from './types/account-monitor'
 export * from './types/campaigns'
 export * from './types/common'
 export * from './types/company-intelligence'

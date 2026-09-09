@@ -7,8 +7,14 @@
 //   - engagementExpansion — expand a saved content-intelligence package into people
 //   - influencerEngagement — score people engaging with a set of LinkedIn profiles
 //   - companyIntelligence / personIntelligence — full reference in src/types/company-intelligence.ts
+//   - accountMonitor — full reference in src/types/account-monitor.ts
 //
 import type { Http } from '../core/http'
+import type {
+  AccountMonitorOptions,
+  AccountMonitorParams,
+  AccountMonitorSignalName,
+} from '../types/account-monitor'
 import type { PaginationParams } from '../types/common'
 import type {
   CompanyIntelligenceOptions,
@@ -80,6 +86,57 @@ const ENGAGEMENT_ACTIVITIES: EngagementActivity[] = [
   'comments',
   'authored_posts',
 ]
+
+/**
+ * Checks the `account_monitor` agent accepts. A separate vocabulary from
+ * {@link SIGNAL_TYPES}: monitor entries carry only a name, and the names
+ * describe account evidence rather than people enrichment.
+ */
+const ACCOUNT_MONITOR_SIGNALS: AccountMonitorSignalName[] = [
+  'company_hiring',
+  'company_news',
+  'company_funding',
+  'company_posts',
+  'company_mention',
+  'company_background',
+  'committee_activity',
+  'committee_to_competitor',
+  'competitor_to_committee',
+  'committee_to_our_company',
+  'account_to_our_company',
+]
+
+/**
+ * Retired monitor checks. Unfinished older runs can still carry them, but a
+ * new request cannot select them — named separately so the SDK can say why
+ * rather than reporting them as unknown.
+ */
+const RETIRED_ACCOUNT_MONITOR_SIGNALS = [
+  'incoming_engagement',
+  'our_company_to_committee',
+  'our_company_to_account',
+]
+
+/**
+ * Every `account_monitor` parameter, in both spellings. The backend rejects
+ * fields it does not declare, so the SDK names the offending key instead of
+ * letting the request fail server-side.
+ */
+const ACCOUNT_MONITOR_FIELDS = [
+  ['account', 'account'],
+  ['depth', 'depth'],
+  ['committee', 'committee'],
+  ['competitors', 'competitors'],
+  ['ourCompany', 'our_company'],
+  ['days', 'days'],
+  ['window', 'window'],
+  ['signalDefinitions', 'signal_definitions'],
+  ['intentScoringInstructions', 'intent_scoring_instructions'],
+  ['history', 'history'],
+  ['tier', 'tier'],
+] as const
+
+const ACCOUNT_MONITOR_FIELD_KEYS = new Set<string>(ACCOUNT_MONITOR_FIELDS.flat())
 
 const MAX_SIGNAL_CONTEXT_CHARS = 4000
 const MAX_CONTENT_INTELLIGENCE_COMPETITORS = 5
@@ -813,6 +870,275 @@ export class ResponsesResource {
   }
 
   /**
+   * Validate one merged `account_monitor` request.
+   *
+   * The monitor's parameters are a CLOSED shape server-side, so unknown keys
+   * are rejected here with the offending name rather than failing after the
+   * request is sent. Everything else mirrors the backend's own rules: an
+   * account that identity resolution can actually resolve, one period (days
+   * OR window, never both), and explicit people/title scopes.
+   */
+  private _validateAccountMonitorParams(params: Record<string, any>): void {
+    const account = params.account
+    if (typeof account !== 'string' || !account.trim()) {
+      throw new ValidationError(
+        '`account` is required for account_monitor — give the monitored company\'s '
+        + 'domain, website, or LinkedIn company URL. A bare company name cannot be resolved.',
+      )
+    }
+
+    const depth = params.depth
+    if (depth !== undefined && depth !== 'light' && depth !== 'deep')
+      throw new ValidationError(`depth must be 'light' or 'deep' for account_monitor`)
+
+    const days = params.days
+    if (days !== undefined && (!Number.isInteger(days) || (days as number) < 1))
+      throw new ValidationError('days must be a positive integer for account_monitor')
+
+    const window = params.window
+    if (window !== undefined) {
+      if (days !== undefined)
+        throw new ValidationError('Supply days or window for account_monitor, not both')
+      if (!this._isPlainObject(window)) {
+        throw new ValidationError(
+          'window must be an object with startAt and endAt timestamps for account_monitor',
+        )
+      }
+      for (const [camel, snake] of [['startAt', 'start_at'], ['endAt', 'end_at']] as const) {
+        const value = this._getParamValue<unknown>(window, camel, snake)
+        if (typeof value !== 'string' || !value.trim()) {
+          throw new ValidationError(
+            `window.${camel} must be a timezone-aware ISO 8601 timestamp for account_monitor`,
+          )
+        }
+      }
+    }
+
+    this._validateAccountMonitorCommittee(params.committee)
+
+    const competitors = params.competitors
+    if (competitors !== undefined) {
+      if (!Array.isArray(competitors))
+        throw new ValidationError('competitors must be an array for account_monitor')
+      competitors.forEach((competitor, index) =>
+        this._validateAccountMonitorCompany(competitor, `competitors[${index}]`))
+    }
+
+    if (params.ourCompany !== undefined)
+      this._validateAccountMonitorCompany(params.ourCompany, 'ourCompany')
+
+    const history = params.history
+    if (history !== undefined && typeof history !== 'string' && !this._isPlainObject(history)) {
+      throw new ValidationError(
+        'history must be an object or a string for account_monitor — the run compares '
+        + 'against what you supply here, it never looks a previous response up.',
+      )
+    }
+
+    const tier = params.tier
+    if (tier !== undefined && typeof tier !== 'string')
+      throw new ValidationError('tier must be a string for account_monitor')
+
+    const instructions = params.intentScoringInstructions
+    if (instructions !== undefined && typeof instructions !== 'string')
+      throw new ValidationError('intentScoringInstructions must be a string')
+
+    this._validateAccountMonitorSignalDefinitions(params.signalDefinitions)
+  }
+
+  /** People are LinkedIn profile URLs; no employee discovery is ever implied. */
+  private _validateAccountMonitorProfiles(value: unknown, field: string): void {
+    if (!Array.isArray(value)
+      || value.some(url => typeof url !== 'string' || !url.trim())) {
+      throw new ValidationError(
+        `${field} must be an array of LinkedIn profile URLs for account_monitor`,
+      )
+    }
+  }
+
+  /**
+   * The committee accepts the full `{ people, groups }` object, a bare URL
+   * array, or a legacy label-to-URLs map. A map that carries `people` or
+   * `groups` is read as the full object, exactly as the backend reads it.
+   */
+  private _validateAccountMonitorCommittee(committee: unknown): void {
+    if (committee === undefined)
+      return
+    if (Array.isArray(committee)) {
+      this._validateAccountMonitorProfiles(committee, 'committee')
+      return
+    }
+    if (!this._isPlainObject(committee)) {
+      throw new ValidationError(
+        'committee must be an object with people and/or groups, an array of LinkedIn '
+        + 'profile URLs, or a map of group name to URLs',
+      )
+    }
+
+    const hasPeople = Object.prototype.hasOwnProperty.call(committee, 'people')
+    const hasGroups = Object.prototype.hasOwnProperty.call(committee, 'groups')
+    if (!hasPeople && !hasGroups) {
+      this._validateAccountMonitorGroups(committee, 'committee')
+      return
+    }
+    if (hasPeople)
+      this._validateAccountMonitorProfiles(committee.people, 'committee.people')
+    if (hasGroups) {
+      if (!this._isPlainObject(committee.groups))
+        throw new ValidationError('committee.groups must map each group name to LinkedIn profile URLs')
+      this._validateAccountMonitorGroups(committee.groups, 'committee.groups')
+    }
+  }
+
+  private _validateAccountMonitorGroups(groups: Record<string, any>, field: string): void {
+    for (const [label, people] of Object.entries(groups)) {
+      if (!label.trim())
+        throw new ValidationError(`${field} group names must not be blank`)
+      this._validateAccountMonitorProfiles(people, `${field}['${label}']`)
+    }
+  }
+
+  /**
+   * A company string means the company page only. People and titles are the
+   * only ways to reach employees — neither is implied by the company itself.
+   */
+  private _validateAccountMonitorCompany(value: unknown, field: string): void {
+    if (typeof value === 'string') {
+      if (!value.trim())
+        throw new ValidationError(`${field} must be a non-empty company domain, URL, or name`)
+      return
+    }
+    if (!this._isPlainObject(value)) {
+      throw new ValidationError(
+        `${field} must be a company string, or an object with company and an explicit `
+        + `people or employeeTitles scope`,
+      )
+    }
+
+    for (const key of Object.keys(value)) {
+      if (!['company', 'people', 'employeeTitles', 'employee_titles'].includes(key)) {
+        throw new ValidationError(
+          `Unknown ${field} field '${key}'. A company accepts only company, people, and employeeTitles.`,
+        )
+      }
+    }
+
+    const company = this._getParamValue<unknown>(value, 'company', 'company')
+    if (typeof company !== 'string' || !company.trim())
+      throw new ValidationError(`${field}.company is required and must be a non-empty string`)
+
+    const people = this._getParamValue<unknown>(value, 'people', 'people')
+    if (people !== undefined)
+      this._validateAccountMonitorProfiles(people, `${field}.people`)
+
+    const employeeTitles = this._getParamValue<unknown>(value, 'employeeTitles', 'employee_titles')
+    if (employeeTitles !== undefined && employeeTitles !== null) {
+      if (!Array.isArray(employeeTitles)
+        || employeeTitles.length === 0
+        || employeeTitles.some(title => typeof title !== 'string' || !title.trim())) {
+        throw new ValidationError(
+          `${field}.employeeTitles must contain at least one non-blank current-title filter. `
+          + `Omit it to skip employee discovery entirely.`,
+        )
+      }
+    }
+  }
+
+  private _validateAccountMonitorSignalDefinitions(value: unknown): void {
+    if (value === undefined || value === null)
+      return
+    if (!Array.isArray(value))
+      throw new ValidationError('signalDefinitions must be an array')
+
+    const seen = new Set<string>()
+    for (const entry of value) {
+      if (!this._isPlainObject(entry)) {
+        throw new ValidationError(
+          'Each account_monitor signalDefinitions entry must be an object like '
+          + `{ name: 'company_hiring' }`,
+        )
+      }
+
+      const rawName = this._getParamValue<unknown>(entry, 'name', 'name')
+      const name = typeof rawName === 'string' ? rawName.trim().toLowerCase() : rawName
+      if (typeof name !== 'string' || !name)
+        throw new ValidationError('Each signalDefinitions entry requires a signal name')
+      if (RETIRED_ACCOUNT_MONITOR_SIGNALS.includes(name)) {
+        throw new ValidationError(
+          `The '${name}' monitor check was retired and can no longer be requested. `
+          + `Choose from: ${ACCOUNT_MONITOR_SIGNALS.join(', ')}.`,
+        )
+      }
+      if (!ACCOUNT_MONITOR_SIGNALS.includes(name as AccountMonitorSignalName)) {
+        throw new ValidationError(
+          `'${name}' is not an account_monitor signal. Choose from: ${ACCOUNT_MONITOR_SIGNALS.join(', ')}.`,
+        )
+      }
+      if (seen.has(name)) {
+        throw new ValidationError(
+          `The '${name}' signal appears more than once in signalDefinitions — send each signal once.`,
+        )
+      }
+      seen.add(name)
+
+      for (const key of Object.keys(entry)) {
+        if (key !== 'name') {
+          throw new ValidationError(
+            `Unknown signalDefinitions field '${key}'. An account_monitor entry accepts only name.`,
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * Merge the monitor request the way the backend does: flat `options` fields
+   * first, then the nested params copy, then the dedicated field. A null never
+   * overwrites a value that an earlier source already supplied.
+   *
+   * Only known monitor fields are read out of flat `options`, because general
+   * platform options live there too. The dedicated and nested parameter
+   * objects are strict, so their unknown fields are reported instead.
+   */
+  private _accountMonitorParams(request: CreateResponseRequest): Record<string, any> {
+    const requestOptions = this._isPlainObject(request.options)
+      ? (request.options as Record<string, any>)
+      : {}
+    const nested = this._getParamValue<unknown>(
+      requestOptions,
+      'specializedAgentParams',
+      'specialized_agent_params',
+    )
+
+    const strict: Array<Record<string, any>> = []
+    if (this._isPlainObject(nested))
+      strict.push(nested)
+    if (this._isPlainObject(request.specializedAgentParams))
+      strict.push(request.specializedAgentParams as Record<string, any>)
+
+    for (const source of strict) {
+      for (const key of Object.keys(source)) {
+        if (!ACCOUNT_MONITOR_FIELD_KEYS.has(key)) {
+          throw new ValidationError(
+            `Unknown account_monitor parameter '${key}'. This agent accepts only: `
+            + `${ACCOUNT_MONITOR_FIELDS.map(([camel]) => camel).join(', ')}.`,
+          )
+        }
+      }
+    }
+
+    const merged: Record<string, any> = {}
+    for (const source of [requestOptions, ...strict]) {
+      for (const [camel, snake] of ACCOUNT_MONITOR_FIELDS) {
+        const value = this._getParamValue<unknown>(source, camel, snake)
+        if (value !== undefined && value !== null)
+          merged[camel] = value
+      }
+    }
+    return merged
+  }
+
+  /**
    * Every place a caller may put specialized-agent params: the dedicated field
    * and the legacy nested copy inside `options`. Both are validated so a nested
    * request cannot smuggle an unknown signal past the SDK.
@@ -926,7 +1252,10 @@ export class ResponsesResource {
       throw new ValidationError('userId is required when salesNavigatorUrl is provided')
   }
 
-  private _validateCriteriaParams(params?: SpecializedAgentParams, specializedAgent?: string): void {
+  private _validateCriteriaParams(
+    params?: SpecializedAgentParams | AccountMonitorParams,
+    specializedAgent?: string,
+  ): void {
     if (!params)
       return
 
@@ -1128,6 +1457,14 @@ export class ResponsesResource {
     if (request.files) {
       for (const file of request.files)
         this._validateFileReference(file.uri)
+    }
+    if (request.specializedAgent === 'account_monitor') {
+      // One closed request, merged from every place a caller may put it. The
+      // monitor owns its own parameters, so the people-search validators below
+      // — Sales Navigator, signal enrichment, criteria — never see it, exactly
+      // as the backend returns before its own Sales Navigator check.
+      this._validateAccountMonitorParams(this._accountMonitorParams(request))
+      return this.http.post<CreateResponseResponse>('/responses', request)
     }
     this._validateSalesNavigatorRequest(request)
     for (const params of this._specializedParamSources(request))
@@ -1540,33 +1877,34 @@ export class ResponsesResource {
       intentScoringInstructions?: string
     },
   ): Promise<CreateResponseResponse> {
+    const params: SpecializedAgentParams = {
+      candidateProfiles,
+      deepValidationUseRelevanceReranker: options?.deepValidationUseRelevanceReranker ?? true,
+      deepValidationBackfillBelowCriteria: options?.deepValidationBackfillBelowCriteria ?? true,
+    }
     const request: CreateResponseRequest = {
       messages: [{ role: 'user', content: query }],
       specializedAgent: 'people_scoring',
-      specializedAgentParams: {
-        candidateProfiles,
-        deepValidationUseRelevanceReranker: options?.deepValidationUseRelevanceReranker ?? true,
-        deepValidationBackfillBelowCriteria: options?.deepValidationBackfillBelowCriteria ?? true,
-      },
+      specializedAgentParams: params,
     }
 
     if (options) {
       if (options.reuseCriteriaFrom)
-        request.specializedAgentParams!.reuseCriteriaFrom = options.reuseCriteriaFrom
+        params.reuseCriteriaFrom = options.reuseCriteriaFrom
       if (options.criteriaDefinitions)
-        request.specializedAgentParams!.criteriaDefinitions = options.criteriaDefinitions
+        params.criteriaDefinitions = options.criteriaDefinitions
       if (options.criteriaClassification)
-        request.specializedAgentParams!.criteriaClassification = options.criteriaClassification
+        params.criteriaClassification = options.criteriaClassification
       if (options.runSingleCriterion)
-        request.specializedAgentParams!.runSingleCriterion = options.runSingleCriterion
+        params.runSingleCriterion = options.runSingleCriterion
       if (options.addCriterion)
-        request.specializedAgentParams!.addCriterion = options.addCriterion
+        params.addCriterion = options.addCriterion
       if (options.addAndRunCriterion)
-        request.specializedAgentParams!.addAndRunCriterion = options.addAndRunCriterion
+        params.addAndRunCriterion = options.addAndRunCriterion
       if (options.deepSearchCriteriaModel)
-        request.specializedAgentParams!.deepSearchCriteriaModel = options.deepSearchCriteriaModel
+        params.deepSearchCriteriaModel = options.deepSearchCriteriaModel
       if (options.intentScoringInstructions !== undefined)
-        request.specializedAgentParams!.intentScoringInstructions = options.intentScoringInstructions
+        params.intentScoringInstructions = options.intentScoringInstructions
     }
 
     return this.create(request)
@@ -2150,6 +2488,84 @@ export class ResponsesResource {
     return this.create({
       messages: [{ role: 'user', content: prompt }],
       specializedAgent: 'person_intelligence',
+      specializedAgentParams: params,
+    })
+  }
+
+  /**
+   * Report on ONE account for ONE fixed period.
+   *
+   * This runs once, now: there is no backend schedule and no saved cadence, so
+   * call it again when you want the next report. The period defaults to the
+   * last seven days — pass `days` for a different look-back, or `window` for an
+   * exact interval.
+   *
+   * What gets collected is decided ONLY by `signalDefinitions`, or by the
+   * `depth` preset that stands in for it. Nothing is implied: a competitor
+   * string means that company's page, not its employees, and committee work
+   * needs `committee` people plus `depth: 'deep'` or an explicit signal.
+   *
+   * Coverage is always partial and the report says so — a missing record never
+   * proves that nothing happened.
+   *
+   * @param query - What to watch for; it steers the report, not the collection.
+   *   Pass an empty string to run the monitor with no steering prompt — the
+   *   account, the period and `intentScoringInstructions` are what decide the
+   *   report.
+   * @param options - The account, its period, and the explicit scopes to track.
+   * @returns Response; poll with `get()`, read `outputText` for the report and
+   *   `structuredResponse` as {@link AccountMonitorOutput}.
+   *
+   * @example
+   * ```ts
+   * await client.responses.accountMonitor(
+   *   'Anything suggesting they are re-evaluating their data warehouse',
+   *   {
+   *     account: 'acme.com',
+   *     days: 14,
+   *     depth: 'deep',
+   *     committee: { groups: { 'data platform': ['https://www.linkedin.com/in/some-vp'] } },
+   *     competitors: [{ company: 'rival.com', employeeTitles: ['Account Executive'] }],
+   *   },
+   * )
+   * ```
+   */
+  async accountMonitor(
+    query: string,
+    options: AccountMonitorOptions,
+  ): Promise<CreateResponseResponse> {
+    if (typeof query !== 'string')
+      throw new ValidationError('accountMonitor query must be a string')
+
+    const params = { account: options.account } as AccountMonitorParams
+    if (options.depth !== undefined)
+      params.depth = options.depth
+    if (options.committee !== undefined)
+      params.committee = options.committee
+    if (options.competitors !== undefined)
+      params.competitors = options.competitors
+    if (options.ourCompany !== undefined)
+      params.ourCompany = options.ourCompany
+    if (options.days !== undefined)
+      params.days = options.days
+    if (options.window !== undefined)
+      params.window = options.window
+    if (options.signalDefinitions !== undefined)
+      params.signalDefinitions = options.signalDefinitions
+    if (options.intentScoringInstructions !== undefined)
+      params.intentScoringInstructions = options.intentScoringInstructions
+    if (options.history !== undefined)
+      params.history = options.history
+    if (options.tier !== undefined)
+      params.tier = options.tier
+
+    // The monitor takes its scope from the parameters, so a blank prompt is a
+    // valid request; name the account rather than sending an empty message.
+    const prompt = query.trim() || `Account monitor report for ${options.account}`
+
+    return this.create({
+      messages: [{ role: 'user', content: prompt }],
+      specializedAgent: 'account_monitor',
       specializedAgentParams: params,
     })
   }

@@ -1,4 +1,13 @@
 // Response API types
+import type {
+  AccountMonitorAccountAnalysis,
+  AccountMonitorCard,
+  AccountMonitorCommitteeSynthesis,
+  AccountMonitorCompanySourceReport,
+  AccountMonitorParams,
+  AccountMonitorPersonReport,
+  AccountMonitorSourceCoverage,
+} from './account-monitor'
 import type { Message, UUID } from './common'
 import type {
   IntelligenceCreditLedger,
@@ -34,7 +43,14 @@ import type {
 } from './influencer-engagement'
 import type { PersonResult } from './people'
 
-export type { PostEngagementType } from './competitor-post-engagement'
+export type {
+  AccountMonitorCard,
+  AccountMonitorOptions,
+  AccountMonitorOutput,
+  AccountMonitorParams,
+  AccountMonitorSignalDefinition,
+  AccountMonitorSignalName,
+} from './account-monitor'
 
 export type ResponseStatus = 'queued' | 'in_progress' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -620,6 +636,25 @@ export interface StructuredResponse extends Record<string, any> {
   stats?: Record<string, any>
   /** Per-call vendor credit ledger for the run. */
   credits?: IntelligenceCreditLedger
+  /**
+   * Account monitor output (when using account_monitor). The report itself is
+   * `reportMarkdown`, the same text as `outputText`; `card` is its projection.
+   * @see {@link ./account-monitor.ts} for the full agent reference.
+   */
+  card?: AccountMonitorCard
+  /** The account scorer's judgment plus the evidence it cited. */
+  accountAnalysis?: AccountMonitorAccountAnalysis
+  /**
+   * Per-committee-member activity reports that finished. Read each report's own
+   * `validation.status`: `warnings` still ships the full report.
+   */
+  personReports?: AccountMonitorPersonReport[]
+  /** Web (news/funding) and hiring analyses, kept separate from the committee read. */
+  companySourceReports?: AccountMonitorCompanySourceReport[]
+  /** The committee read as a group; null when it was not produced or could not finish. */
+  committeeSynthesis?: AccountMonitorCommitteeSynthesis | null
+  /** What each requested source returned and how it stopped. */
+  sourceCoverage?: AccountMonitorSourceCoverage[]
 }
 
 /**
@@ -637,6 +672,7 @@ export type SpecializedAgentType =
   | 'influencer_engagement'
   | 'company_intelligence'
   | 'person_intelligence'
+  | 'account_monitor'
   | (string & {})
 
 /**
@@ -1809,14 +1845,18 @@ export interface CreateResponseRequest {
    * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
    * 'competitor_post_engagement', 'competitor_rep_engagement',
    * 'content_intelligence', 'engagement_expansion', 'influencer_engagement',
-   * 'company_intelligence', 'person_intelligence'
+   * 'company_intelligence', 'person_intelligence', 'account_monitor'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
   /**
-   * Parameters specific to the specialized agent
+   * Parameters specific to the specialized agent.
+   *
+   * `account_monitor` takes {@link AccountMonitorParams}, which is a CLOSED
+   * shape — the backend rejects fields it does not declare. Every other agent
+   * takes the open {@link SpecializedAgentParams} bag.
    */
-  specializedAgentParams?: SpecializedAgentParams
+  specializedAgentParams?: SpecializedAgentParams | AccountMonitorParams
 }
 
 export interface ProgressEntry {
@@ -1957,6 +1997,8 @@ export interface QuickPeopleSearchOutput {
  *
  * For competitor_post_engagement, see {@link ./competitor-post-engagement.ts}.
  */
+
+export type { PostEngagementType } from './competitor-post-engagement'
 
 export type {
   AgentCostStats,
