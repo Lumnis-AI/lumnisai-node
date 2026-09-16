@@ -1069,7 +1069,10 @@ export interface SpecializedAgentParams {
    * Exclude people already in the acting user's synced CRM (`crm_contacts` ledger;
    * local lookup only, never a live CRM call). Matches on exact LinkedIn URL and
    * email; optionally name+company when `crmNameCompanyMatch` is true.
-   * @default true
+   *
+   * Off unless you ask for it: omitted or false runs no CRM lookup at all and
+   * every candidate is kept. With no CRM connected it is a silent no-op.
+   * @default false
    * Used by deep_people_search (via `specializedAgentParams`) and quick_people_search
    * (via top-level `options` on the create request).
    */

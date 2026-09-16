@@ -134,6 +134,37 @@ describe('accountMonitor', () => {
     })).rejects.toThrow(`Unknown account_monitor parameter 'seedProfiles'`)
   })
 
+  it('sends the CRM owner as a parameter and the requester as the request user', async () => {
+    await responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      crmUserId: 'owner@example.com',
+      userId: 'requester@example.com',
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/responses', {
+      messages: [{ role: 'user', content: 'What changed?' }],
+      specializedAgent: 'account_monitor',
+      specializedAgentParams: { account: 'acme.com', crmUserId: 'owner@example.com' },
+      userId: 'requester@example.com',
+    })
+  })
+
+  it('refuses a CRM read that does not name a requester or an owner', async () => {
+    await expect(responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      crmUserId: 'owner@example.com',
+    })).rejects.toThrow('userId is required when crmUserId is provided')
+
+    await expect(responses.create({
+      messages: [{ role: 'user', content: 'What changed?' }],
+      specializedAgent: 'account_monitor',
+      specializedAgentParams: { account: 'acme.com', crmUserId: '   ' },
+      userId: 'requester@example.com',
+    })).rejects.toThrow('crmUserId must be the UUID or email of a CRM owner')
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
   it('validates the period, the preset, and the signal vocabulary', async () => {
     await expect(responses.accountMonitor('What changed?', {
       account: 'acme.com',
@@ -449,5 +480,69 @@ describe('accountMonitor', () => {
     expect(output.accountAnalysis.collectedSignals?.[0].feeds?.[0].stopReason)
       .toBe('no_more_pages')
     expect(output.accountAnalysis.usage?.durationMs).toBe(4200.5)
+  })
+
+  it('camel-cases the CRM context a crmUserId run adds', () => {
+    const response = toCamelCase<{ structuredResponse: AccountMonitorOutput }>({
+      structured_response: {
+        crm_context: {
+          status: 'ok',
+          response: {
+            results: [{
+              input_key: 'account',
+              sales_state: 'active_pipeline',
+              providers: [{
+                provider: 'hubspot',
+                match_method: 'exact_domain',
+                account_ref: 'hubspot:1',
+              }],
+            }],
+            accounts: [{
+              account_ref: 'hubspot:1',
+              provider: 'hubspot',
+              account_id: '1',
+              domains: ['acme.com'],
+            }],
+            provider_coverage: [{ provider: 'hubspot', account_source: 'complete' }],
+          },
+          history: {
+            attio: { status: 'unsupported' },
+            hubspot: {
+              status: 'partial',
+              deals: {
+                42: {
+                  id: '42',
+                  properties: { dealstage: 'contractsent', hs_lastmodifieddate: '2026-09-10' },
+                },
+              },
+              activity_links: {
+                emails: { 7: [{ source_kind: 'contacts', source_id: '9', scope: 'contact_only' }] },
+              },
+              properties: { deals: ['dealstage', 'hs_lastmodifieddate'] },
+              coverage: [{ source: 'records/deals', complete: false }],
+            },
+          },
+        },
+        artifact_refs: { crm_context: 'evidence-internal:crm-context' },
+      },
+    })
+
+    const crm = response.structuredResponse.crmContext
+    expect(crm?.status).toBe('ok')
+    expect(crm?.response?.results[0].inputKey).toBe('account')
+    expect(crm?.response?.accounts[0].accountRef).toBe('hubspot:1')
+    expect(crm?.history?.attio?.status).toBe('unsupported')
+    expect(crm?.history?.hubspot?.status).toBe('partial')
+    expect(crm?.history?.hubspot?.activityLinks?.emails['7'][0].scope).toBe('contact_only')
+    expect(crm?.history?.hubspot?.coverage?.[0].complete).toBe(false)
+    // Provider property names are values in `properties`, so they survive
+    // verbatim; the same names used as keys are camel-cased like every other
+    // key in a response.
+    expect(crm?.history?.hubspot?.properties?.deals)
+      .toEqual(['dealstage', 'hs_lastmodifieddate'])
+    expect(crm?.history?.hubspot?.deals?.['42'].properties.hsLastmodifieddate)
+      .toBe('2026-09-10')
+    expect(response.structuredResponse.artifactRefs.crmContext)
+      .toBe('evidence-internal:crm-context')
   })
 })

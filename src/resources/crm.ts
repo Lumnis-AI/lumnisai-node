@@ -19,7 +19,8 @@ import type {
  * Resource for the user-triggered CRM Sync API.
  *
  * Wraps prospect sync/match, account context, contacts-ledger sync, and
- * exclusion-grant routes under `/v1/crm`.
+ * CRM access-grant routes under `/v1/crm` (the grant routes keep their
+ * original `exclusion-grants` path for compatibility).
  *
  * The user identified by `userId` must already have an active CRM
  * connection (see `client.integrations.initiateConnection`). When the
@@ -169,8 +170,11 @@ export class CrmResource {
   }
 
   /**
-   * Grant a member the right to exclude against an owner's synced CRM ledger
-   * (all providers for that owner). Typically called by the FE on org join.
+   * Grant a member access to an owner's CRM — every provider that owner has
+   * synced. One grant serves both reads that name another owner: ledger
+   * exclusion in search and campaigns, and `account_monitor`'s `crmUserId`.
+   * Both users must be in the authenticated tenant; a self-grant is a no-op.
+   * Typically called by the FE on org join.
    */
   async grantExclusionGrant(
     data: CrmExclusionGrantRequest,
@@ -179,7 +183,8 @@ export class CrmResource {
   }
 
   /**
-   * Revoke a member's access to an owner's CRM exclusion ledger.
+   * Revoke a member's access to an owner's CRM. Implicit access to their own
+   * CRM cannot be revoked.
    */
   async revokeExclusionGrant(
     data: CrmExclusionGrantRequest,
@@ -190,7 +195,8 @@ export class CrmResource {
   }
 
   /**
-   * List CRM owners whose exclusion ledger a member may read (via grants).
+   * List the CRM owners a member may read via grants. The member's own CRM is
+   * implicit and is not listed.
    */
   async listExclusionGrants(memberUserId: string): Promise<CrmExclusionGrantListResponse> {
     return this.http.get<CrmExclusionGrantListResponse>('/crm/exclusion-grants', {

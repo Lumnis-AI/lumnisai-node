@@ -133,6 +133,7 @@ const ACCOUNT_MONITOR_FIELDS = [
   ['signalDefinitions', 'signal_definitions'],
   ['intentScoringInstructions', 'intent_scoring_instructions'],
   ['history', 'history'],
+  ['crmUserId', 'crm_user_id'],
   ['tier', 'tier'],
 ] as const
 
@@ -946,6 +947,31 @@ export class ResponsesResource {
     this._validateAccountMonitorSignalDefinitions(params.signalDefinitions)
   }
 
+  /**
+   * `crmUserId` reads one tenant member's CRM, so the request has to name the
+   * requester too: the backend refuses the pair without a top-level `userId`,
+   * and reading anyone else's CRM also needs a CRM access grant
+   * (`client.crm.grantExclusionGrant`). Reading your own is always allowed.
+   */
+  private _validateAccountMonitorCrmAccess(
+    params: Record<string, any>,
+    request: CreateResponseRequest,
+  ): void {
+    const crmUserId = params.crmUserId
+    if (crmUserId === undefined)
+      return
+
+    if (typeof crmUserId !== 'string' || !crmUserId.trim() || crmUserId.length > 255) {
+      throw new ValidationError(
+        'crmUserId must be the UUID or email of a CRM owner in the authenticated '
+        + 'tenant (1-255 characters) for account_monitor',
+      )
+    }
+
+    if (typeof request.userId !== 'string' || !request.userId.trim())
+      throw new ValidationError('userId is required when crmUserId is provided')
+  }
+
   /** People are LinkedIn profile URLs; no employee discovery is ever implied. */
   private _validateAccountMonitorProfiles(value: unknown, field: string): void {
     if (!Array.isArray(value)
@@ -1463,7 +1489,9 @@ export class ResponsesResource {
       // monitor owns its own parameters, so the people-search validators below
       // — Sales Navigator, signal enrichment, criteria — never see it, exactly
       // as the backend returns before its own Sales Navigator check.
-      this._validateAccountMonitorParams(this._accountMonitorParams(request))
+      const monitorParams = this._accountMonitorParams(request)
+      this._validateAccountMonitorParams(monitorParams)
+      this._validateAccountMonitorCrmAccess(monitorParams, request)
       return this.http.post<CreateResponseResponse>('/responses', request)
     }
     this._validateSalesNavigatorRequest(request)
@@ -1571,7 +1599,7 @@ export class ResponsesResource {
    * @param options - Optional search parameters
    * @param options.limit - Maximum number of results (1-100, default: 20)
    * @param options.dataSources - Specific data sources to use: ["PDL", "CORESIGNAL", "CRUST_DATA"]
-   * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default true (via request `options`)
+   * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default false (via request `options`)
    * @param options.crmExclusionOwners - Granted owner ledgers to exclude against (user id or email)
    * @param options.crmNameCompanyMatch - Also exclude by exact name+company; @default true
    * @returns Response with structured_response containing:
@@ -1640,7 +1668,7 @@ export class ResponsesResource {
    * @param options.excludeProfiles - LinkedIn URLs to exclude from results
    * @param options.excludePreviouslyContacted - Exclude previously contacted people
    * @param options.excludeNames - Names to exclude from results
-   * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default true
+   * @param options.excludeCrmContacts - Exclude people in the acting user's synced CRM ledger; @default false
    * @param options.crmExclusionOwners - Granted owner ledgers to exclude against (user id or email)
    * @param options.crmNameCompanyMatch - Also exclude by exact name+company; @default true
    * @param options.salesNavigatorUrl - Sales Navigator people-search or people-list URL to use as the only discovery source
@@ -2513,8 +2541,14 @@ export class ResponsesResource {
    *   account, the period and `intentScoringInstructions` are what decide the
    *   report.
    * @param options - The account, its period, and the explicit scopes to track.
+   * @param options.crmUserId - CRM owner (UUID or email) whose connected CRM is
+   *   read for relationship context; requires `options.userId`, and another
+   *   member's CRM requires a CRM access grant. Omit for no CRM lookup.
+   * @param options.userId - The acting user, sent as the request's top-level
+   *   `userId`. Required with `crmUserId`.
    * @returns Response; poll with `get()`, read `outputText` for the report and
-   *   `structuredResponse` as {@link AccountMonitorOutput}.
+   *   `structuredResponse` as {@link AccountMonitorOutput}, whose `crmContext`
+   *   is present only when `crmUserId` was sent.
    *
    * @example
    * ```ts
@@ -2556,6 +2590,8 @@ export class ResponsesResource {
       params.intentScoringInstructions = options.intentScoringInstructions
     if (options.history !== undefined)
       params.history = options.history
+    if (options.crmUserId !== undefined)
+      params.crmUserId = options.crmUserId
     if (options.tier !== undefined)
       params.tier = options.tier
 
@@ -2563,10 +2599,16 @@ export class ResponsesResource {
     // valid request; name the account rather than sending an empty message.
     const prompt = query.trim() || `Account monitor report for ${options.account}`
 
-    return this.create({
+    const request: CreateResponseRequest = {
       messages: [{ role: 'user', content: prompt }],
       specializedAgent: 'account_monitor',
       specializedAgentParams: params,
-    })
+    }
+    // The acting user is a property of the request, not of the monitor, and
+    // `crmUserId` is checked against it.
+    if (options.userId !== undefined)
+      request.userId = options.userId
+
+    return this.create(request)
   }
 }

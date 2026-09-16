@@ -40,9 +40,12 @@ export interface CampaignGuardrails {
    */
   customerEditsEnabled?: boolean
   /**
-   * When true (default), prospects already in the campaign owner's synced CRM
-   * are skipped at add-time (exact LinkedIn/email) and flagged on name+company.
-   * Set false to disable for this campaign.
+   * When true, prospects already in the campaign owner's synced CRM are skipped
+   * at add-time (exact LinkedIn/email) and flagged on name+company.
+   *
+   * Off by default — CRM presence alone does not stop enrollment, so opt a
+   * campaign in explicitly.
+   * @default false
    */
   excludeCrmContacts?: boolean
 }

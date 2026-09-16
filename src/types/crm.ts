@@ -53,16 +53,23 @@ export interface CrmContactsSyncStatusResponse {
   totalInCrm?: number | null
 }
 
-// ==================== exclusion grants (org sharing) ====================
+// ==================== CRM access grants (org sharing) ====================
 
 /**
- * Grant or revoke a member's right to exclude against an owner's CRM ledger.
- * Per-owner (all of that owner's synced CRMs inherit). Self-grant is a no-op.
+ * Grant or revoke a member's access to an owner's CRM. Per-owner — all of that
+ * owner's synced CRMs inherit it — and a self-grant is a no-op, because a
+ * member always reaches their own CRM.
+ *
+ * One grant covers every read that names another owner: search and campaign
+ * exclusion against their `crm_contacts` ledger, and the `crmUserId` an
+ * `account_monitor` run reads relationship context from. Both users must
+ * belong to the authenticated tenant. The `exclusion` naming is the original
+ * route's, kept for compatibility.
  */
 export interface CrmExclusionGrantRequest {
-  /** Member (UUID or email) who reads the owner's exclusion ledger. */
+  /** Member (UUID or email) who receives access to the owner's CRM. */
   memberUserId: string
-  /** CRM owner (UUID or email) whose ledger is shared. */
+  /** CRM owner (UUID or email) sharing their CRM. */
   ownerUserId: string
 }
 
@@ -74,6 +81,7 @@ export interface CrmExclusionGrantResponse {
 
 export interface CrmExclusionGrantListResponse {
   memberUserId: string
+  /** Explicitly granted owners only — the member's own CRM is implicit. */
   ownerUserIds: string[]
 }
 
