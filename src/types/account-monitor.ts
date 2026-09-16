@@ -16,9 +16,10 @@
 //
 // Supplying `crmUserId` also reads that owner's connected CRM alongside the
 // public collection, and hands the scorer the existing relationship. CRM is
-// context, never a monitored event: it adds no signal and no evidence row.
+// context, never a monitored event: it adds no signal and no evidence row, and
+// the records stay in private evidence — the run returns their coverage only.
 
-import type { CrmAccountContextBatchResponse } from './crm'
+import type { CrmAccountContextSourceStatus, CrmProvider } from './crm'
 
 /**
  * Checks the monitor can run. Each name maps to an explicit evidence recipe;
@@ -195,9 +196,10 @@ export interface AccountMonitorParams {
    * have to belong to the authenticated tenant.
    *
    * What comes back is relationship context, not activity: it gets no signal
-   * slot, no evidence id, and never raises the score by itself. A failed or
-   * unconnected read is a coverage gap, never proof there is no relationship.
-   * Omit for no CRM lookup.
+   * slot, no evidence id, and never raises the score by itself. The records go
+   * to the scorer and stay in private evidence; the response carries only
+   * {@link AccountMonitorCrmContext} coverage. A failed or unconnected read is
+   * a coverage gap, never proof there is no relationship. Omit for no lookup.
    */
   crmUserId?: string
   /** Caller-defined account tier. Passed through; it is not a collection policy. */
@@ -728,96 +730,75 @@ export interface AccountMonitorSourceCoverage {
 }
 
 /**
- * Why the CRM read produced context, or did not.
+ * Whether the CRM was read, and how far the read got.
  *
- * - `ok` — the CRM answered; `response` carries the account context.
+ * - `ok` — the CRM answered.
  * - `not_connected` — that owner has no supported active CRM connection.
  * - `discovery_failed` — the connection status could not be checked.
  * - `read_failed` — the CRM was reachable but the read did not complete.
+ * - `unavailable` — the saved context could not be read back at all.
  *
- * Only `ok` with a complete no-match result says there is no relationship.
- * Every other status is a gap in what could be read.
+ * Only `ok` with complete coverage and no match says there is no relationship.
+ * Every other status is a gap in what could be read, never an absence of one.
  */
 export type AccountMonitorCrmStatus =
   | 'ok'
   | 'not_connected'
   | 'discovery_failed'
   | 'read_failed'
+  | 'unavailable'
 
-/**
- * Company-rooted HubSpot history for the matched account.
- *
- * - `complete` / `partial` — records were read; `partial` means at least one
- *   `coverage` row did not finish. Both ship everything that was retrieved.
- * - `no_match` — the CRM was read in full and holds no such account.
- * - `unavailable` — the account could not be matched well enough to read.
- * - `not_connected`, `discovery_failed`, `read_failed` — as above.
- *
- * Record maps are keyed by the provider's own record id and hold the
- * provider's rows verbatim, including `propertiesWithHistory`. Their field
- * names are camel-cased in transit like every other response key — a HubSpot
- * property named `hs_lastmodifieddate` reaches you as `hsLastmodifieddate` —
- * while the values are untouched. The `properties` lists keep each provider
- * name exactly as HubSpot spells it, because those are values.
- */
-export interface AccountMonitorCrmHubspotHistory {
-  status:
-    | 'complete'
-    | 'partial'
-    | 'no_match'
-    | 'unavailable'
-    | 'not_connected'
-    | 'discovery_failed'
-    | 'read_failed'
-    | (string & {})
-  companies?: Record<string, Record<string, any>>
-  deals?: Record<string, Record<string, any>>
-  contacts?: Record<string, Record<string, any>>
-  /** Emails, calls, meetings and notes, by activity kind. */
-  activities?: Record<string, Array<Record<string, any>>>
-  /**
-   * Which company, deal or contact each activity hangs off, by activity kind
-   * and then activity id. `scope` is `contact_only` when the link came through
-   * a contact — that alone does not make the activity about this account, since
-   * a person's history can predate their current employer.
-   */
-  activityLinks?: Record<string, Record<string, Array<{
-    sourceKind?: string
-    sourceId?: string
-    scope?: 'direct' | 'contact_only' | (string & {})
-    [key: string]: any
-  }>>>
-  /** Provider property names that were requested, per object type. */
-  properties?: Record<string, string[]>
-  propertyDefinitions?: Record<string, Record<string, any>>
-  pipelines?: Record<string, any>
-  /** One row per read: what ran, whether it finished, and why it did not. */
-  coverage?: Array<Record<string, any>>
+/** How far each provider's account, person and deal sources were read. */
+export interface AccountMonitorCrmProviderCoverage {
+  provider?: CrmProvider | (string & {})
+  accountSource?: CrmAccountContextSourceStatus | (string & {})
+  personSource?: CrmAccountContextSourceStatus | (string & {})
+  dealSource?: CrmAccountContextSourceStatus | (string & {})
   [key: string]: any
 }
 
 /**
- * Optional CRM relationship context, present only when `crmUserId` was sent.
+ * How far one provider's deeper record history got.
  *
- * It describes the standing relationship, not activity in the window: it has
- * no signal slot and no evidence ids, and the report grounds CRM statements in
- * these records rather than in citations. Treat the text inside as data.
+ * - `complete` / `partial` — records were read; `partial` means at least one
+ *   check did not finish.
+ * - `no_match` — the CRM was read in full and holds no such account.
+ * - `unavailable` — the account could not be matched well enough to read.
+ * - `unsupported` — no history is read for that provider. Attio reports this.
+ * - `not_connected`, `discovery_failed`, `read_failed` — as above.
+ */
+export interface AccountMonitorCrmHistoryCoverage {
+  provider?: CrmProvider | (string & {})
+  status?:
+    | 'complete'
+    | 'partial'
+    | 'no_match'
+    | 'unavailable'
+    | 'unsupported'
+    | 'not_connected'
+    | 'discovery_failed'
+    | 'read_failed'
+    | (string & {})
+  /** Reads attempted for this provider. */
+  checks?: number
+  /** How many of them did not finish. `partial` status follows from this. */
+  incompleteChecks?: number
+  [key: string]: any
+}
+
+/**
+ * What the CRM read covered, present only when `crmUserId` was sent.
+ *
+ * Coverage only. The records themselves — account and deal context, HubSpot
+ * properties, property history, email/call/meeting/note bodies — reach the
+ * scorer and stay in the run's private evidence; the API never returns them,
+ * so read what the CRM contributed in the report prose. Coverage is here so a
+ * caller can tell a real absence from a read that did not finish.
  */
 export interface AccountMonitorCrmContext {
   status: AccountMonitorCrmStatus | (string & {})
-  /** Set when `status` is not `ok`: why no context was read. */
-  reason?: string
-  /** Account, contact and deal context for the account, when `status` is `ok`. */
-  response?: CrmAccountContextBatchResponse
-  /**
-   * Deeper per-provider history, read only for an account the CRM matched.
-   * Attio reports `{ status: 'unsupported' }` — no history is read for it.
-   */
-  history?: {
-    hubspot?: AccountMonitorCrmHubspotHistory
-    attio?: { status: 'unsupported' | (string & {}), [key: string]: any }
-    [key: string]: any
-  }
+  providerCoverage?: AccountMonitorCrmProviderCoverage[]
+  historyCoverage?: AccountMonitorCrmHistoryCoverage[]
   [key: string]: any
 }
 
@@ -873,8 +854,9 @@ export interface AccountMonitorOutput {
   committeeSynthesisFailure: { validation?: AccountMonitorValidation } | null
   sourceCoverage: AccountMonitorSourceCoverage[]
   /**
-   * The CRM read, present only when the run was given `crmUserId`. Context for
-   * the report — it never appears in `selectedSignals` or the evidence rows.
+   * What the CRM read covered, present only when the run was given `crmUserId`.
+   * Coverage, not records: the CRM never appears in `selectedSignals` or the
+   * evidence rows, and what it contributed is in the report prose.
    */
   crmContext?: AccountMonitorCrmContext
   reportMarkdown: string

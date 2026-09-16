@@ -482,46 +482,21 @@ describe('accountMonitor', () => {
     expect(output.accountAnalysis.usage?.durationMs).toBe(4200.5)
   })
 
-  it('camel-cases the CRM context a crmUserId run adds', () => {
+  it('camel-cases the CRM coverage a crmUserId run adds', () => {
     const response = toCamelCase<{ structuredResponse: AccountMonitorOutput }>({
       structured_response: {
         crm_context: {
           status: 'ok',
-          response: {
-            results: [{
-              input_key: 'account',
-              sales_state: 'active_pipeline',
-              providers: [{
-                provider: 'hubspot',
-                match_method: 'exact_domain',
-                account_ref: 'hubspot:1',
-              }],
-            }],
-            accounts: [{
-              account_ref: 'hubspot:1',
-              provider: 'hubspot',
-              account_id: '1',
-              domains: ['acme.com'],
-            }],
-            provider_coverage: [{ provider: 'hubspot', account_source: 'complete' }],
-          },
-          history: {
-            attio: { status: 'unsupported' },
-            hubspot: {
-              status: 'partial',
-              deals: {
-                42: {
-                  id: '42',
-                  properties: { dealstage: 'contractsent', hs_lastmodifieddate: '2026-09-10' },
-                },
-              },
-              activity_links: {
-                emails: { 7: [{ source_kind: 'contacts', source_id: '9', scope: 'contact_only' }] },
-              },
-              properties: { deals: ['dealstage', 'hs_lastmodifieddate'] },
-              coverage: [{ source: 'records/deals', complete: false }],
-            },
-          },
+          provider_coverage: [{
+            provider: 'hubspot',
+            account_source: 'complete',
+            person_source: 'degraded',
+            deal_source: 'complete',
+          }],
+          history_coverage: [
+            { provider: 'hubspot', status: 'partial', checks: 12, incomplete_checks: 2 },
+            { provider: 'attio', status: 'unsupported', checks: 0, incomplete_checks: 0 },
+          ],
         },
         artifact_refs: { crm_context: 'evidence-internal:crm-context' },
       },
@@ -529,19 +504,14 @@ describe('accountMonitor', () => {
 
     const crm = response.structuredResponse.crmContext
     expect(crm?.status).toBe('ok')
-    expect(crm?.response?.results[0].inputKey).toBe('account')
-    expect(crm?.response?.accounts[0].accountRef).toBe('hubspot:1')
-    expect(crm?.history?.attio?.status).toBe('unsupported')
-    expect(crm?.history?.hubspot?.status).toBe('partial')
-    expect(crm?.history?.hubspot?.activityLinks?.emails['7'][0].scope).toBe('contact_only')
-    expect(crm?.history?.hubspot?.coverage?.[0].complete).toBe(false)
-    // Provider property names are values in `properties`, so they survive
-    // verbatim; the same names used as keys are camel-cased like every other
-    // key in a response.
-    expect(crm?.history?.hubspot?.properties?.deals)
-      .toEqual(['dealstage', 'hs_lastmodifieddate'])
-    expect(crm?.history?.hubspot?.deals?.['42'].properties.hsLastmodifieddate)
-      .toBe('2026-09-10')
+    expect(crm?.providerCoverage?.[0].accountSource).toBe('complete')
+    expect(crm?.providerCoverage?.[0].personSource).toBe('degraded')
+    expect(crm?.historyCoverage?.[0].status).toBe('partial')
+    expect(crm?.historyCoverage?.[0].incompleteChecks).toBe(2)
+    expect(crm?.historyCoverage?.[1].status).toBe('unsupported')
+    // Coverage only: the CRM records stay in the run's private evidence.
+    expect(crm?.response).toBeUndefined()
+    expect(crm?.history).toBeUndefined()
     expect(response.structuredResponse.artifactRefs.crmContext)
       .toBe('evidence-internal:crm-context')
   })
