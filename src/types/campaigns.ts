@@ -205,11 +205,23 @@ export interface CampaignProspectInput {
 
 export interface AddProspectsRequest {
   prospects: CampaignProspectInput[]
+  /** Run every enrollment check and report what would happen without writing anything. */
+  dryRun?: boolean
 }
 
 export interface ProspectWarning {
   prospectId: string
   warnings: string[]
+}
+
+/**
+ * A prospect the enrollment checks rejected.
+ * `reason` is one of: `already_in_campaign`, `name_company_duplicate`,
+ * `other_active_campaign`, `active_sequence`, `crm_exact_match`, `insert_failed`.
+ */
+export interface ProspectSkip {
+  prospectId: string
+  reason: string
 }
 
 export interface AddProspectsResponse {
@@ -218,6 +230,10 @@ export interface AddProspectsResponse {
   warnings: ProspectWarning[]
   /** Prospects hard-skipped because they exactly matched the owner's CRM ledger. */
   skippedInCrm?: number
+  /** Per-prospect skip reasons for everything counted in `skipped`. */
+  skips: ProspectSkip[]
+  /** Echoes the request: true when nothing was written. */
+  dryRun: boolean
 }
 
 export interface TransferProspectsRequest {
