@@ -8,7 +8,9 @@
  */
 
 import type { Http } from '../src/core/http'
-import { describe, expect, it, vi } from 'vitest'
+import type { CrmHubspotCompanySearchRequest } from '../src/types/crm'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { LumnisClient } from '../src/index'
 import { CrmResource } from '../src/resources/crm'
 
 function createMockHttp(): Http {
@@ -405,6 +407,331 @@ describe('crm', () => {
         params: { member_user_id: 'member@example.com' },
       })
       expect(result.ownerUserIds).toHaveLength(2)
+    })
+  })
+
+  describe('company reads', () => {
+    it('gets /crm/companies/properties with snake_case query params', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({
+        provider: 'hubspot',
+        properties: [],
+        nextCursor: null,
+      })
+
+      await crm.getCompanyProperties({
+        userId: 'member@example.com',
+        provider: 'hubspot',
+        propertyName: 'industry',
+        crmUserId: 'owner@example.com',
+      })
+
+      expect(http.get).toHaveBeenCalledWith('/crm/companies/properties', {
+        params: {
+          user_id: 'member@example.com',
+          provider: 'hubspot',
+          property_name: 'industry',
+          crm_user_id: 'owner@example.com',
+        },
+      })
+    })
+
+    it('omits the optional properties params when they are not supplied', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({
+        provider: 'attio',
+        properties: [],
+        nextCursor: null,
+      })
+
+      await crm.getCompanyProperties({ userId: 'owner@example.com', provider: 'attio' })
+
+      expect(http.get).toHaveBeenCalledWith('/crm/companies/properties', {
+        params: {
+          user_id: 'owner@example.com',
+          provider: 'attio',
+          property_name: undefined,
+          crm_user_id: undefined,
+        },
+      })
+    })
+
+    it('posts a native search and exempts filters/properties from case conversion', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({
+        provider: 'hubspot',
+        companies: [],
+        nextCursor: null,
+        total: 0,
+      })
+
+      const request: CrmHubspotCompanySearchRequest = {
+        userId: 'owner@example.com',
+        provider: 'hubspot',
+        filters: {
+          filterGroups: [{
+            filters: [
+              { propertyName: 'domain', operator: 'CONTAINS_TOKEN', value: 'acme' },
+              { propertyName: 'hs_lead_status', operator: 'IN', values: ['OPEN'] },
+            ],
+          }],
+        },
+        properties: ['numberofemployees'],
+        limit: 50,
+      }
+
+      await crm.searchCompanies(request)
+
+      expect(http.post).toHaveBeenCalledWith('/crm/companies/search', request, {
+        passthroughKeys: ['filters', 'properties'],
+      })
+    })
+
+    it('returns an empty page as a result rather than an error', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({
+        provider: 'attio',
+        companies: [],
+        nextCursor: null,
+        total: null,
+      })
+
+      const page = await crm.searchCompanies({
+        userId: 'owner@example.com',
+        provider: 'attio',
+        filters: { name: { $contains: 'Acme' } },
+      })
+
+      expect(page.companies).toEqual([])
+      expect(page.nextCursor).toBeNull()
+    })
+
+    it('round-trips a cursor without changing the rest of the query', async () => {
+      const http = createMockHttp()
+      const crm = new CrmResource(http)
+
+      const request: CrmHubspotCompanySearchRequest = {
+        userId: 'owner@example.com',
+        provider: 'hubspot',
+        filters: { filterGroups: [] },
+      }
+
+      vi.mocked(http.post).mockResolvedValue({
+        provider: 'hubspot',
+        companies: [{ id: '7', name: 'Acme', domain: 'acme.com', properties: {} }],
+        nextCursor: '7',
+        total: 2,
+      })
+      const first = await crm.searchCompanies(request)
+
+      vi.mocked(http.post).mockResolvedValue({
+        provider: 'hubspot',
+        companies: [{ id: '9', name: 'Acme EU', domain: 'acme.eu', properties: {} }],
+        nextCursor: null,
+        total: null,
+      })
+      const second = await crm.searchCompanies({ ...request, cursor: first.nextCursor })
+
+      expect(vi.mocked(http.post).mock.calls[1][1]).toEqual({ ...request, cursor: '7' })
+      expect(second.nextCursor).toBeNull()
+    })
+  })
+})
+
+/**
+ * The company routes are the only place where request and response keys are
+ * external names rather than Lumnis fields, so they go through the real http
+ * layer here: a `filter_groups` on the wire is a 422 from the API, and a
+ * `hsObjectId` coming back is a property the caller never asked for.
+ */
+describe('crm company reads over the wire', () => {
+  const fetchMock = vi.fn()
+  vi.stubGlobal('fetch', fetchMock)
+
+  afterEach(() => {
+    fetchMock.mockReset()
+  })
+
+  function client(): LumnisClient {
+    return new LumnisClient({
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.test.com',
+      maxRetries: 0,
+    })
+  }
+
+  function respondWith(payload: unknown): void {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => payload,
+    } as Response)
+  }
+
+  function sentBody(): any {
+    return JSON.parse(fetchMock.mock.calls[0][1].body)
+  }
+
+  it('sends HubSpot filter syntax verbatim and snake-cases Lumnis fields', async () => {
+    respondWith({ provider: 'hubspot', companies: [], next_cursor: null, total: 0 })
+
+    await client().crm.searchCompanies({
+      userId: 'member@example.com',
+      crmUserId: 'owner@example.com',
+      provider: 'hubspot',
+      filters: {
+        filterGroups: [{
+          filters: [
+            { propertyName: 'numberofemployees', operator: 'BETWEEN', value: '10', highValue: '50' },
+            { propertyName: 'hs_lead_status', operator: 'IN', values: ['OPEN', 'IN_PROGRESS'] },
+          ],
+        }],
+      },
+      properties: ['annualrevenue'],
+      limit: 25,
+    })
+
+    expect(sentBody()).toEqual({
+      user_id: 'member@example.com',
+      crm_user_id: 'owner@example.com',
+      provider: 'hubspot',
+      filters: {
+        filterGroups: [{
+          filters: [
+            { propertyName: 'numberofemployees', operator: 'BETWEEN', value: '10', highValue: '50' },
+            { propertyName: 'hs_lead_status', operator: 'IN', values: ['OPEN', 'IN_PROGRESS'] },
+          ],
+        }],
+      },
+      properties: ['annualrevenue'],
+      limit: 25,
+    })
+  })
+
+  it('sends Attio operator keys and nested filter paths verbatim', async () => {
+    respondWith({ provider: 'attio', companies: [], next_cursor: null, total: null })
+
+    await client().crm.searchCompanies({
+      userId: 'owner@example.com',
+      provider: 'attio',
+      filters: {
+        $and: [
+          { employee_range: { $gte: 25 } },
+          { categories: { option: { $eq: 'opt_123' } } },
+        ],
+      },
+    })
+
+    expect(sentBody().filters).toEqual({
+      $and: [
+        { employee_range: { $gte: 25 } },
+        { categories: { option: { $eq: 'opt_123' } } },
+      ],
+    })
+  })
+
+  it('camel-cases envelope fields but keeps CRM property names as returned', async () => {
+    respondWith({
+      provider: 'hubspot',
+      companies: [{
+        id: '7',
+        name: 'Acme',
+        domain: 'acme.com',
+        properties: {
+          hs_object_id: '7',
+          annual_revenue_2024: '1000000',
+          numberofemployees: '42',
+        },
+      }],
+      next_cursor: '7',
+      total: 12,
+    })
+
+    const page = await client().crm.searchCompanies({
+      userId: 'owner@example.com',
+      provider: 'hubspot',
+    })
+
+    expect(page.nextCursor).toBe('7')
+    expect(page.total).toBe(12)
+    expect(page.companies[0].properties).toEqual({
+      hs_object_id: '7',
+      annual_revenue_2024: '1000000',
+      numberofemployees: '42',
+    })
+  })
+
+  it('keeps Attio value entries in the provider spelling', async () => {
+    respondWith({
+      provider: 'attio',
+      companies: [{
+        id: 'rec_1',
+        name: 'Acme',
+        domain: 'acme.com',
+        properties: {
+          employee_range: [{ option: { title: '11-50' }, active_until: null }],
+        },
+      }],
+      next_cursor: null,
+      total: null,
+    })
+
+    const page = await client().crm.searchCompanies({
+      userId: 'owner@example.com',
+      provider: 'attio',
+    })
+
+    expect(page.companies[0].properties.employee_range[0]).toEqual({
+      option: { title: '11-50' },
+      active_until: null,
+    })
+  })
+
+  it('camel-cases field metadata, whose keys are Lumnis fields', async () => {
+    respondWith({
+      provider: 'hubspot',
+      properties: [{
+        name: 'hs_lead_status',
+        label: 'Lead status',
+        type: 'enumeration',
+        field_type: 'select',
+        operators: ['EQ', 'IN'],
+        options: [{ value: 'OPEN', label: 'Open', hidden: false }],
+        options_complete: true,
+        external_options: false,
+        hidden: false,
+      }],
+      next_cursor: null,
+    })
+
+    const result = await client().crm.getCompanyProperties({
+      userId: 'owner@example.com',
+      provider: 'hubspot',
+      propertyName: 'hs_lead_status',
+    })
+
+    const url = new URL(fetchMock.mock.calls[0][0])
+    expect(url.pathname).toBe('/v1/crm/companies/properties')
+    expect(url.searchParams.get('property_name')).toBe('hs_lead_status')
+    expect(result.properties[0]).toEqual({
+      name: 'hs_lead_status',
+      label: 'Lead status',
+      type: 'enumeration',
+      fieldType: 'select',
+      operators: ['EQ', 'IN'],
+      options: [{ value: 'OPEN', label: 'Open', hidden: false }],
+      optionsComplete: true,
+      externalOptions: false,
+      hidden: false,
     })
   })
 })

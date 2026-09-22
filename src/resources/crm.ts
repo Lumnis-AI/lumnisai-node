@@ -2,12 +2,20 @@ import type { Http } from '../core/http'
 import type {
   CrmAccountContextBatchRequest,
   CrmAccountContextBatchResponse,
+  CrmAttioCompanyPropertiesResponse,
+  CrmAttioCompanySearchResponse,
+  CrmCompanyPropertiesRequest,
+  CrmCompanyPropertiesResponse,
+  CrmCompanySearchRequest,
+  CrmCompanySearchResponse,
   CrmContactsSyncRequest,
   CrmContactsSyncResponse,
   CrmContactsSyncStatusResponse,
   CrmExclusionGrantListResponse,
   CrmExclusionGrantRequest,
   CrmExclusionGrantResponse,
+  CrmHubspotCompanyPropertiesResponse,
+  CrmHubspotCompanySearchResponse,
   CrmMatchBatchRequest,
   CrmMatchBatchResponse,
   CrmProvider,
@@ -16,11 +24,20 @@ import type {
 } from '../types/crm'
 
 /**
+ * Subtrees of the company-search payload that carry provider-native keys and
+ * must cross the wire untouched: `filters` is HubSpot/Attio query syntax on
+ * the way out, and each company's `properties` map is keyed by CRM property
+ * names on the way back. The exemption is per-request rather than global
+ * because both key names mean Lumnis fields on other routes.
+ */
+const COMPANY_SEARCH_PASSTHROUGH_KEYS = ['filters', 'properties'] as const
+
+/**
  * Resource for the user-triggered CRM Sync API.
  *
- * Wraps prospect sync/match, account context, contacts-ledger sync, and
- * CRM access-grant routes under `/v1/crm` (the grant routes keep their
- * original `exclusion-grants` path for compatibility).
+ * Wraps prospect sync/match, account context, company reads, contacts-ledger
+ * sync, and CRM access-grant routes under `/v1/crm` (the grant routes keep
+ * their original `exclusion-grants` path for compatibility).
  *
  * The user identified by `userId` must already have an active CRM
  * connection (see `client.integrations.initiateConnection`). When the
@@ -39,6 +56,13 @@ import type {
  * - `503 crm_connection_status_unavailable` (account context) — the provider
  *   connection status could not be verified. Retryable; the response includes
  *   a `Retry-After` header. Distinct from `409 crm_not_connected`.
+ *
+ * The company routes ({@link CrmResource.getCompanyProperties},
+ * {@link CrmResource.searchCompanies}) report failures with their own codes —
+ * `crm_access_denied`, `crm_access_unavailable`, `invalid_crm_filter`,
+ * `invalid_crm_request`, `crm_property_not_found`, `crm_rate_limited`,
+ * `crm_read_timeout`, `crm_read_failed` — carried in the error body's
+ * `detail.error`. Provider error text is never forwarded.
  */
 export class CrmResource {
   constructor(private readonly http: Http) {}
@@ -141,6 +165,135 @@ export class CrmResource {
       '/crm/account-context/batch',
       data,
     )
+  }
+
+  /**
+   * List the company fields the connected CRM exposes, with the operators each
+   * one accepts — what a filter builder needs before calling
+   * {@link searchCompanies}. A live, read-only provider call: nothing is
+   * written to the CRM and nothing is served from the `crm_contacts` ledger.
+   *
+   * Pass `propertyName` to narrow to a single field. Attio returns
+   * `select`/`status` choices only that way; HubSpot already includes
+   * enumeration choices in the full listing, except for externally-sourced
+   * ones, which come back as `options: null, optionsComplete: false`.
+   *
+   * Field metadata is provider-shaped, so the return type narrows on the
+   * `provider` you pass.
+   *
+   * Failure modes: `403 crm_access_denied` and `503 crm_access_unavailable`
+   * (the `crmUserId` grant), `409 crm_not_connected` (no single active
+   * connection for the owner), `404 crm_property_not_found`,
+   * `429 crm_rate_limited`, `504 crm_read_timeout`, `502 crm_read_failed`.
+   *
+   * @example
+   * ```typescript
+   * const { properties } = await client.crm.getCompanyProperties({
+   *   userId: 'user@example.com',
+   *   provider: 'hubspot',
+   * })
+   * const filterable = properties.filter(p => p.operators.length > 0)
+   *
+   * // Attio choices need the field named explicitly.
+   * const tier = await client.crm.getCompanyProperties({
+   *   userId: 'user@example.com',
+   *   provider: 'attio',
+   *   propertyName: 'employee_range',
+   * })
+   * console.log(tier.properties[0].options)
+   * ```
+   */
+  async getCompanyProperties<T extends CrmCompanyPropertiesRequest>(
+    params: T,
+  ): Promise<
+      T extends { provider: 'hubspot' }
+        ? CrmHubspotCompanyPropertiesResponse
+        : CrmAttioCompanyPropertiesResponse
+    > {
+    const response = await this.http.get<CrmCompanyPropertiesResponse>(
+      '/crm/companies/properties',
+      {
+        // Backend requires snake_case query params (see getContactsSyncStatus).
+        params: {
+          user_id: params.userId,
+          provider: params.provider,
+          property_name: params.propertyName,
+          crm_user_id: params.crmUserId,
+        },
+      },
+    )
+    // The API returns the shape that matches the provider it was given; the
+    // conditional return type is what makes that visible to the caller.
+    return response as any
+  }
+
+  /**
+   * Read one page of companies from the connected CRM using that provider's
+   * own filter syntax. Read-only: no CRM writes, no local persistence, so the
+   * same request can be replayed to refresh a preview.
+   *
+   * Filters are never translated. HubSpot takes `filterGroups` (AND within a
+   * group, OR between groups) with string comparison values; Attio takes its
+   * record-query object with `$`-prefixed operators. Both cross the wire
+   * verbatim — the SDK's camelCase ↔ snake_case conversion is switched off for
+   * `filters` and for each company's `properties` map, whose keys are CRM
+   * property names. Discover valid names and operators with
+   * {@link getCompanyProperties}.
+   *
+   * Paging is cursor-based: pass the previous page's `nextCursor` back as
+   * `cursor` and keep every other field identical, because HubSpot pages by
+   * record id inside the original query. `nextCursor: null` is the last page.
+   * `total` is reported on the first HubSpot page only, and is always null for
+   * Attio.
+   *
+   * An empty `companies` array is a real "no matches" result — provider
+   * failures raise instead. Failure modes: `403 crm_access_denied` and
+   * `503 crm_access_unavailable` (the `crmUserId` grant),
+   * `409 crm_not_connected`, `400 invalid_crm_filter` (the provider rejected
+   * the query), `422 invalid_crm_request` (filter/limit/cursor budgets,
+   * checked before the provider call), `429 crm_rate_limited`,
+   * `504 crm_read_timeout`, `502 crm_read_failed`.
+   *
+   * @example
+   * ```typescript
+   * const request: CrmHubspotCompanySearchRequest = {
+   *   userId: 'user@example.com',
+   *   provider: 'hubspot',
+   *   filters: {
+   *     filterGroups: [{
+   *       filters: [
+   *         { propertyName: 'domain', operator: 'CONTAINS_TOKEN', value: 'acme' },
+   *         { propertyName: 'numberofemployees', operator: 'GT', value: '50' },
+   *       ],
+   *     }],
+   *   },
+   *   properties: ['numberofemployees', 'industry'],
+   *   limit: 50,
+   * }
+   *
+   * const page = await client.crm.searchCompanies(request)
+   * for (const company of page.companies)
+   *   console.log(company.name, company.properties.industry)
+   *
+   * // Same query, next page.
+   * if (page.nextCursor)
+   *   await client.crm.searchCompanies({ ...request, cursor: page.nextCursor })
+   * ```
+   */
+  async searchCompanies<T extends CrmCompanySearchRequest>(
+    data: T,
+  ): Promise<
+      T extends { provider: 'hubspot' }
+        ? CrmHubspotCompanySearchResponse
+        : CrmAttioCompanySearchResponse
+    > {
+    const response = await this.http.post<CrmCompanySearchResponse>(
+      '/crm/companies/search',
+      data,
+      { passthroughKeys: COMPANY_SEARCH_PASSTHROUGH_KEYS },
+    )
+    // See getCompanyProperties: the cast narrows to the provider's own shape.
+    return response as any
   }
 
   /**

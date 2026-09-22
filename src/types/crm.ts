@@ -340,3 +340,355 @@ export interface CrmAccountContextBatchResponse {
   accounts: CrmAccountContextDetail[]
   providerCoverage: CrmAccountContextProviderCoverage[]
 }
+
+// ==================== company reads ====================
+
+// The company routes (`/crm/companies/*`) are live, read-only provider
+// queries: nothing is written to the CRM, nothing is cached locally, and the
+// `crm_contacts` ledger is not involved.
+//
+// Connection resolution matches the rest of this resource: `userId` is the
+// requester and owns the connection by default, and `crmUserId` reads a
+// colleague's CRM through an existing grant (see CrmExclusionGrantRequest).
+// The owner must have exactly one active connection for the provider,
+// otherwise the call is `409 crm_not_connected`.
+//
+// Filter syntax stays provider-native and is never translated: HubSpot takes
+// `filterGroups` (AND within a group, OR between groups), Attio takes its
+// record-query filter object. `filters` and each company's `properties` map
+// cross the wire verbatim, without camelCase <-> snake_case rewriting,
+// because those keys are the provider's own property names.
+
+/**
+ * Discover the company fields the connected CRM exposes, or one field's
+ * choices. Split per provider so the response type narrows on `provider`.
+ */
+export interface CrmHubspotCompanyPropertiesRequest {
+  provider: 'hubspot'
+  /** UUID or email of the requester; the CRM owner unless `crmUserId` is set. */
+  userId: string
+  /**
+   * Return only this field. A name the CRM does not have is
+   * `404 crm_property_not_found` — not an empty list.
+   */
+  propertyName?: string
+  /** Another tenant member's UUID or email, read through an existing CRM grant. */
+  crmUserId?: string
+}
+
+export interface CrmAttioCompanyPropertiesRequest {
+  provider: 'attio'
+  /** UUID or email of the requester; the CRM owner unless `crmUserId` is set. */
+  userId: string
+  /**
+   * Return only this attribute. Required to load `select`/`status` choices,
+   * which the full listing omits. A slug the CRM does not have is
+   * `404 crm_property_not_found` — not an empty list.
+   */
+  propertyName?: string
+  /** Another tenant member's UUID or email, read through an existing CRM grant. */
+  crmUserId?: string
+}
+
+export type CrmCompanyPropertiesRequest
+  = | CrmHubspotCompanyPropertiesRequest
+    | CrmAttioCompanyPropertiesRequest
+
+/**
+ * HubSpot operators, by property `type`:
+ * - `string`: equality set plus `CONTAINS_TOKEN` / `NOT_CONTAINS_TOKEN`
+ * - `enumeration`: equality set only
+ * - `bool`: `EQ`, `NEQ`, `HAS_PROPERTY`, `NOT_HAS_PROPERTY`
+ * - `number` / `date` / `datetime`: equality set plus range operators
+ *
+ * The equality set is `EQ`, `NEQ`, `IN`, `NOT_IN`, `HAS_PROPERTY`,
+ * `NOT_HAS_PROPERTY`. A property whose type this API does not model comes back
+ * with an empty `operators` array: readable, but not filterable.
+ */
+export type CrmHubspotFilterOperator
+  = | 'EQ'
+    | 'NEQ'
+    | 'IN'
+    | 'NOT_IN'
+    | 'HAS_PROPERTY'
+    | 'NOT_HAS_PROPERTY'
+    | 'CONTAINS_TOKEN'
+    | 'NOT_CONTAINS_TOKEN'
+    | 'LT'
+    | 'LTE'
+    | 'GT'
+    | 'GTE'
+    | 'BETWEEN'
+
+export interface CrmHubspotCompanyPropertyOption {
+  /** Filter with this value, not with `label`. */
+  value: string
+  label: string
+  /** Hidden in the HubSpot UI; still a valid filter value. */
+  hidden: boolean
+}
+
+export interface CrmHubspotCompanyProperty {
+  /** Native property name (`numberofemployees`, `hs_object_id`, …). */
+  name: string
+  label: string
+  /** HubSpot type: `string`, `enumeration`, `bool`, `number`, `date`, `datetime`, … */
+  type: string
+  /** HubSpot input widget: `text`, `select`, `checkbox`, … */
+  fieldType: string | null
+  /** Operators valid for `type`; empty when the type is not modelled. */
+  operators: CrmHubspotFilterOperator[]
+  /**
+   * Enumeration choices. Present for every self-contained enumeration, whether
+   * or not `propertyName` was set; null for other types and for
+   * externally-sourced enumerations.
+   */
+  options: CrmHubspotCompanyPropertyOption[] | null
+  /**
+   * False when the choices live outside the property definition (owners,
+   * external ids). `options` is then null and the full set must come from
+   * HubSpot directly.
+   */
+  optionsComplete: boolean
+  externalOptions: boolean
+  /** Hidden in the HubSpot UI. Archived properties are never returned. */
+  hidden: boolean
+}
+
+/** Attio operators. `$not_empty` and `$in` are only valid on some attribute types. */
+export type CrmAttioFilterOperator
+  = | '$eq'
+    | '$contains'
+    | '$starts_with'
+    | '$ends_with'
+    | '$in'
+    | '$not_empty'
+    | '$lt'
+    | '$lte'
+    | '$gt'
+    | '$gte'
+
+export interface CrmAttioCompanyPropertyOption {
+  /** Attio `option_id` / `status_id` — filter with this, not with `label`. */
+  value: string
+  label: string
+}
+
+/**
+ * A nested filter path on a complex attribute, e.g. `option` on a select or
+ * `country_code` on a location. Filter as
+ * `{ [property]: { [field]: { [operator]: value } } }`.
+ */
+export interface CrmAttioCompanyPropertyFilterField {
+  name: string
+  operators: CrmAttioFilterOperator[]
+}
+
+export interface CrmAttioCompanyProperty {
+  /** Attio `api_slug` (`employee_range`, `primary_location`, …). */
+  name: string
+  label: string
+  /** Attio attribute type: `text`, `select`, `status`, `location`, `interaction`, … */
+  type: string
+  /** `multiselect` when the attribute holds many values, otherwise `type`. */
+  fieldType: string
+  /**
+   * Operators that apply to the attribute directly. Empty for complex types
+   * (select, status, location, interaction, references) — those filter through
+   * {@link CrmAttioCompanyProperty.filterFields} instead.
+   */
+  operators: CrmAttioFilterOperator[]
+  filterFields: CrmAttioCompanyPropertyFilterField[]
+  /**
+   * `select` / `status` choices, excluding archived ones. Only populated when
+   * the request named this property; null in the full listing.
+   */
+  options: CrmAttioCompanyPropertyOption[] | null
+}
+
+export interface CrmHubspotCompanyPropertiesResponse {
+  provider: 'hubspot'
+  properties: CrmHubspotCompanyProperty[]
+  /** Always null: field definitions are returned in a single page. */
+  nextCursor: string | null
+}
+
+export interface CrmAttioCompanyPropertiesResponse {
+  provider: 'attio'
+  properties: CrmAttioCompanyProperty[]
+  /** Always null: field definitions are returned in a single page. */
+  nextCursor: string | null
+}
+
+export type CrmCompanyPropertiesResponse
+  = | CrmHubspotCompanyPropertiesResponse
+    | CrmAttioCompanyPropertiesResponse
+
+/**
+ * One HubSpot comparison, in HubSpot's own spelling. Arity is enforced by the
+ * API: presence operators carry no value, `IN`/`NOT_IN` take `values`,
+ * `BETWEEN` takes `value` + `highValue`, everything else takes `value`. All
+ * comparison values are strings, including numbers and ISO dates.
+ */
+export type CrmHubspotCompanyFilter
+  = | {
+    propertyName: string
+    operator: 'HAS_PROPERTY' | 'NOT_HAS_PROPERTY'
+  }
+  | {
+    propertyName: string
+    operator: 'IN' | 'NOT_IN'
+    /** Non-empty; enum values keep their exact casing. */
+    values: string[]
+  }
+  | {
+    propertyName: string
+    operator: 'BETWEEN'
+    value: string
+    highValue: string
+  }
+  | {
+    propertyName: string
+    operator: 'EQ' | 'NEQ' | 'CONTAINS_TOKEN' | 'NOT_CONTAINS_TOKEN' | 'LT' | 'LTE' | 'GT' | 'GTE'
+    value: string
+  }
+
+/** Filters AND together inside a group. */
+export interface CrmHubspotCompanyFilterGroup {
+  /**
+   * 1..5 comparisons. The sixth slot every group is allowed is reserved for
+   * the keyset-pagination comparison the API adds to each branch.
+   */
+  filters: CrmHubspotCompanyFilter[]
+}
+
+/**
+ * Native HubSpot search filters: groups OR together, filters within a group
+ * AND together. `filterGroups` is the only accepted key — no `objectType`,
+ * `sorts`, `after` or `query` overrides.
+ *
+ * Budgets, all enforced before the provider call and reported as
+ * `422 invalid_crm_request`:
+ * - at most 5 groups
+ * - at most 5 filters per group, and filters + groups no more than 18, since
+ *   every group also carries a reserved pagination slot
+ * - a serialized request under ~3000 characters, again with room reserved for
+ *   the pagination comparison
+ *
+ * Omit or pass `{}` to list companies unfiltered.
+ */
+export interface CrmHubspotCompanyFilters {
+  filterGroups?: CrmHubspotCompanyFilterGroup[]
+}
+
+/**
+ * Native Attio record-query filters, passed through untouched: attribute slugs
+ * at the top level (`{ name: { $contains: 'Acme' } }`), nested paths on complex
+ * attributes (`{ category: { option: { $eq: 'opt_id' } } }`), and `$and` / `$or`
+ * for boolean structure. Pass `{}` to list companies unfiltered.
+ */
+export type CrmAttioCompanyFilters = Record<string, unknown>
+
+export interface CrmHubspotCompanySearchRequest {
+  provider: 'hubspot'
+  /** UUID or email of the requester; the CRM owner unless `crmUserId` is set. */
+  userId: string
+  /** Another tenant member's UUID or email, read through an existing CRM grant. */
+  crmUserId?: string
+  filters?: CrmHubspotCompanyFilters
+  /**
+   * Extra native property names to return. `name` and `domain` are always
+   * included. Names the CRM does not return are absent from `properties`.
+   */
+  properties?: string[]
+  /** 1..100; defaults to 100 server-side. */
+  limit?: number
+  /** `nextCursor` from the previous page. Omit or pass null for the first page. */
+  cursor?: string | null
+}
+
+export interface CrmAttioCompanySearchRequest {
+  provider: 'attio'
+  /** UUID or email of the requester; the CRM owner unless `crmUserId` is set. */
+  userId: string
+  /** Another tenant member's UUID or email, read through an existing CRM grant. */
+  crmUserId?: string
+  filters?: CrmAttioCompanyFilters
+  /**
+   * Attribute slugs to return alongside `name` and `domain`. An unknown slug
+   * comes back as an empty array rather than an error.
+   */
+  properties?: string[]
+  /** 1..100; defaults to 100 server-side. */
+  limit?: number
+  /** `nextCursor` from the previous page. Omit or pass null for the first page. */
+  cursor?: string | null
+}
+
+export type CrmCompanySearchRequest
+  = | CrmHubspotCompanySearchRequest
+    | CrmAttioCompanySearchRequest
+
+export interface CrmHubspotCompany {
+  /** HubSpot record id (`hs_object_id`), always a decimal string. */
+  id: string
+  name: string | null
+  domain: string | null
+  /**
+   * Requested properties keyed by their native HubSpot names, which the SDK
+   * does not rewrite — read `properties.hs_lastmodifieddate`, not
+   * `properties.hsLastmodifieddate`. HubSpot returns every value as a string.
+   */
+  properties: Record<string, string | null>
+}
+
+/**
+ * One Attio value entry, verbatim from the provider. Its keys keep Attio's own
+ * spelling (`active_from`, `active_until`, `attribute_type`, …) because the SDK
+ * does not rewrite provider property data. Only currently-active entries are
+ * returned, so `active_until` is null or empty.
+ */
+export interface CrmAttioCompanyPropertyValue {
+  value?: unknown
+  active_from?: string | null
+  active_until?: string | null
+  [key: string]: unknown
+}
+
+export interface CrmAttioCompany {
+  /** Attio `record_id`. */
+  id: string
+  name: string | null
+  domain: string | null
+  /**
+   * Requested attributes keyed by their Attio slugs, which the SDK does not
+   * rewrite. Attio attributes are multi-valued, so each entry is an array —
+   * empty when the company has no active value for that slug.
+   */
+  properties: Record<string, CrmAttioCompanyPropertyValue[]>
+}
+
+export interface CrmHubspotCompanySearchResponse {
+  provider: 'hubspot'
+  companies: CrmHubspotCompany[]
+  /**
+   * Opaque page token; pass it back as `cursor`. Null on the last page.
+   * Keyset-based, so the underlying query must stay identical between pages.
+   */
+  nextCursor: string | null
+  /** Match count, reported on the first page only; null on later pages. */
+  total: number | null
+}
+
+export interface CrmAttioCompanySearchResponse {
+  provider: 'attio'
+  companies: CrmAttioCompany[]
+  /** Opaque page token; pass it back as `cursor`. Null on the last page. */
+  nextCursor: string | null
+  /** Always null — Attio does not report a match count. */
+  total: number | null
+}
+
+export type CrmCompanySearchResponse
+  = | CrmHubspotCompanySearchResponse
+    | CrmAttioCompanySearchResponse

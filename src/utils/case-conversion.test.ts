@@ -134,4 +134,65 @@ describe('case-conversion', () => {
       })
     })
   })
+
+  describe('per-request passthrough keys', () => {
+    it('sends provider-native filter syntax verbatim', () => {
+      const input = {
+        userId: '123',
+        filters: {
+          filterGroups: [{
+            filters: [{ propertyName: 'numberofemployees', operator: 'GT', value: '50' }],
+          }],
+        },
+      }
+
+      expect(toSnakeCase<any>(input, ['filters'])).toEqual({
+        user_id: '123',
+        filters: {
+          filterGroups: [{
+            filters: [{ propertyName: 'numberofemployees', operator: 'GT', value: '50' }],
+          }],
+        },
+      })
+    })
+
+    it('converts the same key when the request does not exempt it', () => {
+      const input = { filters: { templateId: 'abc' } }
+
+      expect(toSnakeCase<any>(input)).toEqual({ filters: { template_id: 'abc' } })
+    })
+
+    it('keeps CRM property names intact while converting sibling fields', () => {
+      const input = {
+        next_cursor: '42',
+        companies: [{
+          id: '7',
+          properties: {
+            hs_object_id: '7',
+            annual_revenue_2024: '1000',
+          },
+        }],
+      }
+
+      expect(toCamelCase<any>(input, ['properties'])).toEqual({
+        nextCursor: '42',
+        companies: [{
+          id: '7',
+          properties: {
+            hs_object_id: '7',
+            annual_revenue_2024: '1000',
+          },
+        }],
+      })
+    })
+
+    it('keeps the always-on exemptions when extra keys are supplied', () => {
+      const input = { customFields: { lead_source: 'Lumnis' }, otherField: 1 }
+
+      expect(toSnakeCase<any>(input, ['filters'])).toEqual({
+        custom_fields: { lead_source: 'Lumnis' },
+        other_field: 1,
+      })
+    })
+  })
 })

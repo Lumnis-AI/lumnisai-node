@@ -48,15 +48,19 @@ const PASSTHROUGH_VALUE_KEYS = new Set([
   'committee',
 ])
 
-function convertCase(obj: any, converter: (s: string) => string): any {
+function convertCase(
+  obj: any,
+  converter: (s: string) => string,
+  passthroughKeys: ReadonlySet<string>,
+): any {
   if (Array.isArray(obj)) {
-    return obj.map(v => convertCase(v, converter))
+    return obj.map(v => convertCase(v, converter, passthroughKeys))
   }
   else if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((acc: CaseObject, key: string) => {
-      const value = PASSTHROUGH_VALUE_KEYS.has(key)
+      const value = passthroughKeys.has(key)
         ? obj[key]
-        : convertCase(obj[key], converter)
+        : convertCase(obj[key], converter, passthroughKeys)
       acc[converter(key)] = value
       return acc
     }, {})
@@ -64,10 +68,20 @@ function convertCase(obj: any, converter: (s: string) => string): any {
   return obj
 }
 
-export function toCamelCase<T>(obj: any): T {
-  return convertCase(obj, toCamel) as T
+// Per-request exemptions on top of the always-on set above. Used where a key
+// is only provider-native on some routes -- `properties` carries CRM property
+// names on `/crm/companies/search` but Lumnis field names elsewhere -- so the
+// exemption cannot be global without corrupting the other routes.
+function passthroughSet(extraKeys?: readonly string[]): ReadonlySet<string> {
+  if (!extraKeys || extraKeys.length === 0)
+    return PASSTHROUGH_VALUE_KEYS
+  return new Set([...PASSTHROUGH_VALUE_KEYS, ...extraKeys])
 }
 
-export function toSnakeCase<T>(obj: any): T {
-  return convertCase(obj, toSnake) as T
+export function toCamelCase<T>(obj: any, extraPassthroughKeys?: readonly string[]): T {
+  return convertCase(obj, toCamel, passthroughSet(extraPassthroughKeys)) as T
+}
+
+export function toSnakeCase<T>(obj: any, extraPassthroughKeys?: readonly string[]): T {
+  return convertCase(obj, toSnake, passthroughSet(extraPassthroughKeys)) as T
 }

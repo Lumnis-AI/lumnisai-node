@@ -26,6 +26,14 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
   idempotencyKey?: string
   params?: Record<string, any>
+  /**
+   * Extra keys whose values cross the wire verbatim, in both the request body
+   * and the response. Use it for subtrees keyed by external names -- CRM
+   * property names, provider-native filter syntax -- that camelCase ↔
+   * snake_case conversion would rewrite into something the provider (or the
+   * caller) no longer recognises.
+   */
+  passthroughKeys?: readonly string[]
 }
 
 export class Http {
@@ -42,7 +50,10 @@ export class Http {
     }
   }
 
-  private async _handleResponse<T>(response: Response): Promise<T> {
+  private async _handleResponse<T>(
+    response: Response,
+    passthroughKeys?: readonly string[],
+  ): Promise<T> {
     const requestId = response.headers.get('x-request-id')
 
     if (response.ok) {
@@ -51,7 +62,7 @@ export class Http {
       const contentType = response.headers.get('content-type') || ''
       if (contentType.includes('application/json')) {
         const json = await response.json()
-        return toCamelCase<T>(json)
+        return toCamelCase<T>(json, passthroughKeys)
       }
       return (await response.text()) as T
     }
@@ -92,7 +103,13 @@ export class Http {
     path: string,
     init: RequestOptions = {},
   ): Promise<T> {
-    const { body, params, idempotencyKey: idempotencyKeyOption, ...fetchOptions } = init
+    const {
+      body,
+      params,
+      idempotencyKey: idempotencyKeyOption,
+      passthroughKeys,
+      ...fetchOptions
+    } = init
     const method = fetchOptions.method || 'GET'
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
@@ -128,10 +145,10 @@ export class Http {
           ...fetchOptions,
           method,
           headers,
-          body: body ? JSON.stringify(toSnakeCase(body)) : undefined,
+          body: body ? JSON.stringify(toSnakeCase(body, passthroughKeys)) : undefined,
           signal: controller.signal,
         })
-        return await this._handleResponse<T>(response)
+        return await this._handleResponse<T>(response, passthroughKeys)
       }
       catch (error) {
         lastError = error as Error
