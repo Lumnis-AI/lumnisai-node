@@ -40,7 +40,9 @@ import type { CrmAccountContextSourceStatus, CrmProvider } from './crm'
  *
  * `competitor_to_committee` is the reverse direction: it reads the
  * competitor's own employees' outgoing comments and reactions, so it needs
- * `people` or `employeeTitles` on that competitor.
+ * `people` or `employeeTitles` on that competitor. `matchingPeople` does not
+ * select candidates for it — those people are only ever recognized, never
+ * collected.
  *
  * `account_to_our_company` reads the account page's own posts.
  *
@@ -92,6 +94,20 @@ export interface AccountMonitorWindow {
 }
 
 /**
+ * An employee supplied only so the run can RECOGNIZE them in someone else's
+ * activity. It is an identity, never a collection request: their own feed is
+ * never fetched.
+ */
+export interface AccountMonitorMatchingPerson {
+  /** The employee's LinkedIn profile URL. */
+  linkedinUrl: string
+  /** Display name, when you already have it. */
+  name?: string
+  /** Current title, when you already have it. */
+  title?: string
+}
+
+/**
  * A company plus an EXPLICIT employee scope. A bare company string means the
  * company page only — it never means the company's employees.
  */
@@ -104,8 +120,21 @@ export interface AccountMonitorCompany {
    */
   people?: string[]
   /**
+   * Employees used only to recognize engagement — profile URL strings, or
+   * objects carrying the name and title you already know. Their own activity
+   * is never fetched.
+   *
+   * Supplying a list, INCLUDING an empty one, replaces provider employee
+   * discovery for this company; omit the field to keep discovery.
+   */
+  matchingPeople?: Array<string | AccountMonitorMatchingPerson>
+  /**
    * Current-title filters for employee discovery, e.g. `['VP Sales', 'RevOps']`.
    * Omit to skip discovery entirely; every title must be non-blank.
+   *
+   * Committee-to-competitor matching does not use these: it uses
+   * `matchingPeople` when supplied, and otherwise discovers the full
+   * provider-known employee roster.
    */
   employeeTitles?: string[]
 }
@@ -152,9 +181,28 @@ export interface AccountMonitorParams {
   /**
    * Companies to match against. Strings mean company pages only; use objects
    * to give an explicit employee scope.
+   *
+   * Committee-to-competitor checks use a competitor's `matchingPeople` when
+   * it supplies one, and otherwise discover its provider-known current
+   * employees.
    */
   competitors?: Array<string | AccountMonitorCompany>
-  /** Our own company, kept separate from the account and the competitors. */
+  /**
+   * How many employees per competitor have their outgoing comments and
+   * reactions fetched for `competitor_to_committee`. Counts explicit `people`
+   * and title-discovered candidates together — it is not a per-title limit.
+   *
+   * It caps collection only: employee discovery, committee-to-competitor
+   * matching, the committee and `ourCompany` are all unaffected.
+   * @default 10
+   * @minimum 1
+   */
+  maxEmployeesPerCompetitor?: number
+  /**
+   * Our own company, kept separate from the account and the competitors.
+   * Supply `people` or `matchingPeople` for selected employees, or
+   * `employeeTitles` for discovery.
+   */
   ourCompany?: string | AccountMonitorCompany
   /**
    * Rolling look-back in days. Cannot be combined with `window`.

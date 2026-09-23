@@ -127,6 +127,7 @@ const ACCOUNT_MONITOR_FIELDS = [
   ['depth', 'depth'],
   ['committee', 'committee'],
   ['competitors', 'competitors'],
+  ['maxEmployeesPerCompetitor', 'max_employees_per_competitor'],
   ['ourCompany', 'our_company'],
   ['days', 'days'],
   ['window', 'window'],
@@ -138,6 +139,24 @@ const ACCOUNT_MONITOR_FIELDS = [
 ] as const
 
 const ACCOUNT_MONITOR_FIELD_KEYS = new Set<string>(ACCOUNT_MONITOR_FIELDS.flat())
+
+/** Every `account_monitor` company field, in both spellings. */
+const ACCOUNT_MONITOR_COMPANY_FIELDS: string[] = [
+  'company',
+  'people',
+  'matchingPeople',
+  'matching_people',
+  'employeeTitles',
+  'employee_titles',
+]
+
+/** Every field a supplied matching person carries, in both spellings. */
+const ACCOUNT_MONITOR_MATCHING_PERSON_FIELDS: string[] = [
+  'linkedinUrl',
+  'linkedin_url',
+  'name',
+  'title',
+]
 
 const MAX_SIGNAL_CONTEXT_CHARS = 4000
 const MAX_CONTENT_INTELLIGENCE_COMPETITORS = 5
@@ -896,6 +915,14 @@ export class ResponsesResource {
     if (days !== undefined && (!Number.isInteger(days) || (days as number) < 1))
       throw new ValidationError('days must be a positive integer for account_monitor')
 
+    const maxEmployees = params.maxEmployeesPerCompetitor
+    if (maxEmployees !== undefined
+      && (!Number.isInteger(maxEmployees) || (maxEmployees as number) < 1)) {
+      throw new ValidationError(
+        'maxEmployeesPerCompetitor must be a positive integer for account_monitor',
+      )
+    }
+
     const window = params.window
     if (window !== undefined) {
       if (days !== undefined)
@@ -1027,6 +1054,8 @@ export class ResponsesResource {
   /**
    * A company string means the company page only. People and titles are the
    * only ways to reach employees — neither is implied by the company itself.
+   * `matchingPeople` is not a third way in: it names employees to recognize,
+   * and replaces provider discovery rather than collecting anyone.
    */
   private _validateAccountMonitorCompany(value: unknown, field: string): void {
     if (typeof value === 'string') {
@@ -1037,14 +1066,15 @@ export class ResponsesResource {
     if (!this._isPlainObject(value)) {
       throw new ValidationError(
         `${field} must be a company string, or an object with company and an explicit `
-        + `people or employeeTitles scope`,
+        + `people, matchingPeople, or employeeTitles scope`,
       )
     }
 
     for (const key of Object.keys(value)) {
-      if (!['company', 'people', 'employeeTitles', 'employee_titles'].includes(key)) {
+      if (!ACCOUNT_MONITOR_COMPANY_FIELDS.includes(key)) {
         throw new ValidationError(
-          `Unknown ${field} field '${key}'. A company accepts only company, people, and employeeTitles.`,
+          `Unknown ${field} field '${key}'. A company accepts only company, people, `
+          + `matchingPeople, and employeeTitles.`,
         )
       }
     }
@@ -1057,6 +1087,10 @@ export class ResponsesResource {
     if (people !== undefined)
       this._validateAccountMonitorProfiles(people, `${field}.people`)
 
+    const matchingPeople = this._getParamValue<unknown>(value, 'matchingPeople', 'matching_people')
+    if (matchingPeople !== undefined && matchingPeople !== null)
+      this._validateAccountMonitorMatchingPeople(matchingPeople, `${field}.matchingPeople`)
+
     const employeeTitles = this._getParamValue<unknown>(value, 'employeeTitles', 'employee_titles')
     if (employeeTitles !== undefined && employeeTitles !== null) {
       if (!Array.isArray(employeeTitles)
@@ -1068,6 +1102,56 @@ export class ResponsesResource {
         )
       }
     }
+  }
+
+  /**
+   * People supplied only so the run can RECOGNIZE them in someone else's
+   * activity — their own feeds are never fetched. An empty list is meaningful:
+   * it replaces provider employee discovery with nothing, which is why the
+   * check that rejects an empty `employeeTitles` does not apply here.
+   */
+  private _validateAccountMonitorMatchingPeople(value: unknown, field: string): void {
+    if (!Array.isArray(value)) {
+      throw new ValidationError(
+        `${field} must be an array of LinkedIn profile URLs, or of objects with `
+        + `linkedinUrl and optional name and title. Omit it to keep employee discovery; `
+        + `send [] to replace discovery with no one.`,
+      )
+    }
+
+    value.forEach((person, index) => {
+      const entry = `${field}[${index}]`
+      if (typeof person === 'string') {
+        if (!person.trim())
+          throw new ValidationError(`${entry} must be a non-blank LinkedIn profile URL`)
+        return
+      }
+      if (!this._isPlainObject(person)) {
+        throw new ValidationError(
+          `${entry} must be a LinkedIn profile URL, or an object with linkedinUrl `
+          + `and optional name and title`,
+        )
+      }
+
+      for (const key of Object.keys(person)) {
+        if (!ACCOUNT_MONITOR_MATCHING_PERSON_FIELDS.includes(key)) {
+          throw new ValidationError(
+            `Unknown ${entry} field '${key}'. A matching person accepts only `
+            + `linkedinUrl, name, and title.`,
+          )
+        }
+      }
+
+      const linkedinUrl = this._getParamValue<unknown>(person, 'linkedinUrl', 'linkedin_url')
+      if (typeof linkedinUrl !== 'string' || !linkedinUrl.trim())
+        throw new ValidationError(`${entry}.linkedinUrl is required and must be a non-empty string`)
+
+      for (const key of ['name', 'title'] as const) {
+        const detail = this._getParamValue<unknown>(person, key, key)
+        if (detail !== undefined && detail !== null && typeof detail !== 'string')
+          throw new ValidationError(`${entry}.${key} must be a string when supplied`)
+      }
+    })
   }
 
   private _validateAccountMonitorSignalDefinitions(value: unknown): void {
@@ -2533,6 +2617,11 @@ export class ResponsesResource {
    * string means that company's page, not its employees, and committee work
    * needs `committee` people plus `depth: 'deep'` or an explicit signal.
    *
+   * A company's `matchingPeople` is the exception that proves the rule: those
+   * employees are only ever recognized in the committee's activity, never
+   * collected, and supplying the list replaces provider employee discovery
+   * for that company.
+   *
    * Coverage is always partial and the report says so — a missing record never
    * proves that nothing happened.
    *
@@ -2559,7 +2648,17 @@ export class ResponsesResource {
    *     days: 14,
    *     depth: 'deep',
    *     committee: { groups: { 'data platform': ['https://www.linkedin.com/in/some-vp'] } },
-   *     competitors: [{ company: 'rival.com', employeeTitles: ['Account Executive'] }],
+   *     competitors: [
+   *       { company: 'rival.com', employeeTitles: ['Account Executive'] },
+   *       // Recognize only these two, and skip employee discovery entirely.
+   *       {
+   *         company: 'other-rival.com',
+   *         matchingPeople: [
+   *           'https://www.linkedin.com/in/their-ae',
+   *           { linkedinUrl: 'https://www.linkedin.com/in/their-vp', name: 'Dana Lee', title: 'VP Sales' },
+   *         ],
+   *       },
+   *     ],
    *   },
    * )
    * ```
@@ -2578,6 +2677,8 @@ export class ResponsesResource {
       params.committee = options.committee
     if (options.competitors !== undefined)
       params.competitors = options.competitors
+    if (options.maxEmployeesPerCompetitor !== undefined)
+      params.maxEmployeesPerCompetitor = options.maxEmployeesPerCompetitor
     if (options.ourCompany !== undefined)
       params.ourCompany = options.ourCompany
     if (options.days !== undefined)

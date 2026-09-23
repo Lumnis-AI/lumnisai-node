@@ -31,6 +31,7 @@ describe('accountMonitor', () => {
         'rival.com',
         { company: 'other-rival.com', employeeTitles: ['Account Executive'] },
       ],
+      maxEmployeesPerCompetitor: 25,
       ourCompany: { company: 'lumnis.ai', people: ['https://www.linkedin.com/in/our-ae'] },
       signalDefinitions: [{ name: 'company_hiring' }, { name: 'committee_activity' }],
       intentScoringInstructions: 'Weight platform migrations above hiring volume.',
@@ -53,6 +54,7 @@ describe('accountMonitor', () => {
           'rival.com',
           { company: 'other-rival.com', employeeTitles: ['Account Executive'] },
         ],
+        maxEmployeesPerCompetitor: 25,
         ourCompany: { company: 'lumnis.ai', people: ['https://www.linkedin.com/in/our-ae'] },
         signalDefinitions: [{ name: 'company_hiring' }, { name: 'committee_activity' }],
         intentScoringInstructions: 'Weight platform migrations above hiring volume.',
@@ -210,6 +212,24 @@ describe('accountMonitor', () => {
     expect(postMock).not.toHaveBeenCalled()
   })
 
+  it('caps competitor collection with a positive whole number of employees', async () => {
+    await responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      maxEmployeesPerCompetitor: 1,
+    })
+
+    expect(postMock.mock.calls[0][1].specializedAgentParams.maxEmployeesPerCompetitor).toBe(1)
+
+    for (const value of [0, -1, 2.5, '10']) {
+      await expect(responses.accountMonitor('What changed?', {
+        account: 'acme.com',
+        maxEmployeesPerCompetitor: value as any,
+      })).rejects.toThrow('maxEmployeesPerCompetitor must be a positive integer')
+    }
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+  })
+
   it('validates committee people and group names', async () => {
     await expect(responses.accountMonitor('What changed?', {
       account: 'acme.com',
@@ -244,12 +264,87 @@ describe('accountMonitor', () => {
     })).rejects.toThrow(`Unknown ourCompany field 'titles'`)
   })
 
+  it('forwards supplied matching people as URLs or as named identities', async () => {
+    await responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      competitors: [
+        {
+          company: 'rival.com',
+          matchingPeople: [
+            'https://www.linkedin.com/in/their-ae',
+            {
+              linkedinUrl: 'https://www.linkedin.com/in/their-vp',
+              name: 'Dana Lee',
+              title: 'VP Sales',
+            },
+          ],
+        },
+        // [] is a scope, not an omission: it replaces employee discovery.
+        { company: 'other-rival.com', matchingPeople: [] },
+      ],
+      ourCompany: {
+        company: 'lumnis.ai',
+        matchingPeople: ['https://www.linkedin.com/in/our-ae'],
+      },
+    })
+
+    const params = postMock.mock.calls[0][1].specializedAgentParams
+    expect(params.competitors).toEqual([
+      {
+        company: 'rival.com',
+        matchingPeople: [
+          'https://www.linkedin.com/in/their-ae',
+          {
+            linkedinUrl: 'https://www.linkedin.com/in/their-vp',
+            name: 'Dana Lee',
+            title: 'VP Sales',
+          },
+        ],
+      },
+      { company: 'other-rival.com', matchingPeople: [] },
+    ])
+    expect(params.ourCompany.matchingPeople).toEqual(['https://www.linkedin.com/in/our-ae'])
+  })
+
+  it('validates matching people without rejecting an empty list', async () => {
+    await expect(responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      competitors: [{ company: 'rival.com', matchingPeople: 'https://www.linkedin.com/in/ae' as any }],
+    })).rejects.toThrow('competitors[0].matchingPeople must be an array of LinkedIn profile URLs')
+
+    await expect(responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      competitors: [{ company: 'rival.com', matchingPeople: ['  '] }],
+    })).rejects.toThrow('competitors[0].matchingPeople[0] must be a non-blank LinkedIn profile URL')
+
+    await expect(responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      competitors: [{ company: 'rival.com', matchingPeople: [{ name: 'Dana Lee' } as any] }],
+    })).rejects.toThrow('competitors[0].matchingPeople[0].linkedinUrl is required')
+
+    await expect(responses.accountMonitor('What changed?', {
+      account: 'acme.com',
+      ourCompany: {
+        company: 'lumnis.ai',
+        matchingPeople: [
+          { linkedinUrl: 'https://www.linkedin.com/in/our-ae', headline: 'AE' } as any,
+        ],
+      },
+    })).rejects.toThrow(`Unknown ourCompany.matchingPeople[0] field 'headline'`)
+
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
   it('sends monitor fields as snake_case while leaving committee labels alone', () => {
     const body = toSnakeCase<Record<string, any>>({
       specializedAgent: 'account_monitor',
       specializedAgentParams: {
         account: 'acme.com',
         ourCompany: { company: 'lumnis.ai', employeeTitles: ['Account Executive'] },
+        competitors: [{
+          company: 'rival.com',
+          matchingPeople: [{ linkedinUrl: 'https://www.linkedin.com/in/their-vp', title: 'VP Sales' }],
+        }],
         signalDefinitions: [{ name: 'company_hiring' }],
         window: { startAt: '2026-09-01T00:00:00Z', endAt: '2026-09-08T00:00:00Z' },
         committee: { groups: { 'Security Team': ['https://www.linkedin.com/in/ciso'] } },
@@ -258,6 +353,10 @@ describe('accountMonitor', () => {
 
     expect(body.specialized_agent).toBe('account_monitor')
     expect(body.specialized_agent_params.our_company.employee_titles).toEqual(['Account Executive'])
+    expect(body.specialized_agent_params.competitors).toEqual([{
+      company: 'rival.com',
+      matching_people: [{ linkedin_url: 'https://www.linkedin.com/in/their-vp', title: 'VP Sales' }],
+    }])
     expect(body.specialized_agent_params.signal_definitions).toEqual([{ name: 'company_hiring' }])
     expect(body.specialized_agent_params.window).toEqual({
       start_at: '2026-09-01T00:00:00Z',
