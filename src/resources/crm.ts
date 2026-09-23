@@ -26,11 +26,13 @@ import type {
 /**
  * Subtrees of the company-search payload that carry provider-native keys and
  * must cross the wire untouched: `filters` is HubSpot/Attio query syntax on
- * the way out, and each company's `properties` map is keyed by CRM property
- * names on the way back. The exemption is per-request rather than global
- * because both key names mean Lumnis fields on other routes.
+ * the way out, and each company's `properties` and `owners` maps are keyed
+ * by CRM property names on the way back (`hubspot_owner_id` would otherwise
+ * come back as `hubspotOwnerId`). The exemption is per-request rather than
+ * global because `filters` and `properties` mean Lumnis fields on other
+ * routes.
  */
-const COMPANY_SEARCH_PASSTHROUGH_KEYS = ['filters', 'properties'] as const
+const COMPANY_SEARCH_PASSTHROUGH_KEYS = ['filters', 'properties', 'owners'] as const
 
 /**
  * Resource for the user-triggered CRM Sync API.
@@ -181,6 +183,11 @@ export class CrmResource {
    * Field metadata is provider-shaped, so the return type narrows on the
    * `provider` you pass.
    *
+   * A definition with `references: 'owner'` holds a CRM user id; request it
+   * in {@link searchCompanies} to have each company's `owners` map resolve
+   * it to a name and email. HubSpot's is `hubspot_owner_id`; Attio has no
+   * standard one, so take the actor-reference slug this listing flags.
+   *
    * Failure modes: `403 crm_access_denied` and `503 crm_access_unavailable`
    * (the `crmUserId` grant), `409 crm_not_connected` (no single active
    * connection for the owner), `404 crm_property_not_found`,
@@ -201,6 +208,9 @@ export class CrmResource {
    *   propertyName: 'employee_range',
    * })
    * console.log(tier.properties[0].options)
+   *
+   * // The field that can fill an owner column.
+   * const ownerField = properties.find(p => p.references === 'owner')
    * ```
    */
   async getCompanyProperties<T extends CrmCompanyPropertiesRequest>(
@@ -236,9 +246,17 @@ export class CrmResource {
    * group, OR between groups) with string comparison values; Attio takes its
    * record-query object with `$`-prefixed operators. Both cross the wire
    * verbatim — the SDK's camelCase ↔ snake_case conversion is switched off for
-   * `filters` and for each company's `properties` map, whose keys are CRM
-   * property names. Discover valid names and operators with
+   * `filters` and for each company's `properties` and `owners` maps, whose
+   * keys are CRM property names. Discover valid names and operators with
    * {@link getCompanyProperties}.
+   *
+   * Requesting an owner-typed field (`references: 'owner'` in its definition)
+   * also resolves it: `owners[field]` is the CRM user's `{ id, name, email }`,
+   * null when the company has none, with `name`/`email` null when the id is
+   * not in the user directory. Resolution is part of the page — if the
+   * directory read fails the whole request fails with the codes below rather
+   * than returning half-resolved owners. Cost: any requested field adds one
+   * definitions read per page; an owner field adds one directory read on top.
    *
    * Paging is cursor-based: pass the previous page's `nextCursor` back as
    * `cursor` and keep every other field identical, because HubSpot pages by
@@ -267,13 +285,13 @@ export class CrmResource {
    *       ],
    *     }],
    *   },
-   *   properties: ['numberofemployees', 'industry'],
+   *   properties: ['numberofemployees', 'industry', 'hubspot_owner_id'],
    *   limit: 50,
    * }
    *
    * const page = await client.crm.searchCompanies(request)
    * for (const company of page.companies)
-   *   console.log(company.name, company.properties.industry)
+   *   console.log(company.name, company.properties.industry, company.owners?.hubspot_owner_id?.name)
    *
    * // Same query, next page.
    * if (page.nextCursor)

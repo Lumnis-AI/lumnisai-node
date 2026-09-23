@@ -460,7 +460,7 @@ describe('crm', () => {
       })
     })
 
-    it('posts a native search and exempts filters/properties from case conversion', async () => {
+    it('posts a native search and exempts filters/properties/owners from case conversion', async () => {
       const http = createMockHttp()
       const crm = new CrmResource(http)
 
@@ -489,7 +489,7 @@ describe('crm', () => {
       await crm.searchCompanies(request)
 
       expect(http.post).toHaveBeenCalledWith('/crm/companies/search', request, {
-        passthroughKeys: ['filters', 'properties'],
+        passthroughKeys: ['filters', 'properties', 'owners'],
       })
     })
 
@@ -670,6 +670,74 @@ describe('crm company reads over the wire', () => {
     })
   })
 
+  it('keeps owner field names as returned and resolves them per company', async () => {
+    respondWith({
+      provider: 'hubspot',
+      companies: [
+        {
+          id: '7',
+          name: 'Acme',
+          domain: 'acme.com',
+          properties: { hs_ideal_customer_profile: 'tier_1', hubspot_owner_id: '123' },
+          owners: { hubspot_owner_id: { id: '123', name: 'Jane Doe', email: 'jane@x.com' } },
+        },
+        {
+          id: '8',
+          name: 'Globex',
+          domain: 'globex.com',
+          properties: { hs_ideal_customer_profile: 'tier_1', hubspot_owner_id: null },
+          owners: { hubspot_owner_id: null },
+        },
+        {
+          id: '9',
+          name: 'Initech',
+          domain: 'initech.com',
+          properties: { hs_ideal_customer_profile: 'tier_1', hubspot_owner_id: '999' },
+          owners: { hubspot_owner_id: { id: '999', name: null, email: null } },
+        },
+      ],
+      next_cursor: null,
+      total: 3,
+    })
+
+    const page = await client().crm.searchCompanies({
+      userId: 'owner@example.com',
+      provider: 'hubspot',
+      properties: ['hs_ideal_customer_profile', 'hubspot_owner_id'],
+    })
+
+    expect(page.companies[0].properties.hubspot_owner_id).toBe('123')
+    expect(page.companies[0].owners).toEqual({
+      hubspot_owner_id: { id: '123', name: 'Jane Doe', email: 'jane@x.com' },
+    })
+    expect(page.companies[1].owners).toEqual({ hubspot_owner_id: null })
+    // Archived owner: the id is known but not in the directory.
+    expect(page.companies[2].owners?.hubspot_owner_id).toEqual({ id: '999', name: null, email: null })
+  })
+
+  it('returns an empty owners map when no requested field is owner-typed', async () => {
+    respondWith({
+      provider: 'attio',
+      companies: [{
+        id: 'rec_1',
+        name: 'Acme',
+        domain: 'acme.com',
+        properties: { employee_range: [] },
+        owners: {},
+      }],
+      next_cursor: null,
+      total: null,
+    })
+
+    const page = await client().crm.searchCompanies({
+      userId: 'owner@example.com',
+      provider: 'attio',
+      properties: ['employee_range'],
+    })
+
+    expect(page.companies[0].owners).toEqual({})
+  })
+
   it('keeps Attio value entries in the provider spelling', async () => {
     respondWith({
       provider: 'attio',
@@ -709,6 +777,7 @@ describe('crm company reads over the wire', () => {
         options_complete: true,
         external_options: false,
         hidden: false,
+        references: null,
       }],
       next_cursor: null,
     })
@@ -732,6 +801,45 @@ describe('crm company reads over the wire', () => {
       optionsComplete: true,
       externalOptions: false,
       hidden: false,
+      references: null,
     })
+  })
+
+  it('flags the field that identifies a CRM user with references: owner', async () => {
+    respondWith({
+      provider: 'attio',
+      properties: [
+        {
+          name: 'account_owner',
+          label: 'Owner',
+          type: 'actor-reference',
+          field_type: 'actor-reference',
+          operators: [],
+          filter_fields: [{ name: 'referenced_actor_id', operators: ['$eq'] }],
+          options: null,
+          references: 'owner',
+        },
+        {
+          name: 'employee_range',
+          label: 'Employees',
+          type: 'select',
+          field_type: 'select',
+          operators: [],
+          filter_fields: [{ name: 'option', operators: ['$eq'] }],
+          options: null,
+          references: null,
+        },
+      ],
+      next_cursor: null,
+    })
+
+    const result = await client().crm.getCompanyProperties({
+      userId: 'owner@example.com',
+      provider: 'attio',
+    })
+
+    const ownerField = result.properties.find(p => p.references === 'owner')
+    expect(ownerField?.name).toBe('account_owner')
+    expect(result.properties[1].references).toBeNull()
   })
 })

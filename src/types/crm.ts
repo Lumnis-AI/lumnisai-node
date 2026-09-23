@@ -453,6 +453,13 @@ export interface CrmHubspotCompanyProperty {
   externalOptions: boolean
   /** Hidden in the HubSpot UI. Archived properties are never returned. */
   hidden: boolean
+  /**
+   * `owner` when the value identifies a CRM user (`hubspot_owner_id` and any
+   * custom owner-typed property); null otherwise. Request such a field in
+   * {@link CrmHubspotCompanySearchRequest.properties} and each company's
+   * `owners` map resolves it to a name and email.
+   */
+  references?: 'owner' | null
 }
 
 /** Attio operators. `$not_empty` and `$in` are only valid on some attribute types. */
@@ -504,6 +511,14 @@ export interface CrmAttioCompanyProperty {
    * the request named this property; null in the full listing.
    */
   options: CrmAttioCompanyPropertyOption[] | null
+  /**
+   * `owner` when the value identifies a CRM user (any actor-reference
+   * attribute, such as a custom "Owner"); null otherwise. Attio has no
+   * standard owner field and the API does not guess from labels, so pick the
+   * slug with `references === 'owner'` here and request it in
+   * {@link CrmAttioCompanySearchRequest.properties}.
+   */
+  references?: 'owner' | null
 }
 
 export interface CrmHubspotCompanyPropertiesResponse {
@@ -599,6 +614,8 @@ export interface CrmHubspotCompanySearchRequest {
   /**
    * Extra native property names to return. `name` and `domain` are always
    * included. Names the CRM does not return are absent from `properties`.
+   * Include `hubspot_owner_id` (or any field whose definition has
+   * `references: 'owner'`) to also get it resolved in each company's `owners`.
    */
   properties?: string[]
   /** 1..100; defaults to 100 server-side. */
@@ -616,7 +633,9 @@ export interface CrmAttioCompanySearchRequest {
   filters?: CrmAttioCompanyFilters
   /**
    * Attribute slugs to return alongside `name` and `domain`. An unknown slug
-   * comes back as an empty array rather than an error.
+   * comes back as an empty array rather than an error. Include a slug whose
+   * definition has `references: 'owner'` to also get it resolved in each
+   * company's `owners`.
    */
   properties?: string[]
   /** 1..100; defaults to 100 server-side. */
@@ -629,6 +648,17 @@ export type CrmCompanySearchRequest
   = | CrmHubspotCompanySearchRequest
     | CrmAttioCompanySearchRequest
 
+/**
+ * A CRM user resolved from an owner-typed field. `name` and `email` are null
+ * when the id is not in the CRM's user directory (an archived HubSpot owner,
+ * or an Attio system/app actor).
+ */
+export interface CrmCompanyOwner {
+  id: string
+  name: string | null
+  email: string | null
+}
+
 export interface CrmHubspotCompany {
   /** HubSpot record id (`hs_object_id`), always a decimal string. */
   id: string
@@ -640,6 +670,14 @@ export interface CrmHubspotCompany {
    * `properties.hsLastmodifieddate`. HubSpot returns every value as a string.
    */
   properties: Record<string, string | null>
+  /**
+   * Owner-typed fields from the request's `properties`, keyed by native
+   * HubSpot name (not rewritten either — read `owners.hubspot_owner_id`) and
+   * resolved through the portal's owner directory. Null when the company has
+   * no value in that field; `{}` when no requested field has
+   * `references: 'owner'`. `properties` still holds the raw owner id string.
+   */
+  owners?: Record<string, CrmCompanyOwner | null>
 }
 
 /**
@@ -666,6 +704,14 @@ export interface CrmAttioCompany {
    * empty when the company has no active value for that slug.
    */
   properties: Record<string, CrmAttioCompanyPropertyValue[]>
+  /**
+   * Actor-reference fields from the request's `properties`, keyed by Attio
+   * slug (not rewritten either) and resolved through the workspace's member
+   * list. Null when the company has no value in that field; `{}` when no
+   * requested slug has `references: 'owner'`. `properties` still holds the
+   * raw value rows with `referenced_actor_type` / `referenced_actor_id`.
+   */
+  owners?: Record<string, CrmCompanyOwner | null>
 }
 
 export interface CrmHubspotCompanySearchResponse {
