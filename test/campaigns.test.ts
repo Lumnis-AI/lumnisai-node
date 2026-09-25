@@ -271,6 +271,50 @@ describe('campaigns', () => {
   })
 
   describe('approvals', () => {
+    it('lists pending approvals for one campaign', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({ items: [] })
+
+      await campaigns.listPendingApprovals({
+        campaignId: 'c-1',
+        limit: 500,
+        offset: 0,
+      })
+
+      expect(http.get).toHaveBeenCalledWith(
+        '/campaigns/approvals?campaign_id=c-1&limit=500&offset=0',
+      )
+    })
+
+    it('lists pending approvals for several campaigns in one call', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({ items: [] })
+
+      await campaigns.listPendingApprovals({
+        campaignId: ['c-1', 'c-2'],
+        limit: 500,
+      })
+
+      expect(http.get).toHaveBeenCalledWith(
+        '/campaigns/approvals?campaign_id=c-1&campaign_id=c-2&limit=500',
+      )
+    })
+
+    it('lists every pending approval when no campaign is given', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({ items: [] })
+
+      await campaigns.listPendingApprovals()
+
+      expect(http.get).toHaveBeenCalledWith('/campaigns/approvals')
+    })
+
     it('approves action with edit', async () => {
       const http = createMockHttp()
       const campaigns = new CampaignsResource(http)

@@ -410,21 +410,24 @@ export class CampaignsResource {
   // ==================== Approval Queue ====================
 
   /**
-   * List pending approvals across campaigns.
+   * List pending approvals across campaigns. Pass several campaign ids to
+   * read all of them in one call (repeated `campaign_id` params).
    */
   async listPendingApprovals(
     options?: ListPendingApprovalsOptions,
   ): Promise<CampaignActionListResponse> {
-    const params: Record<string, unknown> = {}
-    if (options?.campaignId)
-      params.campaign_id = options.campaignId
+    const query = new URLSearchParams()
+    const campaignIds = options?.campaignId === undefined
+      ? []
+      : ([] as string[]).concat(options.campaignId)
+    campaignIds.filter(Boolean).forEach(id => query.append('campaign_id', id))
     if (options?.limit !== undefined)
-      params.limit = options.limit
+      query.append('limit', String(options.limit))
     if (options?.offset !== undefined)
-      params.offset = options.offset
+      query.append('offset', String(options.offset))
+    const qs = query.toString()
     return this.http.get<CampaignActionListResponse>(
-      '/campaigns/approvals',
-      { params },
+      qs ? `/campaigns/approvals?${qs}` : '/campaigns/approvals',
     )
   }
 

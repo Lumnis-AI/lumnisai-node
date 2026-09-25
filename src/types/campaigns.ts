@@ -561,7 +561,11 @@ export interface ListCampaignActionsOptions {
 }
 
 export interface ListPendingApprovalsOptions {
-  campaignId?: string
+  /**
+   * One campaign, or several: a list is sent as repeated `campaign_id`
+   * params and returns the pending approvals of all of them in one call.
+   */
+  campaignId?: string | string[]
   limit?: number
   offset?: number
 }
