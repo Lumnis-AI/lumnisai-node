@@ -45,6 +45,7 @@ export type { LumnisClientOptions } from './core/client'
 export * from './errors'
 
 // Export resources
+export type { AccountsResource } from './resources/accounts'
 export type { CampaignsResource } from './resources/campaigns'
 export type { ContactRelationshipsResource } from './resources/contact-relationships'
 export type { CrmResource } from './resources/crm'
@@ -67,6 +68,7 @@ export type { UsersResource } from './resources/users'
 
 // Export types
 export * from './types/account-monitor'
+export * from './types/accounts'
 export * from './types/campaigns'
 export * from './types/common'
 export * from './types/company-intelligence'

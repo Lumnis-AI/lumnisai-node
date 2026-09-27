@@ -8,6 +8,7 @@ import type { SkillGuidelineCreate, SkillGuidelineListResponse, SkillGuidelineRe
 import type { ThreadListResponse, ThreadObject } from '../types/threads'
 import type { UserDeleteResponse, UserListResponse, UserResponse } from '../types/users'
 import { DEFAULT_BASE_URL, DEFAULT_MAX_RETRIES, DEFAULT_POLL_INTERVAL_MS, DEFAULT_TIMEOUT_MS, LONG_POLL_TIMEOUT_S } from '../constants'
+import { AccountsResource } from '../resources/accounts'
 import { CampaignsResource } from '../resources/campaigns'
 import { ContactRelationshipsResource } from '../resources/contact-relationships'
 import { CrmResource } from '../resources/crm'
@@ -76,6 +77,7 @@ export class LumnisClient {
   public readonly enrichment: EnrichmentResource
   public readonly email: EmailResource
   public readonly crm: CrmResource
+  public readonly accounts: AccountsResource
   public readonly outreach: OutreachResource
 
   private readonly _scopedUserId?: string
@@ -126,6 +128,7 @@ export class LumnisClient {
     this.enrichment = new EnrichmentResource(this.http)
     this.email = new EmailResource(this.http)
     this.crm = new CrmResource(this.http)
+    this.accounts = new AccountsResource(this.http)
     this.outreach = new OutreachResource(this.http)
   }
 

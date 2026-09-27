@@ -33,6 +33,7 @@ describe('lumnisAI', () => {
       expect(client.integrations).toBeDefined()
       expect(client.modelPreferences).toBeDefined()
       expect(client.mcpServers).toBeDefined()
+      expect(client.accounts).toBeDefined()
     })
 
     it('should use default base URL when not provided', () => {
