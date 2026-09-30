@@ -10,6 +10,10 @@ import type { ApiKeyMode } from './tenant-info'
  * - `FIRECRAWL_API_KEY` — optional; homepage/comparison-page scraping during
  *   competitor discovery (agent falls back to Exa-only when absent)
  * - `EXA_API_KEY` — used by discovery ReAct web search
+ *
+ * `PARTICLE_API_KEY` is optional for person_intelligence: podcast appearances
+ * and their speaker-labelled transcripts. Without it the report still finds
+ * podcasts through Apple Podcasts and show RSS feeds.
  */
 export type ApiProvider =
   | 'OPENAI_API_KEY'
@@ -39,6 +43,7 @@ export type ApiProvider =
   | 'AWS_SECRET_ACCESS_KEY'
   | 'OPENROUTER_API_KEY'
   | 'PROSPEO_API_KEY'
+  | 'PARTICLE_API_KEY'
 
 export interface StoreApiKeyRequest {
   provider: ApiProvider

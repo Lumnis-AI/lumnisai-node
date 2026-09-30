@@ -76,6 +76,9 @@
  * | `FIBER_API_KEY` | Talent flow, second revenue estimate, person profile/posts/engagement, X + Instagram |
  * | `FIRECRAWL_API_KEY` | Careers page and press-page capture (plain fetch is the fallback) |
  * | `EXA_API_KEY` | News sweep, web-events check, person web presence |
+ * | `ENRICH_LAYER_API_KEY` | Person lane: profile sections (honours, volunteering, recommendations) |
+ * | `PARTICLE_API_KEY` | Person lane: podcast appearances and speaker-labelled transcripts |
+ * | `OPENROUTER_API_KEY` | Person lane: podcast audio transcription (an LLM key, not a vendor key) |
  *
  * Every leg fails soft on a missing key: the run still produces a report from
  * whatever sources are credentialed, and says what was thin.
@@ -105,9 +108,13 @@
  *   `summary.errors` counts the failure.
  * - `richness` — person lane only; `null` on company reports.
  * - `stats` — company corpus stats; `{}` on person reports.
- * - `credits` — the per-call credit ledger for the run.
+ * - `credits` — the per-call credit ledger for the run (company lane; `{}` on
+ *   person reports).
+ * - `cost` — person lane only: what the run cost in USD, per source and model
+ *   step ({@link PersonIntelligenceCost}); `{}` on company reports.
+ * - `engagementProfile`, `outreachDrafts`, `writer` — person lane only.
  * - `summary` — run summary, including `legCounts` (per-leg evidence sizes on
- *   the person lane; `{}` on company reports).
+ *   the person lane; `{}` on company reports) and `costUsd` (person lane).
  * - `agentParams` — the resolved params the run actually used.
  *
  * The envelope is lossless by construction: prose blocks are verbatim slices of
@@ -276,6 +283,17 @@ export interface PersonEvidenceLegCounts {
   reactions?: number
   tweets?: number
   igPosts?: number
+  /**
+   * Public records found beyond their LinkedIn activity: web pages, podcast
+   * episodes, videos and transcripts, posts by others, their own writing,
+   * profile sections. Replaces `webResults`.
+   */
+  publicRecords?: number
+  /** Of `publicRecords`, how many were judged to be about this person. */
+  publicRecordsAboutThem?: number
+  /**
+   * @deprecated No longer sent; web pages are counted in `publicRecords`.
+   */
   webResults?: number
   /** Whether the employer's cached company brief was attached as context. */
   employerBrief?: boolean
@@ -288,7 +306,10 @@ export interface IntelligenceReportSummary {
   subject: IntelligenceReportSubject | Record<string, any>
   reportChars: number
   complete?: boolean | null
+  /** Company lane: total credits spent. `null` on person reports, which report USD in `costUsd`. */
   creditsTotal?: number | null
+  /** Person lane: what the run cost in USD (`cost.total`). `null` on company reports. */
+  costUsd?: number | null
   /**
    * Per-leg evidence counts on the person lane — the raw sizes behind
    * `richness`. Empty on company reports.
@@ -502,6 +523,116 @@ export interface CompanyIntelligenceOutput {
   agentParams: CompanyIntelligenceResolvedParams
 }
 
+/** One detail bullet in the person report's section 4, with the links it comes from. */
+export interface PersonAttentionDetail {
+  text: string
+  /** Links to the items the detail comes from; only links the model actually read. */
+  links: string[]
+}
+
+/** One point in section 4: a short heading, the claim, and its detail bullets. */
+export interface PersonAttentionPoint {
+  heading: string
+  claim: string
+  details: PersonAttentionDetail[]
+}
+
+/**
+ * Section 4 of a person report ("What they pay attention to and how they
+ * engage") as structured data: one model reading of their posts, comments
+ * and recent likes. `engagementProfile` on {@link PersonIntelligenceOutput};
+ * `{}` when there was nothing to read or the call failed.
+ */
+export interface PersonAttentionAnalysis {
+  reasoning: string
+  /** 3-5 one-line patterns in what they care about. */
+  atAGlance: PersonAttentionDetail[]
+  summary: string
+  jobAndCompany: PersonAttentionPoint[]
+  interests: PersonAttentionPoint[]
+  engagementStyle: PersonAttentionPoint[]
+  timeline: PersonAttentionPoint[]
+  people: PersonAttentionPoint[]
+  personal: PersonAttentionPoint[]
+}
+
+/** One outreach message variant. */
+export interface PersonOutreachDraft {
+  /** The personal detail the message opens with. */
+  hook: string
+  /** How likely the model would have written it (0-1); lower means less obvious. */
+  probability: number
+  /** Emails only. */
+  subject?: string
+  body: string
+}
+
+/**
+ * Email and LinkedIn variants written from the finished report, each opening
+ * with a different personal detail. `{}` when the drafts call failed.
+ */
+export interface PersonOutreachDrafts {
+  /** Whether the report had personal material ("What stands out") to open with. */
+  personalMaterial?: boolean
+  emails?: PersonOutreachDraft[]
+  /** At most 300 characters each (LinkedIn's connection-note limit). */
+  connectionNotes?: PersonOutreachDraft[]
+  linkedinMessages?: PersonOutreachDraft[]
+}
+
+/** The configured writer model and the model that actually served the call. */
+export interface PersonReportWriter {
+  configuredModel?: string
+  servingModel?: string | null
+  fallbackUsed?: boolean
+  [key: string]: any
+}
+
+/** What one source (a vendor leg) cost and how it went. */
+export interface PersonCostSource {
+  calls?: number
+  credits?: number
+  usd?: number
+  /** Calls whose price is unknown; `usd` covers only the rest. */
+  unpricedCalls?: number
+  documents?: number
+  seconds?: number
+  errors?: string[]
+}
+
+/** What one model step (writer, extractor, attention, drafts, ...) cost. */
+export interface PersonCostModelStep {
+  model?: string
+  models?: string[]
+  calls?: number
+  inputTokens?: number
+  outputTokens?: number
+  usd?: number
+  unpricedCalls?: number
+  /** True when tokens were counted locally because the streamed call reported none. */
+  estimated?: boolean
+}
+
+/**
+ * What a person report cost in USD, per source and per model step.
+ *
+ * `sources` and `models` are keyed by name; the SDK camelCases those keys
+ * (`linkedin_comments` arrives as `linkedinComments`), while `unpriced` lists
+ * the names as the backend spells them.
+ */
+export interface PersonIntelligenceCost {
+  currency: 'USD' | (string & {})
+  /** USD for this run. A corpus served from cache adds no fetch cost. */
+  total: number
+  fetchUsd: number
+  modelsUsd: number
+  corpusFromCache: boolean
+  /** Names of the sources and steps with calls that could not be priced. */
+  unpriced: string[]
+  sources: Record<string, PersonCostSource>
+  models: Record<string, PersonCostModelStep>
+}
+
 /** Full structured response returned by the `person_intelligence` agent. */
 export interface PersonIntelligenceOutput {
   /** Display-block document; `null` when the translator step failed. */
@@ -515,7 +646,15 @@ export interface PersonIntelligenceOutput {
    * Per-leg evidence sizes live on `summary.legCounts` instead.
    */
   stats: Record<string, never> | Record<string, any>
-  credits: IntelligenceCreditLedger
+  /** Company-lane credit ledger; `{}` on person reports, which report USD in `cost`. */
+  credits: IntelligenceCreditLedger | Record<string, never>
+  /** What the run cost in USD, per source and model step. */
+  cost: PersonIntelligenceCost | Record<string, never>
+  /** Section 4 as structured data; `{}` when there was nothing to read or it failed. */
+  engagementProfile: PersonAttentionAnalysis | Record<string, never>
+  /** Email and LinkedIn variants; `{}` when the drafts call failed. */
+  outreachDrafts: PersonOutreachDrafts
+  writer: PersonReportWriter | Record<string, never>
   summary: IntelligenceReportSummary
   agentParams: PersonIntelligenceResolvedParams
 }

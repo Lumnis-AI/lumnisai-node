@@ -31,16 +31,13 @@ interface CaseObject { [key: string]: any }
 
 // Keys whose *values* are exempt from case conversion. The keys nested inside
 // these subtrees are data rather than Lumnis API field names -- external
-// provider-native property names for customFields, and label values such as
-// `list_or_framework` or `announcement_or_launch` for engagementProfile.
-// Rewriting them would corrupt the data itself, so the value passes through
-// verbatim while the container key is still converted. Both spellings are
-// listed so the exemption holds in either conversion direction.
+// provider-native property names for customFields. Rewriting them would
+// corrupt the data itself, so the value passes through verbatim while the
+// container key is still converted. Both spellings are listed so the
+// exemption holds in either conversion direction.
 const PASSTHROUGH_VALUE_KEYS = new Set([
   'customFields',
   'custom_fields',
-  'engagementProfile',
-  'engagement_profile',
   // account_monitor's committee: its own fields (`people`, `groups`) are
   // spelled the same in both cases, while the group labels underneath
   // `groups` are caller-chosen names such as 'Security team'. Converting
