@@ -1758,6 +1758,7 @@ export class ResponsesResource {
    * @param options.salesNavigatorUrl - Sales Navigator people-search or people-list URL to use as the only discovery source
    * @param options.userId - Acting user whose owned Sales Navigator connection should be used; required with `salesNavigatorUrl`
    * @param options.searchJobSignal - CrustData job-listing signal search (decision makers at hiring companies); true | false | 'auto'
+   * @param options.searchWebPeople - Find people a request names on the web (e.g. a speaker list), matched to LinkedIn; @default false
    * @param options.deepVerify - Web verification for org/location/third-party criteria: 'auto' (default), 'always', or 'off'
    * @param options.deepValidationUseRelevanceReranker - SLM relevance reranker for surfaced candidates (ranking-only); @default true
    * @param options.deepValidationBackfillBelowCriteria - Pad with criteria-failed candidates when under count; @default true
@@ -1815,6 +1816,7 @@ export class ResponsesResource {
       postsExtractReactors?: boolean
       postsExtractCommenters?: boolean
       searchJobSignal?: boolean | 'auto'
+      searchWebPeople?: boolean
       deepVerify?: 'off' | 'auto' | 'always'
       deepValidationUseRelevanceReranker?: boolean
       deepValidationBackfillBelowCriteria?: boolean
@@ -1905,6 +1907,8 @@ export class ResponsesResource {
         params.postsExtractCommenters = options.postsExtractCommenters
       if (options.searchJobSignal !== undefined)
         params.searchJobSignal = options.searchJobSignal
+      if (options.searchWebPeople !== undefined)
+        params.searchWebPeople = options.searchWebPeople
       if (options.deepVerify !== undefined)
         params.deepVerify = options.deepVerify
       if (options.enrichEngagementHistory !== undefined)
@@ -1931,6 +1935,7 @@ export class ResponsesResource {
         params.searchPosts = false
         params.searchConnections = false
         params.searchJobSignal = false
+        params.searchWebPeople = false
         params.includeEngagementInScore = false
         params.postsEnableEnrichment = false
         params.postsEnableFiltering = false

@@ -65,6 +65,18 @@ describe('responses AI columns', () => {
     }))
   })
 
+  it('forwards the web people lane flag', async () => {
+    await responses.deepPeopleSearch('Find the speakers at SaaStr Annual', {
+      searchWebPeople: true,
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/responses', expect.objectContaining({
+      specializedAgentParams: expect.objectContaining({
+        searchWebPeople: true,
+      }),
+    }))
+  })
+
   it('forwards a Sales Navigator source with its acting user', async () => {
     const salesNavigatorUrl
       = 'https://www.linkedin.com/sales/search/people?query=finance-leaders'
@@ -76,6 +88,7 @@ describe('responses AI columns', () => {
       searchProfiles: true,
       searchPosts: true,
       searchJobSignal: true,
+      searchWebPeople: true,
       deepValidationUseRelevanceReranker: true,
       deepValidationBackfillBelowCriteria: true,
       enrichEngagementHistory: true,
@@ -91,6 +104,7 @@ describe('responses AI columns', () => {
         searchPosts: false,
         searchConnections: false,
         searchJobSignal: false,
+        searchWebPeople: false,
         includeEngagementInScore: false,
         postsEnableEnrichment: false,
         postsEnableFiltering: false,

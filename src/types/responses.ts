@@ -465,7 +465,7 @@ export interface ValidatedCandidate {
   refoundOnNewPost?: boolean
   /** Source of candidate data */
   source?: string
-  /** Candidate-source lanes that found this person, including `sales_navigator`. */
+  /** Candidate-source lanes that found this person, including `sales_navigator` and `web_people`. */
   discoverySources?: string[]
   /** LinkedIn relationship distance reported by Sales Navigator. */
   networkDistance?: 'FIRST_DEGREE' | 'SECOND_DEGREE' | 'THIRD_DEGREE' | 'OUT_OF_NETWORK' | null
@@ -522,6 +522,35 @@ export interface PostsSearchStats {
 }
 
 /**
+ * Statistics from the web people lane (when `searchWebPeople` was used).
+ * When the lane is off, only `enabled: false` is present.
+ */
+export interface WebPeopleStats {
+  /** Whether the web people lane ran */
+  enabled: boolean
+  /** The list used, why, and other lists that also matched */
+  summary?: string
+  /** Short name of the list used, e.g. "speakers at AI Engineer NYC 2026" */
+  listName?: string
+  /** Pages the people were found on */
+  sourceUrls?: string[]
+  /** People named on the web pages */
+  peopleFound?: number
+  /** People whose LinkedIn URL was on the page itself */
+  linkedinFromPage?: number
+  /** People matched to a LinkedIn profile by search */
+  linkedinMatched?: number
+  /** People dropped because no LinkedIn profile matched */
+  droppedNoLinkedin?: number
+  /** People enriched and passed to the normal filters */
+  enriched?: number
+  /** Duration of the lane in milliseconds */
+  durationMs?: number
+  /** Error from the web search agent, when it failed */
+  agentError?: string
+}
+
+/**
  * Search statistics from deep people search.
  */
 export interface DeepSearchStats {
@@ -537,6 +566,8 @@ export interface DeepSearchStats {
   batchesTotal?: number
   /** Posts search statistics (when posts search was used) */
   postsSearch?: PostsSearchStats | null
+  /** Web people lane statistics (when web people search was used) */
+  webPeople?: WebPeopleStats | null
   /** Job signal pipeline stats (companies found, confirmed, decision makers), when job signal search ran */
   jobSignalPrefilterStats?: Record<string, unknown> | null
   /**
@@ -1449,6 +1480,16 @@ export interface SpecializedAgentParams {
    * Used by deep_people_search.
    */
   searchJobSignal?: boolean | 'auto'
+
+  /**
+   * Find the people a request names on the web (for example a conference
+   * speaker list), match each to a LinkedIn profile, then run the normal
+   * filters. People with no LinkedIn match are dropped. Candidates from this
+   * lane carry `web_people` in `discoverySources`.
+   * @default false
+   * Used by deep_people_search.
+   */
+  searchWebPeople?: boolean
 
   /**
    * Maximum candidates to return per company. Prevents results
