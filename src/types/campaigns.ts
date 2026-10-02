@@ -326,6 +326,7 @@ export type CampaignActionType =
   | 'reply_email'
   | 'meeting_booked'
   | 'intro_accepted'
+  | 'call_phone'
   | 'wait'
   | 'stop'
 

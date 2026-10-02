@@ -386,6 +386,21 @@ describe('campaigns', () => {
     })
   })
 
+  describe('actions', () => {
+    it('filters actions by the call_phone action type', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({ actions: [], total: 0 })
+
+      await campaigns.listActions('camp-1', { actionType: 'call_phone' })
+
+      expect(http.get).toHaveBeenCalledWith('/campaigns/camp-1/actions', {
+        params: { action_type: 'call_phone' },
+      })
+    })
+  })
+
   describe('assets', () => {
     it('creates asset with key validation', async () => {
       const http = createMockHttp()
