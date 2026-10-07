@@ -1,6 +1,8 @@
 // People Search API resource
 import type { Http } from '../core/http'
 import type {
+  LinkedInProfilesPreviewRequest,
+  LinkedInProfilesPreviewResponse,
   PeopleSearchRequest,
   PeopleSearchResponse,
   PostPreviewRequest,
@@ -186,5 +188,21 @@ export class PeopleResource {
       // Re-throw other errors
       throw error
     }
+  }
+
+  /**
+   * Get the real name behind each LinkedIn profile URL (free CrustData
+   * preview, 0 credits). Names that can't be found come back as null.
+   *
+   * @param params.linkedinUrls - LinkedIn profile URLs or bare slugs
+   * @returns One entry per URL, in request order
+   */
+  async previewLinkedInProfiles(
+    params: LinkedInProfilesPreviewRequest,
+  ): Promise<LinkedInProfilesPreviewResponse> {
+    return this.http.post<LinkedInProfilesPreviewResponse>(
+      '/people/linkedin-profiles/preview',
+      { linkedinUrls: params.linkedinUrls },
+    )
   }
 }

@@ -223,3 +223,28 @@ export interface PostPreviewResponse {
   /** List of post preview results (same order as request) */
   posts: PostPreviewResult[]
 }
+
+/**
+ * Request model for LinkedIn profile name preview.
+ */
+export interface LinkedInProfilesPreviewRequest {
+  /** LinkedIn profile URLs or bare slugs */
+  linkedinUrls: string[]
+}
+
+/**
+ * Real name behind one LinkedIn profile URL.
+ */
+export interface LinkedInProfilePreview {
+  /** The URL exactly as sent */
+  linkedinUrl: string
+  /** The person's real name, or null when the preview found none */
+  name: string | null
+}
+
+/**
+ * Response model for LinkedIn profile name preview (same order as request).
+ */
+export interface LinkedInProfilesPreviewResponse {
+  profiles: LinkedInProfilePreview[]
+}
