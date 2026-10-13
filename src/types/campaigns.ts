@@ -137,6 +137,13 @@ export interface CampaignCreate {
   approvalSettings?: ApprovalSettings
   maxProspects?: number
   emailPersonaId?: string
+  /**
+   * User (UUID or email) whose CRM connection the campaign reads. Omit to
+   * read as the campaign's own `userId`.
+   */
+  crmUserId?: string
+  /** CRM company field names to read into each prospect's company context. */
+  crmCompanyFields?: string[]
 }
 
 export interface CampaignUpdate {
@@ -149,6 +156,8 @@ export interface CampaignUpdate {
   approvalSettings?: ApprovalSettings
   maxProspects?: number
   emailPersonaId?: string
+  /** CRM company field names to read. Send `[]` to clear the list. */
+  crmCompanyFields?: string[]
 }
 
 export interface CampaignResponse {
@@ -167,6 +176,10 @@ export interface CampaignResponse {
   approvalSettings: ApprovalSettings
   maxProspects?: number | null
   emailPersonaId?: string | null
+  /** User whose CRM connection the campaign reads; null means its own `userId`. */
+  crmUserId?: string | null
+  /** CRM company field names the campaign reads (empty when none picked). */
+  crmCompanyFields: string[]
   startedAt?: string | null
   pausedAt?: string | null
   terminalProspectCount: number

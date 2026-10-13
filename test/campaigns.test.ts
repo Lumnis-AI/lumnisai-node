@@ -8,6 +8,7 @@
 import type { Http } from '../src/core/http'
 import { describe, expect, it, vi } from 'vitest'
 import { CampaignsResource } from '../src/resources/campaigns'
+import { toSnakeCase } from '../src/utils/case-conversion'
 
 // Mock HTTP client
 function createMockHttp(): Http {
@@ -137,6 +138,59 @@ describe('campaigns', () => {
         undefined,
         { params: { reason: 'End of week' } },
       )
+    })
+  })
+
+  describe('campaign CRM context', () => {
+    it('sends crm_user_id and crm_company_fields on create', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      vi.mocked(http.post).mockResolvedValue({})
+
+      await campaigns.createCampaign({
+        userId: 'user-1',
+        name: 'Q1 Outreach',
+        playbookId: 'playbook-1',
+        crmUserId: 'owner@example.com',
+        crmCompanyFields: ['lifecyclestage', 'industry'],
+      })
+
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.post).mock.calls[0]![1],
+      )
+      expect(body.crm_user_id).toBe('owner@example.com')
+      expect(body.crm_company_fields).toEqual(['lifecyclestage', 'industry'])
+    })
+
+    it('sends crm_company_fields on update', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      vi.mocked(http.put).mockResolvedValue({})
+
+      await campaigns.updateCampaign('campaign-1', {
+        crmCompanyFields: ['industry'],
+      })
+
+      expect(http.put).toHaveBeenCalledWith('/campaigns/campaign-1', {
+        crmCompanyFields: ['industry'],
+      })
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.put).mock.calls[0]![1],
+      )
+      expect(body).toEqual({ crm_company_fields: ['industry'] })
+    })
+
+    it('sends an empty list on update to clear the fields', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      vi.mocked(http.put).mockResolvedValue({})
+
+      await campaigns.updateCampaign('campaign-1', { crmCompanyFields: [] })
+
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.put).mock.calls[0]![1],
+      )
+      expect(body).toEqual({ crm_company_fields: [] })
     })
   })
 
