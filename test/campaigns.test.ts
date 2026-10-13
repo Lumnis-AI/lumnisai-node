@@ -194,6 +194,41 @@ describe('campaigns', () => {
     })
   })
 
+  describe('person intelligence guardrail', () => {
+    it('sends person_intelligence on create', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      vi.mocked(http.post).mockResolvedValue({})
+
+      await campaigns.createCampaign({
+        userId: 'user-1',
+        name: 'Q1 Outreach',
+        playbookId: 'playbook-1',
+        guardrails: { personIntelligence: true },
+      })
+
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.post).mock.calls[0]![1],
+      )
+      expect(body.guardrails).toEqual({ person_intelligence: true })
+    })
+
+    it('sends person_intelligence on update', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      vi.mocked(http.put).mockResolvedValue({})
+
+      await campaigns.updateCampaign('campaign-1', {
+        guardrails: { personIntelligence: false },
+      })
+
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.put).mock.calls[0]![1],
+      )
+      expect(body).toEqual({ guardrails: { person_intelligence: false } })
+    })
+  })
+
   describe('prospects', () => {
     it('adds prospects with deduplication', async () => {
       const http = createMockHttp()

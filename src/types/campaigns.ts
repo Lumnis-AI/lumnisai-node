@@ -48,6 +48,18 @@ export interface CampaignGuardrails {
    * @default false
    */
   excludeCrmContacts?: boolean
+  /**
+   * When true, the campaign researches each person (person intelligence)
+   * just before it first works them, at 7 credits per person, and uses the
+   * finished report to write messages.
+   *
+   * People who already have a report get it attached free when they are
+   * added, whether or not this is on.
+   *
+   * Off by default.
+   * @default false
+   */
+  personIntelligence?: boolean
 }
 
 export type ApprovalMode = 'auto' | 'require'
