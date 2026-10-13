@@ -843,3 +843,38 @@ describe('crm company reads over the wire', () => {
     expect(result.properties[1].references).toBeNull()
   })
 })
+
+describe('company field writes', () => {
+  it('posts a field write and returns per-domain results', async () => {
+    const http = createMockHttp()
+    const crm = new CrmResource(http)
+    vi.mocked(http.post).mockResolvedValue({
+      provider: 'hubspot',
+      field: 'lumnis_signal_information',
+      results: [{ domain: 'a.com', status: 'written', companyIds: ['1'], error: null }],
+    })
+    const request = {
+      userId: 'owner@example.com',
+      provider: 'hubspot' as const,
+      field: 'lumnis_signal_information',
+      companies: [{ domain: 'a.com', value: 'Act now' }],
+    }
+
+    const result = await crm.writeCompanyField(request)
+
+    expect(http.post).toHaveBeenCalledWith('/crm/companies/write-field', request)
+    expect(result.results[0].status).toBe('written')
+  })
+
+  it('posts a find-or-create for a field label', async () => {
+    const http = createMockHttp()
+    const crm = new CrmResource(http)
+    vi.mocked(http.post).mockResolvedValue({ provider: 'attio', created: false, field: { name: 'x' } })
+    const request = { userId: 'owner@example.com', provider: 'attio' as const, label: 'Lumnis Signal Information' }
+
+    const result = await crm.createCompanyField(request)
+
+    expect(http.post).toHaveBeenCalledWith('/crm/companies/fields', request)
+    expect(result.created).toBe(false)
+  })
+})

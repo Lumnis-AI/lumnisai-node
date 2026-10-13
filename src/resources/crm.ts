@@ -4,6 +4,10 @@ import type {
   CrmAccountContextBatchResponse,
   CrmAttioCompanyPropertiesResponse,
   CrmAttioCompanySearchResponse,
+  CrmCompanyFieldCreateRequest,
+  CrmCompanyFieldCreateResponse,
+  CrmCompanyFieldWriteRequest,
+  CrmCompanyFieldWriteResponse,
   CrmCompanyPropertiesRequest,
   CrmCompanyPropertiesResponse,
   CrmCompanySearchRequest,
@@ -312,6 +316,32 @@ export class CrmResource {
     )
     // See getCompanyProperties: the cast narrows to the provider's own shape.
     return response as any
+  }
+
+  /**
+   * Overwrite one company field for up to 100 companies, each found in the
+   * CRM by domain. Writes HubSpot in batches of 100, Attio record by record.
+   * Never creates a company: a domain with no company comes back `not_found`.
+   * Failures come back per domain; only connection-level errors throw
+   * (`crm_not_connected`, `crm_access_denied`, `invalid_crm_request`).
+   */
+  async writeCompanyField(
+    data: CrmCompanyFieldWriteRequest,
+  ): Promise<CrmCompanyFieldWriteResponse> {
+    return this.http.post<CrmCompanyFieldWriteResponse>('/crm/companies/write-field', data)
+  }
+
+  /**
+   * Return the company field with this label, creating it only if absent:
+   * HubSpot multi-line text in `companyinformation`, Attio `text`. A field
+   * with the same API name or label (any case) is returned with
+   * `created: false`. Throws 403 `crm_permission_missing` when the
+   * connection may not add fields.
+   */
+  async createCompanyField(
+    data: CrmCompanyFieldCreateRequest,
+  ): Promise<CrmCompanyFieldCreateResponse> {
+    return this.http.post<CrmCompanyFieldCreateResponse>('/crm/companies/fields', data)
   }
 
   /**

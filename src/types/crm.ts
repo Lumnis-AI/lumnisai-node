@@ -429,6 +429,8 @@ export interface CrmHubspotCompanyPropertyOption {
 }
 
 export interface CrmHubspotCompanyProperty {
+  /** True for fields the customer (or Lumnis) made; false for the CRM's own. */
+  custom?: boolean
   /** Native property name (`numberofemployees`, `hs_object_id`, …). */
   name: string
   label: string
@@ -492,6 +494,8 @@ export interface CrmAttioCompanyPropertyFilterField {
 }
 
 export interface CrmAttioCompanyProperty {
+  /** True for fields the customer (or Lumnis) made; false for the CRM's own. */
+  custom?: boolean
   /** Attio `api_slug` (`employee_range`, `primary_location`, …). */
   name: string
   label: string
@@ -738,3 +742,54 @@ export interface CrmAttioCompanySearchResponse {
 export type CrmCompanySearchResponse
   = | CrmHubspotCompanySearchResponse
     | CrmAttioCompanySearchResponse
+
+/** One company to write, found in the CRM by its domain. */
+export interface CrmCompanyFieldValue {
+  /** Bare domain (`example.com`); the backend also accepts `www.` and URLs. */
+  domain: string
+  /** The field's new value. Replaces whatever was there. */
+  value: string
+}
+
+export interface CrmCompanyFieldWriteRequest {
+  /** CRM owner whose connection writes (or the requester, with `crmUserId`). */
+  userId: string
+  crmUserId?: string | null
+  provider: CrmProvider
+  /** The field's API name (HubSpot property name, Attio attribute slug). */
+  field: string
+  /** 1–100 companies with unique domains. */
+  companies: CrmCompanyFieldValue[]
+}
+
+export interface CrmCompanyFieldResult {
+  domain: string
+  /** `not_found`: no CRM company has this domain; nothing was created. */
+  status: 'written' | 'not_found' | 'failed'
+  /** Every CRM company written for this domain (duplicates are all written). */
+  companyIds: string[]
+  /** Safe error code when `failed` (`rate_limited`, `permission_denied`, …). */
+  error: string | null
+}
+
+export interface CrmCompanyFieldWriteResponse {
+  provider: CrmProvider
+  field: string
+  results: CrmCompanyFieldResult[]
+}
+
+export interface CrmCompanyFieldCreateRequest {
+  userId: string
+  crmUserId?: string | null
+  provider: CrmProvider
+  /** Field label, e.g. `Lumnis Signal Information`. */
+  label: string
+}
+
+export interface CrmCompanyFieldCreateResponse {
+  provider: CrmProvider
+  /** False when a field with this name or label already existed. */
+  created: boolean
+  /** Same shape as one field from {@link CrmCompanyPropertiesResponse}. */
+  field: CrmHubspotCompanyProperty | CrmAttioCompanyProperty
+}
