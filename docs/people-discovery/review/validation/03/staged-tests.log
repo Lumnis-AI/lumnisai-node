@@ -1,0 +1,35 @@
+
+ RUN  v3.0.8 /private/tmp/lumnis-sdk-lookup-WnW5Ab/staged
+
+ ✓ test/account-monitor.test.ts (18 tests) 19ms
+ ✓ test/responses.test.ts (29 tests) 19ms
+stderr | test/client.test.ts > lumnisAI > invoke > should create a response with a simple message
+Using TENANT scope bypasses user isolation. Ensure this is intentional and follows security best practices.
+
+stderr | test/client.test.ts > lumnisAI > invoke > should create a response with message array
+Using TENANT scope bypasses user isolation. Ensure this is intentional and follows security best practices.
+
+stderr | test/client.test.ts > lumnisAI > invoke > should stream progress entries
+showProgress is not supported in streaming mode.
+
+stderr | test/client.test.ts > lumnisAI > invoke > should stream progress entries
+Using TENANT scope bypasses user isolation. Ensure this is intentional and follows security best practices.
+
+stdout | test/client.test.ts > lumnisAI > invoke > should stream progress entries
+Response ID: 123
+
+ ✓ test/people-lookup.test.ts (12 tests) 22ms
+stderr | test/client.test.ts > lumnisAI > error handling > should throw AuthenticationError for 401 status
+Using TENANT scope bypasses user isolation. Ensure this is intentional and follows security best practices.
+
+stderr | test/client.test.ts > lumnisAI > error handling > should throw RateLimitError for 429 status
+Using TENANT scope bypasses user isolation. Ensure this is intentional and follows security best practices.
+
+ ✓ test/client.test.ts (12 tests) 4015ms
+   ✓ lumnisAI > invoke > should stream progress entries 4005ms
+
+ Test Files  4 passed (4)
+      Tests  71 passed (71)
+   Start at  08:44:32
+   Duration  4.85s (transform 514ms, setup 0ms, collect 1.17s, tests 4.07s, environment 1ms, prepare 510ms)
+

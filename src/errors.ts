@@ -77,10 +77,10 @@ export class LocalFileNotSupportedError extends ValidationError {
 }
 
 export class NoDataSourcesError extends ValidationError {
-  constructor(message?: string) {
+  constructor(message?: string, options: LumnisErrorOptions = {}) {
     super(
       message || 'No people data sources configured. Please configure API keys.',
-      { code: 'NO_DATA_SOURCES' },
+      { ...options, code: 'NO_DATA_SOURCES' },
     )
     this.name = 'NoDataSourcesError'
   }

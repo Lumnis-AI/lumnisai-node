@@ -1,5 +1,42 @@
 // People Search API types
 
+/** A name and company lookup; title is optional matching context. */
+export interface FindLinkedInProfilesRow {
+  name: string
+  company: string
+  title?: string | null
+}
+
+export interface FindLinkedInProfilesRequest {
+  /** Between 1 and 50 rows, each processed independently. */
+  people: FindLinkedInProfilesRow[]
+}
+
+/** Provider-ranked candidate requiring caller confirmation. */
+export interface LinkedInProfileCandidate {
+  linkedinUrl: string
+  fullName: string | null
+  headline: string | null
+  currentTitle: string | null
+  currentCompany: string | null
+  location: string | null
+  relevanceScore: number | null
+}
+
+export interface FindLinkedInProfilesResult {
+  /** Zero-based position in the request; results preserve input order. */
+  inputIndex: number
+  inputTitle: string | null
+  status: 'matched' | 'not_found' | 'error'
+  reason: string | null
+  /** Up to three candidates; `matched` does not confirm identity. */
+  candidates: LinkedInProfileCandidate[]
+}
+
+export interface FindLinkedInProfilesResponse {
+  results: FindLinkedInProfilesResult[]
+}
+
 /**
  * Available people search data sources
  */

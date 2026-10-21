@@ -1,0 +1,23 @@
+{
+  "tree": "63d77a64fb7b592f2282d500567922b555f43f27",
+  "timestamp": "2026-10-21T12:44:53.740Z",
+  "cwd": "/tmp/lumnis-sdk-lookup-WnW5Ab/staged",
+  "checks": [
+    {
+      "command": "pnpm exec vitest run test/people-lookup.test.ts test/client.test.ts test/responses.test.ts test/account-monitor.test.ts",
+      "exit_code": 0,
+      "passed": 71,
+      "log": "staged-tests.log"
+    },
+    {
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "log": "staged-typecheck.log"
+    }
+  ],
+  "candidate_matches": true,
+  "preserved_campaign_blob": "1fc6cda2eb63221c1f7a13b48f55b72248f94d81",
+  "after_tests_changes": "Only the review note Results paragraph changed and was restaged. Runtime and test blobs unchanged.",
+  "final_staged_tree": "d97c08b40dcd32b12b07fa401991ba0494ded070",
+  "independent_review": "Passed, including final note/index check."
+}

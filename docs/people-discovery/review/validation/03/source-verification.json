@@ -1,0 +1,42 @@
+{
+  "tree": "63d77a64fb7b592f2282d500567922b555f43f27",
+  "files": [
+    {
+      "path": "src/core/http.ts",
+      "sha256": "eca769f808e655ce552e3b674889542e2c00620176d615a734c69a732896e760",
+      "candidate_sha256": "eca769f808e655ce552e3b674889542e2c00620176d615a734c69a732896e760"
+    },
+    {
+      "path": "src/errors.ts",
+      "sha256": "c3824992062c5652d26fe8bf9797dcf87b5cffa87945fee5720adbed105a2151",
+      "candidate_sha256": "c3824992062c5652d26fe8bf9797dcf87b5cffa87945fee5720adbed105a2151"
+    },
+    {
+      "path": "src/resources/people.ts",
+      "sha256": "b87f4228d4cdd59df0d2cce958a0e763a02c29f25cdf68b1cc28487b3b4f2ae9",
+      "candidate_sha256": "b87f4228d4cdd59df0d2cce958a0e763a02c29f25cdf68b1cc28487b3b4f2ae9"
+    },
+    {
+      "path": "src/types/people.ts",
+      "sha256": "9ab92e3ce7fa1f2385db1ccaa798665d49dffaa21c70c6b43cc870fcd69af50a",
+      "candidate_sha256": "9ab92e3ce7fa1f2385db1ccaa798665d49dffaa21c70c6b43cc870fcd69af50a"
+    },
+    {
+      "path": "test/people-lookup.test.ts",
+      "sha256": "6fa9a9c756aa7302594d951634c1716cb13ebe6e9a1324734f32f0a2840bc4ba",
+      "candidate_sha256": "6fa9a9c756aa7302594d951634c1716cb13ebe6e9a1324734f32f0a2840bc4ba"
+    },
+    {
+      "path": "docs/people-discovery/context.md",
+      "sha256": "f7f8769e49aba4a945ba819f6582d1cc26e738b1401a5bbbcc8e23375bcb2e01",
+      "candidate_sha256": "f7f8769e49aba4a945ba819f6582d1cc26e738b1401a5bbbcc8e23375bcb2e01"
+    },
+    {
+      "path": "docs/people-discovery/review/03_linkedin_lookup_sdk.md",
+      "sha256": "ab526f5168a14e2cc6d48b55e2b110afe0099f14cfa85658f8c123cd5899ce13",
+      "candidate_sha256": "ab526f5168a14e2cc6d48b55e2b110afe0099f14cfa85658f8c123cd5899ce13"
+    }
+  ],
+  "candidate_matches": true,
+  "preserved_campaign_blob": "1fc6cda2eb63221c1f7a13b48f55b72248f94d81"
+}

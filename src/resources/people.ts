@@ -1,6 +1,8 @@
 // People Search API resource
 import type { Http } from '../core/http'
 import type {
+  FindLinkedInProfilesRequest,
+  FindLinkedInProfilesResponse,
   LinkedInProfilesPreviewRequest,
   LinkedInProfilesPreviewResponse,
   PeopleSearchRequest,
@@ -9,6 +11,7 @@ import type {
   PostPreviewResponse,
 } from '../types/people'
 import {
+  LumnisError,
   NoDataSourcesError,
   SourcesNotAvailableError,
   ValidationError,
@@ -17,6 +20,45 @@ import { PeopleDataSource } from '../types/people'
 
 export class PeopleResource {
   constructor(private readonly http: Http) {}
+
+  /**
+   * Find up to three LinkedIn candidates per name/company row, without saving
+   * prospects. A match is a candidate, not a confirmed identity.
+   *
+   * This paid lookup has no durable replay protection, so it never retries.
+   * The default 90-second timeout allows the backend's 60-second batch deadline.
+   */
+  async findLinkedInProfiles(
+    params: FindLinkedInProfilesRequest,
+    options?: { timeoutMs?: number },
+  ): Promise<FindLinkedInProfilesResponse> {
+    if (!params.people?.length || params.people.length > 50) {
+      throw new ValidationError('Supply between 1 and 50 people', {
+        code: 'INVALID_PEOPLE_COUNT',
+      })
+    }
+
+    try {
+      return await this.http.post<FindLinkedInProfilesResponse>(
+        '/people/find-linkedin-profiles',
+        { people: params.people },
+        { maxRetries: 0, timeoutMs: options?.timeoutMs ?? 90_000 },
+      )
+    }
+    catch (error) {
+      if (error instanceof LumnisError) {
+        const detail = error.details?.detail?.error || error.details?.error
+        if (detail?.code === 'NO_DATA_SOURCES') {
+          throw new NoDataSourcesError(detail.message, {
+            statusCode: error.statusCode,
+            requestId: error.requestId,
+            details: error.details,
+          })
+        }
+      }
+      throw error
+    }
+  }
 
   /**
    * Perform a quick people search across multiple data sources.

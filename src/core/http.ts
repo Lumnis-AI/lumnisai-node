@@ -26,6 +26,10 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
   idempotencyKey?: string
   params?: Record<string, any>
+  /** Override retries for operations without durable replay protection. */
+  maxRetries?: number
+  /** Override the client timeout for this request only. */
+  timeoutMs?: number
   /**
    * Extra keys whose values cross the wire verbatim, in both the request body
    * and the response. Use it for subtrees keyed by external names -- CRM
@@ -108,6 +112,8 @@ export class Http {
       params,
       idempotencyKey: idempotencyKeyOption,
       passthroughKeys,
+      maxRetries,
+      timeoutMs,
       ...fetchOptions
     } = init
     const method = fetchOptions.method || 'GET'
@@ -133,12 +139,12 @@ export class Http {
     }
 
     const isIdempotent = method === 'GET' || method === 'DELETE' || !!idempotencyKey
-    const maxAttempts = isIdempotent ? this.options.maxRetries + 1 : 1
+    const maxAttempts = isIdempotent ? (maxRetries ?? this.options.maxRetries) + 1 : 1
     let lastError: Error | undefined
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs)
+      const timeout = setTimeout(() => controller.abort(), timeoutMs ?? this.options.timeoutMs)
 
       try {
         const response = await fetch(url.toString(), {
@@ -154,6 +160,8 @@ export class Http {
         lastError = error as Error
 
         if (error instanceof RateLimitError) {
+          if (attempt === maxAttempts - 1)
+            throw error
           const backoff = backoffMs(attempt, error.retryAfter)
           await sleep(backoff)
           continue
