@@ -1,8 +1,9 @@
 # People discovery
 
-These SDK changes are prepared for the authorized patch release. Publication
-is pending. The dashboard must adopt the released SDK before it can use the
-lookup method, committee types and Responses idempotency option.
+Published to npm as **lumnisai 0.5.65** on October 21, 2026. The release
+commit is `d99fd77`; the [publish workflow](https://github.com/Lumnis-AI/lumnisai-node/actions/runs/39603172808) succeeded.
+Dashboard and MCP callers can now adopt this version for lookup, committee
+request types and the Responses idempotency option.
 
 ## Find LinkedIn candidates
 
@@ -42,9 +43,12 @@ committee result must remain distinct from an empty successful committee.
 of the same logical submission. Keep the request unchanged when reusing it.
 Callers responsible for paid work should use a client with `maxRetries: 0` and
 persist the key before submission; the SDK does not persist submission state.
-This optional argument also requires the updated SDK release.
+This optional argument is available in SDK 0.5.65.
 
 ## Validation
+
+The committed release passed **228 tests with 1 skipped**, type checking and
+the package build. The focused checks below were run before release.
 
 `pnpm exec vitest run test/people-lookup.test.ts test/committee-search.test.ts test/client.test.ts test/responses.test.ts test/account-monitor.test.ts`
 passes 74 tests, including 15 new tests. The same 59 existing tests passed

@@ -2,9 +2,9 @@
 
 ## Status and files
 
-Approved for SDK 0.5.65 release on October 21, 2026. The implementation covers the people
-resource and types, shared HTTP options, the missing data source error,
-lookup tests, the review index and this note.
+Reviewed and committed as `37cb12d`; published in SDK **0.5.65** on
+October 21, 2026. The implementation covers the people resource and types,
+shared HTTP options, the missing data source error, lookup tests and docs.
 
 ## How this came up
 
@@ -37,6 +37,9 @@ three candidates. The call neither saves prospects nor starts research.
 
 ## Results
 
+The committed SDK release passed 228 tests with 1 skipped, type checking and
+the package build. The evidence below records the earlier isolated review.
+
 The exact staged extraction passed 71 tests: 12 lookup tests and 59 existing
 client, Responses and Account Monitor tests. Type checking passed. Its seven
 feature files match the isolated HEAD based candidate, which passed the same
@@ -64,7 +67,6 @@ dashboard integration are being completed against the published package.
 
 ## Gaps and risks
 
-The SDK must be published and adopted before the MCP server can call this
-method. This patch does not register an MCP tool, change committee search,
-publish a package or deploy anything. Unrelated staged campaign changes remain
-outside this problem.
+SDK 0.5.65 is published. The MCP server must adopt it and register the lookup
+tool; that integration remains a separate frontend change. Unrelated staged
+campaign changes were excluded from this release.
