@@ -60,6 +60,19 @@ export interface CampaignGuardrails {
    * @default false
    */
   personIntelligence?: boolean
+  /**
+   * People copied (CC) on every email this campaign sends: first emails,
+   * follow ups and replies. For example an account executive, a manager or
+   * a partner.
+   *
+   * The server lowercases the addresses and drops repeats at send time. The
+   * sender's and the prospect's own address are left off. Sending a list
+   * replaces the stored one; send `[]` to turn CC off. Has no effect on
+   * LinkedIn.
+   *
+   * Empty by default (no CC).
+   */
+  ccEmails?: string[]
 }
 
 export type ApprovalMode = 'auto' | 'require'
@@ -399,6 +412,19 @@ export interface CampaignActionResponse {
   sourceMessageId?: string | null
   createdAt: string
   updatedAt: string
+  /**
+   * Approvals list, email cards only: the address approving sends this email
+   * to. Null on other cards, or when the prospect has no usable address
+   * (approving then fails).
+   */
+  recipientEmail?: string | null
+  /**
+   * Approvals list, email cards only: the addresses the send will copy (the
+   * prospect's own CC list when set, else the campaign's, minus the sender
+   * and the prospect). An empty list means no one is copied. Null on other
+   * cards.
+   */
+  ccEmails?: string[] | null
 }
 
 export interface CampaignProspectDetailResponse {
@@ -418,6 +444,18 @@ export interface ApprovalActionRequest {
   notes?: string
   modifiedContent?: string
   modifiedSubject?: string
+  /**
+   * Email cards only: send to this address instead of the prospect's email.
+   * It also becomes the prospect's address for later emails. Omit to keep
+   * the current one.
+   */
+  recipientEmail?: string
+  /**
+   * Email cards only: the full CC list for this prospect from now on,
+   * replacing the campaign's list for them. `[]` copies no one. Omit to
+   * keep the current list.
+   */
+  ccEmails?: string[]
 }
 
 export interface RejectActionRequest {

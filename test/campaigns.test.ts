@@ -229,6 +229,25 @@ describe('campaigns', () => {
     })
   })
 
+  describe('cc emails guardrail', () => {
+    it('sends cc_emails on update with the addresses unchanged', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+      vi.mocked(http.put).mockResolvedValue({})
+
+      await campaigns.updateCampaign('campaign-1', {
+        guardrails: { ccEmails: ['ae.owner@native.com', 'Sales_Lead@native.com'] },
+      })
+
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.put).mock.calls[0]![1],
+      )
+      expect(body).toEqual({
+        guardrails: { cc_emails: ['ae.owner@native.com', 'Sales_Lead@native.com'] },
+      })
+    })
+  })
+
   describe('prospects', () => {
     it('adds prospects with deduplication', async () => {
       const http = createMockHttp()
@@ -393,6 +412,20 @@ describe('campaigns', () => {
       )
     })
 
+    it('returns an email card\'s To and CC list', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.get).mockResolvedValue({
+        items: [{ id: 'a-1', recipientEmail: 'alex@acme.com', ccEmails: ['ae@native.com'] }],
+      })
+
+      const { items } = await campaigns.listPendingApprovals()
+
+      expect(items[0]?.recipientEmail).toBe('alex@acme.com')
+      expect(items[0]?.ccEmails).toEqual(['ae@native.com'])
+    })
+
     it('lists every pending approval when no campaign is given', async () => {
       const http = createMockHttp()
       const campaigns = new CampaignsResource(http)
@@ -424,6 +457,28 @@ describe('campaigns', () => {
           modifiedContent: 'New version of the message',
         },
       )
+    })
+
+    it('approves an email with a new To and CC list', async () => {
+      const http = createMockHttp()
+      const campaigns = new CampaignsResource(http)
+
+      vi.mocked(http.post).mockResolvedValue({ success: true })
+
+      await campaigns.approveAction('action-123', {
+        userId: 'user-1',
+        recipientEmail: 'alex.kim@acme.com',
+        ccEmails: [],
+      })
+
+      const body = toSnakeCase<Record<string, unknown>>(
+        vi.mocked(http.post).mock.calls[0]![1],
+      )
+      expect(body).toEqual({
+        user_id: 'user-1',
+        recipient_email: 'alex.kim@acme.com',
+        cc_emails: [],
+      })
     })
 
     it('rejects action with reason', async () => {
