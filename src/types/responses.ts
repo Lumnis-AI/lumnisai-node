@@ -115,8 +115,8 @@ export interface CriterionDefinition {
   answerFormat?: string
   /** Whether this criterion extracts a value or produces a score-bearing verdict. */
   columnKind?: ColumnKind
-  /** Extraction columns are excluded from fit-score calculations. */
-  scoringRelevance?: 'none'
+  /** Whether a verdict participates in scoring; extraction columns use none. */
+  scoringRelevance?: 'full' | 'filter_only' | 'none'
   /** Set by the web-need classifier when deep verification runs (response output). */
   requiresWebVerification?: boolean
   /** Whose fact must be verified: person, organization, or location (response output). */
@@ -704,6 +704,7 @@ export type SpecializedAgentType =
   | 'company_intelligence'
   | 'person_intelligence'
   | 'account_monitor'
+  | 'committee_search'
   | (string & {})
 
 /**
@@ -1046,6 +1047,35 @@ export interface SignalEnrichmentPool {
 export interface SignalEnrichmentStats extends Record<string, any> {
   signalEnrichmentPool?: SignalEnrichmentPool
   signalFunnel?: SignalFunnel
+}
+
+/** Exact company identity for live committee discovery. Supply domain or URL. */
+export interface CommitteeSearchAccount {
+  id: string
+  name: string
+  domain?: string | null
+  linkedinUrl?: string | null
+}
+
+/** Parameters for `committee_search` through the existing Responses lifecycle. */
+export interface CommitteeSearchParams {
+  /** Exactly one account per specialized agent job. */
+  accounts: [CommitteeSearchAccount]
+  /** Optional retrieval hints (up to 30), never substitutes for reviewed criteria. */
+  titles?: string[]
+  /** 1 to 50 reviewed verdict definitions; extraction columns are unsupported. */
+  criteriaDefinitions: CriterionDefinition[]
+  criteriaClassification: CriteriaClassification
+  /** Defaults to bounded; page is the explicit synchronous live-page option. */
+  retrievalMode?: 'bounded' | 'page'
+  /** Defaults to GPT-6 Luna for the specialized agent. */
+  filterModel?: 'gpt-6-luna'
+  /** Provider return cap in bounded mode: 1 to 100, default 50. */
+  maxCandidatesPerAccount?: number
+  /** Selected people: 1 to 25, default 25. */
+  limitPerAccount?: number
+  /** Bounded mode requires page 1. */
+  page?: number
 }
 
 /** @see {@link ./competitor-post-engagement.ts} for full agent reference (invocation, pipeline, output shape, costs). */
@@ -1889,7 +1919,7 @@ export interface CreateResponseRequest {
    * Known agents: 'quick_people_search', 'deep_people_search', 'people_scoring',
    * 'competitor_post_engagement', 'competitor_rep_engagement',
    * 'content_intelligence', 'engagement_expansion', 'influencer_engagement',
-   * 'company_intelligence', 'person_intelligence', 'account_monitor'
+   * 'company_intelligence', 'person_intelligence', 'account_monitor', 'committee_search'
    * Accepts any string to support future agents without SDK updates
    */
   specializedAgent?: SpecializedAgentType
@@ -1897,10 +1927,10 @@ export interface CreateResponseRequest {
    * Parameters specific to the specialized agent.
    *
    * `account_monitor` takes {@link AccountMonitorParams}, which is a CLOSED
-   * shape — the backend rejects fields it does not declare. Every other agent
-   * takes the open {@link SpecializedAgentParams} bag.
+   * shape. `committee_search` takes {@link CommitteeSearchParams} and requires
+   * reviewed criteria. Other agents take the open {@link SpecializedAgentParams} bag.
    */
-  specializedAgentParams?: SpecializedAgentParams | AccountMonitorParams
+  specializedAgentParams?: SpecializedAgentParams | AccountMonitorParams | CommitteeSearchParams
 }
 
 export interface ProgressEntry {

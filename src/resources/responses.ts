@@ -9,7 +9,7 @@
 //   - companyIntelligence / personIntelligence — full reference in src/types/company-intelligence.ts
 //   - accountMonitor — full reference in src/types/account-monitor.ts
 //
-import type { Http } from '../core/http'
+import type { Http, RequestOptions } from '../core/http'
 import type {
   AccountMonitorOptions,
   AccountMonitorParams,
@@ -1562,8 +1562,12 @@ export class ResponsesResource {
 
   /**
    * Create a new response request for asynchronous processing
+   * Reuse options.idempotencyKey for retries of the same logical request.
    */
-  async create(request: CreateResponseRequest): Promise<CreateResponseResponse> {
+  async create(
+    request: CreateResponseRequest,
+    options?: Pick<RequestOptions, 'idempotencyKey'>,
+  ): Promise<CreateResponseResponse> {
     if (request.files) {
       for (const file of request.files)
         this._validateFileReference(file.uri)
@@ -1576,14 +1580,18 @@ export class ResponsesResource {
       const monitorParams = this._accountMonitorParams(request)
       this._validateAccountMonitorParams(monitorParams)
       this._validateAccountMonitorCrmAccess(monitorParams, request)
-      return this.http.post<CreateResponseResponse>('/responses', request)
+      return options
+        ? this.http.post<CreateResponseResponse>('/responses', request, options)
+        : this.http.post<CreateResponseResponse>('/responses', request)
     }
     this._validateSalesNavigatorRequest(request)
     for (const params of this._specializedParamSources(request))
       this._validateSignalParams(params)
     if (request.specializedAgentParams)
       this._validateCriteriaParams(request.specializedAgentParams, request.specializedAgent)
-    return this.http.post<CreateResponseResponse>('/responses', request)
+    return options
+      ? this.http.post<CreateResponseResponse>('/responses', request, options)
+      : this.http.post<CreateResponseResponse>('/responses', request)
   }
 
   /**
