@@ -232,6 +232,7 @@ export type CampaignProspectState =
   | 'meeting_booked'
   | 'intro_accepted'
   | 'stopped'
+  | 'completed'
   | 'snoozed'
   | 'paused'
 
@@ -367,6 +368,7 @@ export type CampaignActionType =
   | 'call_phone'
   | 'wait'
   | 'stop'
+  | 'complete'
 
 export type CampaignActionStatus =
   | 'pending_approval'
@@ -537,6 +539,8 @@ export interface StoppedBreakdown {
 export interface CampaignMetricsResponse {
   totalProspects: number
   activeProspects: number
+  /** Successful outreach completion; omitted by older API deployments. */
+  completed?: number
   funnel: Record<string, FunnelStage>
   stopped: StoppedBreakdown
   pendingApproval: number
@@ -612,9 +616,24 @@ export interface ListCampaignsOptions {
 
 export interface ListCampaignProspectsOptions {
   state?: CampaignProspectState
+  /** Historical membership, optionally narrowed by the current state. */
+  funnelStage?: CampaignFunnelStage
   limit?: number
   offset?: number
 }
+
+export type CampaignFunnelStage =
+  | 'all'
+  | 'engaged'
+  | 'connection_sent'
+  | 'inmail_sent'
+  | 'connected'
+  | 'messaged'
+  | 'replied'
+  | 'meeting_booked'
+  | 'intro_accepted'
+  | 'completed'
+  | 'stopped'
 
 export interface ListCampaignActionsOptions {
   status?: CampaignActionStatus

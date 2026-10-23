@@ -268,7 +268,7 @@ export class CampaignsResource {
   }
 
   /**
-   * List prospects in a campaign with optional state filter.
+   * List campaign prospects by historical funnel membership and/or current state.
    */
   async listProspects(
     campaignId: string,
@@ -277,6 +277,8 @@ export class CampaignsResource {
     const params: Record<string, unknown> = {}
     if (options?.state)
       params.state = options.state
+    if (options?.funnelStage)
+      params.funnel_stage = options.funnelStage
     if (options?.limit !== undefined)
       params.limit = options.limit
     if (options?.offset !== undefined)

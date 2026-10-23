@@ -5,8 +5,9 @@
  * parameters. They use mocked HTTP responses.
  */
 
-import type { Http } from '../src/core/http'
-import { describe, expect, it, vi } from 'vitest'
+import type { CampaignActionType, CampaignFunnelStage, CampaignMetricsResponse, CampaignProspectState } from '../src'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { Http } from '../src/core/http'
 import { CampaignsResource } from '../src/resources/campaigns'
 import { toSnakeCase } from '../src/utils/case-conversion'
 
@@ -20,6 +21,97 @@ function createMockHttp(): Http {
     patch: vi.fn(),
   } as unknown as Http
 }
+
+describe('historical funnel contract', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const stages = [
+    'all',
+    'engaged',
+    'connection_sent',
+    'inmail_sent',
+    'connected',
+    'messaged',
+    'replied',
+    'meeting_booked',
+    'intro_accepted',
+    'completed',
+    'stopped',
+  ] satisfies CampaignFunnelStage[]
+
+  it.each(stages)('forwards %s with state and pagination over HTTP', async (funnelStage) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json([]))
+    vi.stubGlobal('fetch', fetchMock)
+    const campaigns = new CampaignsResource(new Http({
+      baseUrl: 'https://api.invalid',
+      apiPrefix: '/v1',
+      headers: { 'X-API-Key': 'test-key' },
+      maxRetries: 0,
+    }))
+
+    await campaigns.listProspects('campaign/encoded', {
+      funnelStage,
+      state: 'completed',
+      limit: 200,
+      offset: 0,
+    })
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const request = new URL(url)
+    expect(request.pathname).toBe('/v1/campaigns/campaign%2Fencoded/prospects')
+    expect(Object.fromEntries(request.searchParams)).toEqual({
+      state: 'completed',
+      funnel_stage: funnelStage,
+      limit: '200',
+      offset: '0',
+    })
+    expect(init.headers['X-API-Key']).toBe('test-key')
+  })
+
+  it('keeps unfiltered and state-only requests compatible', async () => {
+    const http = createMockHttp()
+    const campaigns = new CampaignsResource(http)
+    vi.mocked(http.get).mockResolvedValue([])
+    await campaigns.listProspects('campaign')
+    await campaigns.listProspects('campaign', { state: 'snoozed', limit: 50, offset: 0 })
+    expect(http.get).toHaveBeenNthCalledWith(1, '/campaigns/campaign/prospects', { params: {} })
+    expect(http.get).toHaveBeenNthCalledWith(2, '/campaigns/campaign/prospects', {
+      params: { state: 'snoozed', limit: 50, offset: 0 },
+    })
+  })
+
+  it('preserves completed lifecycle, completion actions and zero metrics through conversion', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(
+      url.endsWith('/metrics')
+        ? { total_prospects: 1, active_prospects: 0, completed: 0 }
+        : {
+            prospect: { id: 'prospect', state: 'completed', last_action_type: 'complete' },
+            actions: [{ action_type: 'complete', status: 'executed' }],
+            pending_action: null,
+          },
+    )))
+    const campaigns = new CampaignsResource(new Http({ baseUrl: 'https://api.invalid', maxRetries: 0 }))
+    const detail = await campaigns.getProspectDetail('campaign', 'prospect')
+    const metrics = await campaigns.getMetrics('campaign')
+
+    expect(detail.prospect.state).toBe('completed')
+    expect(detail.prospect.lastActionType).toBe('complete')
+    expect(detail.actions[0]!.actionType).toBe('complete')
+    expect(detail.pendingAction).toBeNull()
+    expect(metrics).toEqual({ totalProspects: 1, activeProspects: 0, completed: 0 })
+    expectTypeOf<'completed'>().toMatchTypeOf<CampaignProspectState>()
+    expectTypeOf<'complete'>().toMatchTypeOf<CampaignActionType>()
+    expectTypeOf<CampaignMetricsResponse['completed']>().toEqualTypeOf<number | undefined>()
+  })
+
+  it('accepts older metrics responses without a completed field', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ total_prospects: 0, active_prospects: 0 })))
+    const campaigns = new CampaignsResource(new Http({ baseUrl: 'https://api.invalid', maxRetries: 0 }))
+    const metrics = await campaigns.getMetrics('campaign')
+    expect(metrics.completed).toBeUndefined()
+    expect(metrics.activeProspects).toBe(0)
+  })
+})
 
 describe('campaigns', () => {
   describe('playbooks', () => {
