@@ -242,6 +242,20 @@ export interface CrmAccountContextBatchRequest {
   /** UUID or email of the CRM owner whose context is queried. */
   userId: string
   candidates: CrmAccountContextCandidateInput[]
+  /**
+   * Provider-native company field names to return on each matched account,
+   * per CRM. Each account's `fields` holds the names for its own provider.
+   */
+  companyFields?: {
+    hubspot?: string[]
+    attio?: string[]
+  }
+}
+
+/** One requested company field on a matched CRM account. */
+export interface CrmAccountContextField {
+  label: string
+  value: string | null
 }
 
 export interface CrmAccountContextProviderCoverage {
@@ -315,6 +329,11 @@ export interface CrmAccountContextDetail {
   contactPreview: CrmAccountContextPersonPreview[]
   dealCount: number
   dealPreview: CrmAccountContextDealSummary[]
+  /**
+   * Requested `companyFields` for this account's provider, keyed by the
+   * provider-native field name exactly as requested.
+   */
+  fields?: Record<string, CrmAccountContextField>
 }
 
 export interface CrmAccountContextProviderResult {

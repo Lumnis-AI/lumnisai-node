@@ -170,6 +170,8 @@ export class CrmResource {
     return this.http.post<CrmAccountContextBatchResponse>(
       '/crm/account-context/batch',
       data,
+      // `fields` is keyed by CRM property names; keep them as sent.
+      { passthroughKeys: ['fields'] },
     )
   }
 

@@ -289,7 +289,7 @@ describe('crm', () => {
           companyDomain: 'acme.example',
           companyLinkedinUrl: 'https://www.linkedin.com/company/acme/',
         }],
-      })
+      }, { passthroughKeys: ['fields'] })
       expect(result.results[0].salesState).toBe('active_pipeline')
       expect(result.accounts[0].domains).toEqual(['acme.example'])
       expect(result.accounts[0].lifecycleStage).toBe('customer')
@@ -581,6 +581,36 @@ describe('crm company reads over the wire', () => {
     return JSON.parse(fetchMock.mock.calls[0][1].body)
   }
 
+  it('sends account-context companyFields and keeps returned field names', async () => {
+    respondWith({
+      results: [],
+      accounts: [{
+        account_ref: 'hubspot:company-1',
+        fields: {
+          hs_ideal_customer_profile: {
+            label: 'Ideal Customer Profile Tier',
+            value: 'tier_1',
+          },
+        },
+      }],
+      provider_coverage: [],
+    })
+    const result = await client().crm.accountContextBatch({
+      userId: 'owner',
+      candidates: [{ inputKey: 'candidate-123', companyDomain: 'acme.example' }],
+      companyFields: { hubspot: ['hs_ideal_customer_profile'] },
+    })
+    expect(sentBody()).toMatchObject({
+      company_fields: { hubspot: ['hs_ideal_customer_profile'] },
+    })
+    expect(result.accounts[0].accountRef).toBe('hubspot:company-1')
+    expect(result.accounts[0].fields).toEqual({
+      hs_ideal_customer_profile: {
+        label: 'Ideal Customer Profile Tier',
+        value: 'tier_1',
+      },
+    })
+  })
   it('sends HubSpot filter syntax verbatim and snake-cases Lumnis fields', async () => {
     respondWith({ provider: 'hubspot', companies: [], next_cursor: null, total: 0 })
 
