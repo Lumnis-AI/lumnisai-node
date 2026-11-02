@@ -1078,6 +1078,21 @@ export interface CommitteeSearchParams {
   page?: number
 }
 
+export interface LinkedInNetworkSearch {
+  /** Degrees 1, 2 and/or 3 (default [2]); with `connectionsOf`, degrees 1 and/or 2. */
+  networkDistance?: Array<1 | 2 | 3>
+  /** Leave out: chosen automatically. */
+  api?: 'auto' | 'classic' | 'sales_navigator'
+  /**
+   * Search these people's networks instead of the user's. Each must be the
+   * user's 1st-degree connection (LinkedIn URLs or provider IDs). Degree 2
+   * returns their connections the user doesn't know; degree 1 shared ones.
+   */
+  connectionsOf?: string[]
+  /** Only people currently at these companies: names, domains or company URLs. */
+  targetAccounts?: string[]
+}
+
 /** @see {@link ./competitor-post-engagement.ts} for full agent reference (invocation, pipeline, output shape, costs). */
 
 /**
@@ -1085,6 +1100,8 @@ export interface CommitteeSearchParams {
  * This is a flexible interface that supports any agent-specific parameters
  */
 export interface SpecializedAgentParams {
+  /** Find people through the user's LinkedIn network, or named connections' networks. */
+  linkedinNetwork?: LinkedInNetworkSearch
   /**
    * Maximum number of results.
    * Agent-specific ranges: quick_people_search (1-100), deep_people_search

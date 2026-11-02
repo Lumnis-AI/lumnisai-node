@@ -1362,6 +1362,60 @@ export class ResponsesResource {
       throw new ValidationError('userId is required when salesNavigatorUrl is provided')
   }
 
+  private _validateLinkedInNetworkRequest(request: CreateResponseRequest): void {
+    const sources = this._specializedParamSources(request)
+    if (sources.some(params => this._getParamValue<unknown>(params, 'autoSelectLane', 'auto_select_lane') === true))
+      return
+    for (const params of sources) {
+      const network = this._getParamValue<unknown>(params, 'linkedinNetwork', 'linkedin_network')
+      if (network === undefined || network === null)
+        continue
+      if (request.specializedAgent !== 'deep_people_search')
+        throw new ValidationError('linkedinNetwork requires deep_people_search')
+      if (typeof request.userId !== 'string' || !request.userId.trim())
+        throw new ValidationError('userId is required when linkedinNetwork is provided')
+      if (!this._isPlainObject(network))
+        throw new ValidationError('linkedinNetwork must be an object')
+      const allowed = new Set([
+        'networkDistance',
+        'network_distance',
+        'api',
+        'connectionsOf',
+        'connections_of',
+        'targetAccounts',
+        'target_accounts',
+      ])
+      if (Object.keys(network).some(key => !allowed.has(key)))
+        throw new ValidationError('linkedinNetwork contains unsupported fields')
+      // Allowed values; the API checks them too.
+      const lists: Array<[string, string]> = [
+        ['connectionsOf', 'connections_of'],
+        ['targetAccounts', 'target_accounts'],
+      ]
+      for (const [camel, snake] of lists) {
+        const value = this._getParamValue<unknown>(network, camel, snake)
+        if (value !== undefined && (!Array.isArray(value)
+          || value.some(item => typeof item !== 'string' || !item.trim()))) {
+          throw new ValidationError(`linkedinNetwork.${camel} must be a list of non-empty strings`)
+        }
+      }
+      const connectionsOf = this._getParamValue<string[]>(network, 'connectionsOf', 'connections_of') ?? []
+      const suppliedDegrees = this._getParamValue<unknown>(network, 'networkDistance', 'network_distance')
+      const degrees = suppliedDegrees === undefined ? [2] : suppliedDegrees
+      const allowedDegrees = connectionsOf.length ? [1, 2] : [1, 2, 3]
+      if (!Array.isArray(degrees) || degrees.length < 1
+        || degrees.some(degree => !allowedDegrees.includes(degree))) {
+        throw new ValidationError(connectionsOf.length
+          ? 'connectionsOf supports networkDistance 1 and 2'
+          : 'networkDistance supports 1, 2 and 3 without connectionsOf')
+      }
+      if (network.api !== undefined && !['auto', 'classic', 'sales_navigator'].includes(network.api as string))
+        throw new ValidationError('linkedinNetwork.api must be auto, classic or sales_navigator')
+      if (this._getParamValue(params, 'salesNavigatorUrl', 'sales_navigator_url'))
+        throw new ValidationError('linkedinNetwork cannot be combined with salesNavigatorUrl')
+    }
+  }
+
   private _validateCriteriaParams(
     params?: SpecializedAgentParams | AccountMonitorParams,
     specializedAgent?: string,
@@ -1585,6 +1639,7 @@ export class ResponsesResource {
         : this.http.post<CreateResponseResponse>('/responses', request)
     }
     this._validateSalesNavigatorRequest(request)
+    this._validateLinkedInNetworkRequest(request)
     for (const params of this._specializedParamSources(request))
       this._validateSignalParams(params)
     if (request.specializedAgentParams)
@@ -1765,6 +1820,7 @@ export class ResponsesResource {
    * @param options.crmNameCompanyMatch - Also exclude by exact name+company; @default true
    * @param options.salesNavigatorUrl - Sales Navigator people-search or people-list URL to use as the only discovery source
    * @param options.userId - Acting user whose owned Sales Navigator connection should be used; required with `salesNavigatorUrl`
+   * @param options.linkedinNetwork - Find people through the user's LinkedIn network (1st, 2nd or 3rd+), or through named connections' networks (`connectionsOf`), optionally only at `targetAccounts`
    * @param options.searchJobSignal - CrustData job-listing signal search (decision makers at hiring companies); true | false | 'auto'
    * @param options.searchWebPeople - Find people a request names on the web (e.g. a speaker list), matched to LinkedIn; @default false
    * @param options.deepVerify - Web verification for org/location/third-party criteria: 'auto' (default), 'always', or 'off'
@@ -1806,6 +1862,7 @@ export class ResponsesResource {
       crmExclusionOwners?: string[]
       crmNameCompanyMatch?: boolean
       salesNavigatorUrl?: string
+      linkedinNetwork?: SpecializedAgentParams['linkedinNetwork']
       userId?: string
       // LinkedIn Posts Integration options
       searchProfiles?: boolean | 'auto'
@@ -1882,6 +1939,8 @@ export class ResponsesResource {
         params.crmNameCompanyMatch = options.crmNameCompanyMatch
       if (options.salesNavigatorUrl !== undefined)
         params.salesNavigatorUrl = options.salesNavigatorUrl
+      if (options.linkedinNetwork !== undefined)
+        params.linkedinNetwork = options.linkedinNetwork
       // LinkedIn Posts Integration parameters
       if (options.searchProfiles !== undefined)
         params.searchProfiles = options.searchProfiles
@@ -1953,6 +2012,14 @@ export class ResponsesResource {
       }
     }
 
+    if (params.linkedinNetwork && params.autoSelectLane !== true) {
+      params.searchProfiles = false
+      params.searchPosts = false
+      params.searchConnections = false
+      params.searchJobSignal = false
+      params.searchWebPeople = false
+      params.directPostUrls = []
+    }
     request.specializedAgentParams = params
 
     return this.create(request)
