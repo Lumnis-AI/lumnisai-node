@@ -1091,6 +1091,8 @@ export interface LinkedInNetworkSearch {
   connectionsOf?: string[]
   /** Only people currently at these companies: names, domains or company URLs. */
   targetAccounts?: string[]
+  /** Emails of the organization's members, for teammate paths. */
+  teamMembers?: string[]
 }
 
 /** @see {@link ./competitor-post-engagement.ts} for full agent reference (invocation, pipeline, output shape, costs). */

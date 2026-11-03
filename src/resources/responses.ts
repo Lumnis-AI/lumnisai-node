@@ -1384,6 +1384,8 @@ export class ResponsesResource {
         'connections_of',
         'targetAccounts',
         'target_accounts',
+        'teamMembers',
+        'team_members',
       ])
       if (Object.keys(network).some(key => !allowed.has(key)))
         throw new ValidationError('linkedinNetwork contains unsupported fields')
@@ -1391,6 +1393,7 @@ export class ResponsesResource {
       const lists: Array<[string, string]> = [
         ['connectionsOf', 'connections_of'],
         ['targetAccounts', 'target_accounts'],
+        ['teamMembers', 'team_members'],
       ]
       for (const [camel, snake] of lists) {
         const value = this._getParamValue<unknown>(network, camel, snake)

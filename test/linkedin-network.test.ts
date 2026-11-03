@@ -74,4 +74,13 @@ describe('linkedIn network SDK', () => {
     await responses.create({ messages: [{ role: 'user', content: 'Persona' }], userId: 'actor', specializedAgent: 'deep_people_search', specializedAgentParams: { linkedinNetwork: { networkDistance: [1] } } })
     expect(post).toHaveBeenCalledTimes(3)
   })
+
+  it('accepts a team list in either spelling', async () => {
+    const post = vi.fn().mockResolvedValue({ responseId: 'response' })
+    const responses = new ResponsesResource({ post } as unknown as Http)
+    await responses.create({ messages: [{ role: 'user', content: 'Persona' }], userId: 'actor', specializedAgent: 'deep_people_search', specializedAgentParams: { linkedinNetwork: { teamMembers: ['a@org.com'] } } })
+    await responses.create({ messages: [{ role: 'user', content: 'Persona' }], userId: 'actor', specializedAgent: 'deep_people_search', specializedAgentParams: { linkedinNetwork: { team_members: ['a@org.com'] } } as any })
+    await expect(responses.create({ messages: [{ role: 'user', content: 'Persona' }], userId: 'actor', specializedAgent: 'deep_people_search', specializedAgentParams: { linkedinNetwork: { teamMembers: [1] } } as any })).rejects.toThrow('teamMembers')
+    expect(post).toHaveBeenCalledTimes(2)
+  })
 })
