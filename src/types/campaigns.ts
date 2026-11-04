@@ -162,6 +162,8 @@ export interface CampaignCreate {
   approvalSettings?: ApprovalSettings
   maxProspects?: number
   emailPersonaId?: string
+  /** Exact sending inbox. Omit or use null for automatic selection; immutable after creation. */
+  emailMailboxId?: string | null
   /**
    * User (UUID or email) whose CRM connection the campaign reads. Omit to
    * read as the campaign's own `userId`.
@@ -201,6 +203,8 @@ export interface CampaignResponse {
   approvalSettings: ApprovalSettings
   maxProspects?: number | null
   emailPersonaId?: string | null
+  /** Saved exact sending inbox; null means automatic selection. */
+  emailMailboxId?: string | null
   /** User whose CRM connection the campaign reads; null means its own `userId`. */
   crmUserId?: string | null
   /** CRM company field names the campaign reads (empty when none picked). */

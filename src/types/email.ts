@@ -75,6 +75,8 @@ export interface ConnectInboxRequest {
   personaId?: string
   /** Initial per-mailbox daily cap; no hard ceiling, defaults to 40. */
   dailySendCap?: number
+  /** Allow automatic campaigns to use a new inbox. Defaults true; reconnect preserves the saved value. */
+  allowAutomaticOutreach?: boolean
 }
 
 /**
@@ -86,6 +88,8 @@ export interface MailboxUpdateRequest {
   dailySendCap?: number
   /** Pause/unpause the mailbox. */
   paused?: boolean
+  /** False excludes automatic campaigns; explicitly pinned campaigns may still use this inbox. */
+  allowAutomaticOutreach?: boolean
 }
 
 /** Which inboxes to return from `listInboxes`. */
@@ -204,6 +208,8 @@ export interface MailboxUpdateResponse {
   status: string
   dailySendCap: number
   sendsToday: number
+  /** Saved automatic-campaign eligibility; absent on older backends. */
+  allowAutomaticOutreach?: boolean
   /** Where this mailbox came from: inboxkit | unipile | smtp. */
   source: string
 }
@@ -234,6 +240,8 @@ export interface EmailInboxItem {
   provider?: string | null
   dailySendCap: number
   sendsToday: number
+  /** Automatic-campaign eligibility. Absent on older backends, which default to eligible. */
+  allowAutomaticOutreach?: boolean
   organizationId: string
   organizationName: string
   persona: EmailInboxPersona
