@@ -462,6 +462,12 @@ export interface ApprovalActionRequest {
    * keep the current list.
    */
   ccEmails?: string[]
+  /**
+   * Email cards only: send this email at this future time, as an ISO 8601
+   * string with a timezone. It overrides the campaign's active hours. Omit to
+   * send now.
+   */
+  sendAt?: string
 }
 
 export interface RejectActionRequest {
