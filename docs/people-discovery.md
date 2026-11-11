@@ -26,24 +26,94 @@ shorter `timeoutMs`. HTTP 503 `NO_DATA_SOURCES` becomes `NoDataSourcesError`
 while retaining the status, request ID and backend details. Other operations
 retain their configured retry behavior.
 
-## Find a reviewed committee
+## Find an account's committee
 
 Use `responses.create` with `specializedAgent: 'committee_search'` and
-`CommitteeSearchParams`. The parameters contain exactly one account, reviewed
-`criteriaDefinitions` and `criteriaClassification`, and optional title hints.
-The backend defaults to bounded live retrieval of up to 50 candidates and
-GPT-6 Luna qualification. The return cap is configurable from 1 to 100; the
-selection limit is from 1 to 25. Title hints do not replace reviewed criteria.
+`CommitteeSearchParams`. The parameters hold exactly one account. Everything
+else is optional. The search runs as a background job, so poll the response as
+usual. This section describes SDK 0.5.72.
 
-Existing Responses polling and result handling apply. No extra SDK execution
-method or transport is introduced. Explicit unknown/error outcomes in the
-committee result must remain distinct from an empty successful committee.
+### The request
 
-`responses.create(request, { idempotencyKey })` accepts a stable key for retries
-of the same logical submission. Keep the request unchanged when reusing it.
-Callers responsible for paid work should use a client with `maxRetries: 0` and
-persist the key before submission; the SDK does not persist submission state.
-This optional argument is available in SDK 0.5.65.
+The user message is what you are asking for, in plain words.
+
+```ts
+await client.responses.create({
+  messages: [{
+    role: 'user',
+    content: 'Map the team building the AI travel agent at Airbnb, director level and above, plus the people around that team.',
+  }],
+  specializedAgent: 'committee_search',
+  specializedAgentParams: {
+    accounts: [{ id: 'airbnb.com', name: 'Airbnb', domain: 'airbnb.com' }],
+    focus: 'the team building the AI travel agent',
+    orgChart: { scope: 'focus' },
+  },
+})
+```
+
+Optional fields:
+
+- `titles`: job titles that narrow the people search (up to 30). When you
+  send none, Lumnis writes them from the message and the focus.
+- `criteriaDefinitions` and `criteriaClassification`: reviewed criteria. Send
+  both or neither. When sent, they are used as they are.
+- `writeCriteria`: only used when you send no criteria. `false` (the default)
+  checks each person against your message as written. Every person gets a yes
+  or no, a 0 to 10 score and a reason. `true` has Lumnis write separate
+  criteria from the message first.
+- `focus`: a team, function, product or initiative, in plain words (1 to 2000
+  characters). The account's job posts are read for it, its people are
+  searched for, and every person check sees it. Do not pass a list of team
+  names. If you know a team name, write it inside this text.
+- `depth`: `'standard'` (the default) searches stored profiles. `'deep'` runs
+  the wider deep people search. It finds more people, takes much longer and
+  costs more.
+- `orgChart`: `{ scope: 'company' }` charts everyone found at the account.
+  `{ scope: 'focus' }` charts the people the search said yes to, plus the
+  leaders above them. It needs `focus`.
+- `maxCandidatesPerAccount` (1 to 100, default 50) and `limitPerAccount`
+  (1 to 25, default 25).
+
+A request with no criteria and an empty message is rejected. `retrievalMode`
+and `page` are removed. The backend rejects a request that sends either.
+
+### The result
+
+The criteria used come back in `structuredResponse.criteria`
+(`CriteriaMetadata`). `source` is `provided` when you sent them, `query` when
+your message was used as written, and `generated` when Lumnis wrote them.
+
+The rest is under `structuredResponse.committee.accounts[0]`. The SDK passes
+this subtree through unchanged, so its keys are snake_case.
+
+- `candidates`: each person with a status, score and the decisions behind it.
+- `focus` (`CommitteeFocus`): null when the request had no focus. Otherwise
+  it holds `description` (your focus text), `title_phrases` (the team names
+  searched in people's titles), `posts_read`, and `jobs`. Each job
+  (`CommitteeFocusJob`) has `title`, `url`, `date_added`, `location`,
+  `team_name`, `reports_to` and one `quote`. `status` is `ok`, `partial` or
+  `error`. A skipped focus step never fails the search. `error` is an internal
+  code. Do not show it to customers.
+- `org_chart` (`CommitteeOrgChart`): present only when you asked for a chart.
+  `nodes` lists people and unfilled seats (`kind: 'placeholder'`, no name, a
+  likely title). Each node has its most likely `manager_id` (null at the top),
+  a `confidence` from 0 to 1 (below 0.7 is an estimate), runner-up
+  `other_managers` and `evidence`. `candidate_id` links a node to a committee
+  candidate. `status: 'partial'` means the senior roster was unavailable.
+  `error` means no chart. The people result is the same either way.
+
+`source` is `crustdata_stored`, `crustdata_stored_exa`, `deep_search` or
+`deep_search_exa`. `coverage` is `bounded_stored` or `deep`. The fields
+`page`, `next_page`, `provider_job_id`, `retrieval_reused` and
+`stored_credits_used` are gone.
+
+### Paid work
+
+Pass `{ idempotencyKey }` as the second argument to `responses.create` to
+avoid starting paid work twice. Callers responsible for paid work should use a
+client with `maxRetries: 0` and store the key before sending. The SDK does not
+store it for you.
 
 ## Validation
 

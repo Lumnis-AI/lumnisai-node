@@ -28,3 +28,27 @@ and existing Responses behavior. Provider responses were mocked.
 The published release excludes unrelated network, podcast, competitor and
 campaign edits. Frontend integration and adopting SDK 0.5.65 remain separate
 work. This SDK release did not deploy the backend or change its prompt.
+
+## Message, focus, depth and org chart (release 0.5.72)
+
+Types only. No new method and no client-side checks were added.
+
+`CommitteeSearchParams`:
+
+- `criteriaDefinitions` and `criteriaClassification` are now optional. Send
+  both or neither. With neither, the user message is the request.
+- Added `writeCriteria`, `focus`, `depth` (`'standard'` or `'deep'`) and
+  `orgChart` (`{ scope: 'company' | 'focus' }`).
+- Removed `retrievalMode` and `page`. The backend rejects both.
+
+New result types, all snake_case because the SDK passes
+`structuredResponse.committee` through unchanged: `CommitteeFocus`,
+`CommitteeFocusJob`, `CommitteeOrgChart`, `CommitteeOrgChartNode` and
+`CommitteeOrgChartOtherManager`. `CriteriaMetadata.source` also accepts
+`'query'`.
+
+Tests in `test/committee-search.test.ts` cover the request body for each new
+field and the unchanged result.
+
+Not in this release: CRM contacts in committee search (`crmUserId`, `inCrm`,
+`crm`). Those lines stay uncommitted.

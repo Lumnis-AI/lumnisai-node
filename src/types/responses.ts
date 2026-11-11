@@ -159,7 +159,8 @@ export interface AddAndRunCriterionRequest {
 export interface CriteriaMetadata {
   version: number
   createdAt: string
-  source: 'generated' | 'reused' | 'provided'
+  /** Committee search also uses `query`: the request's message, checked as written. */
+  source: 'generated' | 'reused' | 'provided' | 'query'
   sourceResponseId?: string | null
   criteriaDefinitions: CriterionDefinition[]
   criteriaClassification: CriteriaClassification
@@ -1057,25 +1058,158 @@ export interface CommitteeSearchAccount {
   linkedinUrl?: string | null
 }
 
-/** Parameters for `committee_search` through the existing Responses lifecycle. */
+/**
+ * Parameters for `committee_search` through the existing Responses lifecycle.
+ *
+ * The request's user message is the search query in plain words, as for deep
+ * people search ("Map the team building the AI travel agent at Airbnb,
+ * director level and above"). Send reviewed criteria to use them as they are,
+ * or leave both criteria fields out: each person is then checked against the
+ * query as written, or, with `writeCriteria`, Lumnis first writes separate
+ * criteria from the query, the account and the focus. The criteria used come back in
+ * `structuredResponse.criteria` (`source` is `provided`, `query` or
+ * `generated`). A request with no criteria and no real query is rejected.
+ */
 export interface CommitteeSearchParams {
   /** Exactly one account per specialized agent job. */
   accounts: [CommitteeSearchAccount]
-  /** Optional retrieval hints (up to 30), never substitutes for reviewed criteria. */
+  /** Optional job titles that narrow the stored people search (up to 30; may be empty). */
   titles?: string[]
-  /** 1 to 50 reviewed verdict definitions; extraction columns are unsupported. */
-  criteriaDefinitions: CriterionDefinition[]
-  criteriaClassification: CriteriaClassification
-  /** Defaults to bounded; page is the explicit synchronous live-page option. */
-  retrievalMode?: 'bounded' | 'page'
+  /**
+   * 1 to 50 reviewed verdict definitions; extraction columns are unsupported.
+   * Send both criteria fields or neither.
+   */
+  criteriaDefinitions?: CriterionDefinition[]
+  criteriaClassification?: CriteriaClassification
   /** Defaults to GPT-6 Luna for the specialized agent. */
   filterModel?: 'gpt-6-luna'
-  /** Provider return cap in bounded mode: 1 to 100, default 50. */
+  /** Provider return cap: 1 to 100, default 50. */
   maxCandidatesPerAccount?: number
   /** Selected people: 1 to 25, default 25. */
   limitPerAccount?: number
-  /** Bounded mode requires page 1. */
-  page?: number
+  /**
+   * How hard to look for people. `standard` (the default) searches stored
+   * profiles. `deep` runs deep search's wider people finder instead, stopping
+   * at its fast filter: it finds more people, takes much longer and costs
+   * more. Works with or without `focus`.
+   */
+  depth?: 'standard' | 'deep'
+  /**
+   * A team, function, product or initiative at the account, in plain words
+   * ("the team building the AI travel agent"), 1 to 2000 characters. The
+   * account's job posts are read for it, its people are searched for, and
+   * every person check sees it. Never pass a list of team names; a known name
+   * goes inside this text.
+   */
+  focus?: string
+  /** Also estimate the account's reporting lines. Omit for no chart. */
+  orgChart?: CommitteeOrgChartRequest
+  /**
+   * Only when no criteria are sent. False (the default): each person is
+   * checked against the query as written. True: Lumnis first writes
+   * separate criteria from the query.
+   */
+  writeCriteria?: boolean
+}
+
+/**
+ * Ask committee search for an estimated org chart. `company` charts everyone
+ * found at the account. `focus` charts only the people the search accepted,
+ * plus the leaders above them; it needs
+ * `CommitteeSearchParams.focus`.
+ */
+export interface CommitteeOrgChartRequest {
+  scope: 'company' | 'focus'
+}
+
+/** One job post from a team that does the focus's work (snake_case, unconverted). */
+export interface CommitteeFocusJob {
+  title: string
+  url: string | null
+  /** "YYYY-MM-DD". */
+  date_added: string | null
+  location: string | null
+  /** The team name the post itself uses; empty when it gives none. */
+  team_name: string
+  /** Who the post says the role reports to; empty when it does not say. */
+  reports_to: string
+  /** The line in the post that places it. */
+  quote: string
+}
+
+/**
+ * Focus block at `structuredResponse.committee.accounts[0].focus` (snake_case,
+ * unconverted). Null when the request had no focus. `partial` or `error`
+ * means a focus step was skipped; the committee result still returns.
+ */
+export interface CommitteeFocus {
+  status: 'ok' | 'partial' | 'error'
+  /** Short internal code; never show it to customers. */
+  error: string | null
+  /** The focus text from the request. */
+  description: string
+  /** Short team names searched in people's titles. */
+  title_phrases: string[]
+  /** Every post read, including those left out of `jobs`. */
+  posts_read: number
+  jobs: CommitteeFocusJob[]
+}
+
+/**
+ * A less likely manager for one org chart node. Like everything under
+ * `structuredResponse.committee`, it is passed through unconverted, so its
+ * keys stay snake_case.
+ */
+export interface CommitteeOrgChartOtherManager {
+  /** Id of another node in the same chart. */
+  id: string
+  confidence: number
+}
+
+/** One person, or an unfilled seat, in an estimated org chart (snake_case, unconverted). */
+export interface CommitteeOrgChartNode {
+  id: string
+  /** `placeholder` is a likely but unfound seat: `name` is null, `title` is the likely role. */
+  kind: 'person' | 'placeholder'
+  name: string | null
+  title: string | null
+  linkedin_url: string | null
+  /** Matches `committee.accounts[0].candidates[].candidate_id`, or null when not in the committee. */
+  candidate_id: string | null
+  photo_url?: string | null
+  location?: string | null
+  /** When they joined the company, "YYYY-MM". */
+  started_at?: string | null
+  /** The most likely manager's node id; null at the top of the chart. */
+  manager_id: string | null
+  /** 0 to 1 for the top manager guess. Below 0.7 is an estimate. */
+  confidence: number
+  /** Runner-up managers; with `confidence` they sum to 1. */
+  other_managers: CommitteeOrgChartOtherManager[]
+  /** `stated` when a public source says the line; `inferred` from titles. */
+  basis: 'stated' | 'inferred'
+  /** Short reason for the line. */
+  evidence: string
+}
+
+/**
+ * Estimated org chart at `structuredResponse.committee.accounts[0].org_chart`.
+ * The SDK passes the `committee` subtree through without camelCasing, so these
+ * keys are snake_case. Every `manager_id` and `other_managers[].id` is a node
+ * in `nodes`; there are no loops. `partial` means the senior roster was
+ * unavailable, so the chart holds committee people only. `error` means no
+ * chart; the committee result is unaffected. A `focus` chart holds the
+ * accepted people, plus the leaders above them up to the top of the company.
+ */
+export interface CommitteeOrgChart {
+  status: 'ok' | 'partial' | 'error'
+  error: 'roster_unavailable' | 'roster_too_large' | 'model_failed' | null
+  scope: 'company' | 'focus'
+  /** The focus text from the request, or null. */
+  focus?: string | null
+  model: string
+  root_ids: string[]
+  nodes: CommitteeOrgChartNode[]
 }
 
 export interface LinkedInNetworkSearch {
@@ -1946,8 +2080,8 @@ export interface CreateResponseRequest {
    * Parameters specific to the specialized agent.
    *
    * `account_monitor` takes {@link AccountMonitorParams}, which is a CLOSED
-   * shape. `committee_search` takes {@link CommitteeSearchParams} and requires
-   * reviewed criteria. Other agents take the open {@link SpecializedAgentParams} bag.
+   * shape. `committee_search` takes {@link CommitteeSearchParams}: reviewed
+   * criteria, or none so the message is the request. Other agents take the open {@link SpecializedAgentParams} bag.
    */
   specializedAgentParams?: SpecializedAgentParams | AccountMonitorParams | CommitteeSearchParams
 }

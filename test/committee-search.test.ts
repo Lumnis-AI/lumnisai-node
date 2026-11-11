@@ -1,4 +1,9 @@
-import type { CommitteeSearchParams, CreateResponseRequest } from '../src'
+import type {
+  CommitteeFocus,
+  CommitteeOrgChart,
+  CommitteeSearchParams,
+  CreateResponseRequest,
+} from '../src'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LumnisClient } from '../src'
 
@@ -64,7 +69,6 @@ describe('committee search transport', () => {
         scoringRelevance: 'full',
       }],
       criteriaClassification: { universalCriteria: [], varyingCriteria: [], validationOnlyCriteria: [] },
-      retrievalMode: 'bounded',
       filterModel: 'gpt-6-luna',
       maxCandidatesPerAccount: 75,
       limitPerAccount: 25,
@@ -88,11 +92,196 @@ describe('committee search transport', () => {
       max_candidates_per_account: 75,
       criteria_definitions: [{
         criterion_id: 'Role_OR_security',
-        criterion_text: params.criteriaDefinitions[0].criterionText,
+        criterion_text: params.criteriaDefinitions![0].criterionText,
         weight: 2,
         scoring_relevance: 'full',
       }],
     })
     expect(params).toEqual(original)
+  })
+
+  it('sends the query as the message and no criteria when none were reviewed', async () => {
+    fetchMock.mockResolvedValue(json({ response_id: 'resp-q', status: 'queued' }))
+    const query = 'Map the team building the AI travel agent at Example, director level and above.'
+    await client.responses.create({
+      messages: [{ role: 'user', content: query }],
+      specializedAgent: 'committee_search',
+      specializedAgentParams: {
+        accounts: [{ id: 'account-1', name: 'Example', domain: 'example.com' }],
+        focus: 'the team building the AI travel agent',
+      } satisfies CommitteeSearchParams,
+    })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages).toEqual([{ role: 'user', content: query }])
+    expect(body.specialized_agent_params).not.toHaveProperty('criteria_definitions')
+    expect(body.specialized_agent_params).not.toHaveProperty('criteria_classification')
+    expect(body.specialized_agent_params).not.toHaveProperty('write_criteria')
+  })
+
+  it('sends writeCriteria snake-cased', async () => {
+    fetchMock.mockResolvedValue(json({ response_id: 'resp-w', status: 'queued' }))
+    await client.responses.create({
+      messages: [{ role: 'user', content: 'Map the AI travel agent team at Example.' }],
+      specializedAgent: 'committee_search',
+      specializedAgentParams: {
+        accounts: [{ id: 'account-1', name: 'Example', domain: 'example.com' }],
+        writeCriteria: true,
+      } satisfies CommitteeSearchParams,
+    })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.specialized_agent_params.write_criteria).toBe(true)
+  })
+
+  it('reads the criteria source from the result', async () => {
+    fetchMock.mockResolvedValue(json({
+      response_id: 'resp-g',
+      status: 'succeeded',
+      structured_response: {
+        producer: 'committee_search',
+        criteria: {
+          version: 1,
+          created_at: '2026-11-10T00:00:00Z',
+          source: 'query',
+          source_response_id: null,
+          criteria_definitions: [{ criterion_id: 'request', column_name: 'Matches the request', criterion_text: 'Map the team.' }],
+          criteria_classification: { universal_criteria: [], varying_criteria: [], validation_only_criteria: [] },
+        },
+      },
+    }))
+    const response = await client.responses.get('resp-g')
+    expect(response.structuredResponse?.criteria).toMatchObject({
+      source: 'query',
+      criteriaDefinitions: [{ criterionId: 'request', columnName: 'Matches the request', criterionText: 'Map the team.' }],
+    })
+  })
+
+  it('sends the org chart option snake-cased', async () => {
+    fetchMock.mockResolvedValue(json({ response_id: 'resp-2', status: 'queued' }))
+    const params: CommitteeSearchParams = {
+      accounts: [{ id: 'account-1', name: 'Example', domain: 'example.com' }],
+      criteriaDefinitions: [{
+        criterionId: 'Role',
+        columnName: 'Role',
+        criterionText: 'Security leader.',
+        criterionType: 'universal',
+        weight: 1,
+        scoringRelevance: 'full',
+      }],
+      criteriaClassification: { universalCriteria: [], varyingCriteria: [], validationOnlyCriteria: [] },
+      orgChart: { scope: 'company' },
+    }
+    await client.responses.create({
+      messages: [{ role: 'user', content: 'Find this committee.' }],
+      specializedAgent: 'committee_search',
+      specializedAgentParams: params,
+    })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.specialized_agent_params.org_chart).toEqual({ scope: 'company' })
+    expect(body.specialized_agent_params).not.toHaveProperty('orgChart')
+  })
+
+  it('sends the focus text unchanged with a focus org chart', async () => {
+    fetchMock.mockResolvedValue(json({ response_id: 'resp-3', status: 'queued' }))
+    const focus = 'the team building the AI travel agent'
+    const params: CommitteeSearchParams = {
+      accounts: [{ id: 'account-1', name: 'Example', domain: 'example.com' }],
+      criteriaDefinitions: [{
+        criterionId: 'Role',
+        columnName: 'Role',
+        criterionText: 'Director or above on the team, or leading a team around it.',
+        criterionType: 'universal',
+        weight: 1,
+        scoringRelevance: 'full',
+      }],
+      criteriaClassification: { universalCriteria: [], varyingCriteria: [], validationOnlyCriteria: [] },
+      focus,
+      orgChart: { scope: 'focus' },
+    }
+    await client.responses.create({
+      messages: [{ role: 'user', content: 'Map this focus.' }],
+      specializedAgent: 'committee_search',
+      specializedAgentParams: params,
+    })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.specialized_agent_params.focus).toBe(focus)
+    expect(body.specialized_agent_params.org_chart).toEqual({ scope: 'focus' })
+  })
+
+  it('sends depth only when asked for', async () => {
+    fetchMock.mockImplementation(async () => json({ response_id: 'resp-4', status: 'queued' }))
+    const params: CommitteeSearchParams = {
+      accounts: [{ id: 'account-1', name: 'Example', domain: 'example.com' }],
+      criteriaDefinitions: [{
+        criterionId: 'Role',
+        columnName: 'Role',
+        criterionText: 'Security leader.',
+        criterionType: 'universal',
+        weight: 1,
+        scoringRelevance: 'full',
+      }],
+      criteriaClassification: { universalCriteria: [], varyingCriteria: [], validationOnlyCriteria: [] },
+    }
+    const send = async (specializedAgentParams: CommitteeSearchParams) => {
+      await client.responses.create({
+        messages: [{ role: 'user', content: 'Find this committee.' }],
+        specializedAgent: 'committee_search',
+        specializedAgentParams,
+      })
+      return JSON.parse(fetchMock.mock.calls.at(-1)![1].body).specialized_agent_params
+    }
+    expect(await send(params)).not.toHaveProperty('depth')
+    expect((await send({ ...params, depth: 'deep' })).depth).toBe('deep')
+  })
+
+  it('returns the focus block and focus chart under committee unconverted', async () => {
+    const account: {
+      focus: CommitteeFocus
+      org_chart: CommitteeOrgChart
+    } = {
+      focus: {
+        status: 'ok',
+        error: null,
+        description: 'the team building the AI travel agent',
+        title_phrases: ['AI Experiences', 'Conversational Products'],
+        posts_read: 115,
+        jobs: [{
+          title: 'Staff Machine Learning Engineer',
+          url: 'https://example.com/jobs/1',
+          date_added: '2025-07-30',
+          location: 'San Francisco, CA',
+          team_name: 'AI Experience Team',
+          reports_to: '',
+          quote: 'We are building the ultimate concierge.',
+        }],
+      },
+      org_chart: {
+        status: 'ok',
+        error: null,
+        scope: 'focus',
+        focus: 'the team building the AI travel agent',
+        model: 'gpt-6-luna',
+        root_ids: ['p1'],
+        nodes: [{
+          id: 'p1',
+          kind: 'person',
+          name: 'Example Leader',
+          title: 'CTO',
+          linkedin_url: null,
+          candidate_id: null,
+          manager_id: null,
+          confidence: 1,
+          other_managers: [],
+          basis: 'inferred',
+          evidence: '',
+        }],
+      },
+    }
+    fetchMock.mockResolvedValue(json({
+      response_id: 'resp-4',
+      status: 'succeeded',
+      structured_response: { committee: { accounts: [account] } },
+    }))
+    const response = await client.responses.get('resp-4')
+    expect(response.structuredResponse?.committee.accounts[0]).toEqual(account)
   })
 })
