@@ -115,21 +115,8 @@ describe('committee search transport', () => {
     expect(body.messages).toEqual([{ role: 'user', content: query }])
     expect(body.specialized_agent_params).not.toHaveProperty('criteria_definitions')
     expect(body.specialized_agent_params).not.toHaveProperty('criteria_classification')
-    expect(body.specialized_agent_params).not.toHaveProperty('write_criteria')
-  })
-
-  it('sends writeCriteria snake-cased', async () => {
-    fetchMock.mockResolvedValue(json({ response_id: 'resp-w', status: 'queued' }))
-    await client.responses.create({
-      messages: [{ role: 'user', content: 'Map the AI travel agent team at Example.' }],
-      specializedAgent: 'committee_search',
-      specializedAgentParams: {
-        accounts: [{ id: 'account-1', name: 'Example', domain: 'example.com' }],
-        writeCriteria: true,
-      } satisfies CommitteeSearchParams,
-    })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.specialized_agent_params.write_criteria).toBe(true)
+    expect(body.specialized_agent_params).not.toHaveProperty('org_chart')
+    expect(body.specialized_agent_params).not.toHaveProperty('limit_per_account')
   })
 
   it('reads the criteria source from the result', async () => {
@@ -168,7 +155,7 @@ describe('committee search transport', () => {
         scoringRelevance: 'full',
       }],
       criteriaClassification: { universalCriteria: [], varyingCriteria: [], validationOnlyCriteria: [] },
-      orgChart: { scope: 'company' },
+      orgChart: true,
     }
     await client.responses.create({
       messages: [{ role: 'user', content: 'Find this committee.' }],
@@ -176,11 +163,11 @@ describe('committee search transport', () => {
       specializedAgentParams: params,
     })
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.specialized_agent_params.org_chart).toEqual({ scope: 'company' })
+    expect(body.specialized_agent_params.org_chart).toBe(true)
     expect(body.specialized_agent_params).not.toHaveProperty('orgChart')
   })
 
-  it('sends the focus text unchanged with a focus org chart', async () => {
+  it('sends the focus text unchanged with an org chart and no people limit', async () => {
     fetchMock.mockResolvedValue(json({ response_id: 'resp-3', status: 'queued' }))
     const focus = 'the team building the AI travel agent'
     const params: CommitteeSearchParams = {
@@ -195,7 +182,8 @@ describe('committee search transport', () => {
       }],
       criteriaClassification: { universalCriteria: [], varyingCriteria: [], validationOnlyCriteria: [] },
       focus,
-      orgChart: { scope: 'focus' },
+      orgChart: true,
+      limitPerAccount: 200,
     }
     await client.responses.create({
       messages: [{ role: 'user', content: 'Map this focus.' }],
@@ -204,7 +192,8 @@ describe('committee search transport', () => {
     })
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.specialized_agent_params.focus).toBe(focus)
-    expect(body.specialized_agent_params.org_chart).toEqual({ scope: 'focus' })
+    expect(body.specialized_agent_params.org_chart).toBe(true)
+    expect(body.specialized_agent_params.limit_per_account).toBe(200)
   })
 
   it('sends depth only when asked for', async () => {
@@ -233,7 +222,7 @@ describe('committee search transport', () => {
     expect((await send({ ...params, depth: 'deep' })).depth).toBe('deep')
   })
 
-  it('returns the focus block and focus chart under committee unconverted', async () => {
+  it('returns the focus block and org chart under committee unconverted', async () => {
     const account: {
       focus: CommitteeFocus
       org_chart: CommitteeOrgChart
@@ -257,7 +246,6 @@ describe('committee search transport', () => {
       org_chart: {
         status: 'ok',
         error: null,
-        scope: 'focus',
         focus: 'the team building the AI travel agent',
         model: 'gpt-6-luna',
         root_ids: ['p1'],

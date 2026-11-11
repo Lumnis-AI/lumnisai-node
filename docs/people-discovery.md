@@ -31,7 +31,7 @@ retain their configured retry behavior.
 Use `responses.create` with `specializedAgent: 'committee_search'` and
 `CommitteeSearchParams`. The parameters hold exactly one account. Everything
 else is optional. The search runs as a background job, so poll the response as
-usual. This section describes SDK 0.5.72.
+usual. This section describes SDK 0.5.73.
 
 ### The request
 
@@ -41,13 +41,13 @@ The user message is what you are asking for, in plain words.
 await client.responses.create({
   messages: [{
     role: 'user',
-    content: 'Map the team building the AI travel agent at Airbnb, director level and above, plus the people around that team.',
+    content: 'Map the team building the AI travel agent at Airbnb, director level and above.',
   }],
   specializedAgent: 'committee_search',
   specializedAgentParams: {
     accounts: [{ id: 'airbnb.com', name: 'Airbnb', domain: 'airbnb.com' }],
     focus: 'the team building the AI travel agent',
-    orgChart: { scope: 'focus' },
+    orgChart: true,
   },
 })
 ```
@@ -57,11 +57,8 @@ Optional fields:
 - `titles`: job titles that narrow the people search (up to 30). When you
   send none, Lumnis writes them from the message and the focus.
 - `criteriaDefinitions` and `criteriaClassification`: reviewed criteria. Send
-  both or neither. When sent, they are used as they are.
-- `writeCriteria`: only used when you send no criteria. `false` (the default)
-  checks each person against your message as written. Every person gets a yes
-  or no, a 0 to 10 score and a reason. `true` has Lumnis write separate
-  criteria from the message first.
+  both or neither. When sent, they are used as they are. With neither, Lumnis
+  writes the criteria from your message, the way a people search does.
 - `focus`: a team, function, product or initiative, in plain words (1 to 2000
   characters). The account's job posts are read for it, its people are
   searched for, and every person check sees it. Do not pass a list of team
@@ -69,20 +66,23 @@ Optional fields:
 - `depth`: `'standard'` (the default) searches stored profiles. `'deep'` runs
   the wider deep people search. It finds more people, takes much longer and
   costs more.
-- `orgChart`: `{ scope: 'company' }` charts everyone found at the account.
-  `{ scope: 'focus' }` charts the people the search said yes to, plus the
-  leaders above them. It needs `focus`.
-- `maxCandidatesPerAccount` (1 to 100, default 50) and `limitPerAccount`
-  (1 to 25, default 25).
+- `orgChart`: `true` also estimates who reports to whom among the people the
+  search kept, with the leaders above them. Default `false`. It works with or
+  without `focus`.
+- `maxCandidatesPerAccount`: people fetched and checked per search (1 to 100,
+  default 100).
+- `limitPerAccount`: select only the best this many people (1 or more, no
+  maximum). Leave it out and everyone who passes is selected.
 
-A request with no criteria and an empty message is rejected. `retrievalMode`
-and `page` are removed. The backend rejects a request that sends either.
+A request with no criteria and an empty message is rejected. `retrievalMode`,
+`page` and `writeCriteria` are removed. The backend rejects a request that
+sends any of them.
 
 ### The result
 
 The criteria used come back in `structuredResponse.criteria`
-(`CriteriaMetadata`). `source` is `provided` when you sent them, `query` when
-your message was used as written, and `generated` when Lumnis wrote them.
+(`CriteriaMetadata`). `source` is `provided` when you sent them and
+`generated` when Lumnis wrote them.
 
 The rest is under `structuredResponse.committee.accounts[0]`. The SDK passes
 this subtree through unchanged, so its keys are snake_case.
@@ -100,8 +100,8 @@ this subtree through unchanged, so its keys are snake_case.
   likely title). Each node has its most likely `manager_id` (null at the top),
   a `confidence` from 0 to 1 (below 0.7 is an estimate), runner-up
   `other_managers` and `evidence`. `candidate_id` links a node to a committee
-  candidate. `status: 'partial'` means the senior roster was unavailable.
-  `error` means no chart. The people result is the same either way.
+  candidate. `status` is `ok` or `error`. `error` means no chart, and the
+  people result is the same either way.
 
 `source` is `crustdata_stored`, `crustdata_stored_exa`, `deep_search` or
 `deep_search_exa`. `coverage` is `bounded_stored` or `deep`. The fields

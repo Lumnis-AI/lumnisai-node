@@ -52,3 +52,31 @@ field and the unchanged result.
 
 Not in this release: CRM contacts in committee search (`crmUserId`, `inCrm`,
 `crm`). Those lines stay uncommitted.
+
+## One org chart, no written criteria (release 0.5.73)
+
+Types only, to match the backend clean-up.
+
+`CommitteeSearchParams`:
+
+- `orgChart` is now a boolean. `true` asks for the chart. The
+  `CommitteeOrgChartRequest` type and its `scope` are removed. There is one
+  chart: the people the search kept, plus the leaders above them.
+- `writeCriteria` is removed. With no criteria sent, the backend always
+  writes them from the message. The backend rejects the field.
+- `limitPerAccount` has no maximum. Left out, everyone who passes is selected.
+- `maxCandidatesPerAccount` defaults to 100.
+
+`CommitteeOrgChart`:
+
+- `scope` is removed. `focus` stays.
+- `status` is `'ok'` or `'error'`. `error` is `'model_failed'` or null. The
+  `'partial'` status and the two roster errors are gone.
+
+The criteria `source` for a committee search is `'provided'` or
+`'generated'`.
+
+Not typed in the SDK, so unchanged here: the web search receipt
+(`exa_retrieval.reason` is now `enough_people_found` in place of
+`candidate_limit_reached`) and each candidate's `selected` flag, which now
+marks everyone who passed unless `limitPerAccount` was sent.

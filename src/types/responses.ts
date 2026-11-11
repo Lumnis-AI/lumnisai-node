@@ -159,7 +159,7 @@ export interface AddAndRunCriterionRequest {
 export interface CriteriaMetadata {
   version: number
   createdAt: string
-  /** Committee search also uses `query`: the request's message, checked as written. */
+  /** `query` appears only on committee searches run before 0.5.73. */
   source: 'generated' | 'reused' | 'provided' | 'query'
   sourceResponseId?: string | null
   criteriaDefinitions: CriterionDefinition[]
@@ -1064,11 +1064,10 @@ export interface CommitteeSearchAccount {
  * The request's user message is the search query in plain words, as for deep
  * people search ("Map the team building the AI travel agent at Airbnb,
  * director level and above"). Send reviewed criteria to use them as they are,
- * or leave both criteria fields out: each person is then checked against the
- * query as written, or, with `writeCriteria`, Lumnis first writes separate
- * criteria from the query, the account and the focus. The criteria used come back in
- * `structuredResponse.criteria` (`source` is `provided`, `query` or
- * `generated`). A request with no criteria and no real query is rejected.
+ * or leave both criteria fields out: Lumnis then writes the criteria from the
+ * query, the account and the focus. The criteria used come back in
+ * `structuredResponse.criteria` (`source` is `provided` or `generated`). A
+ * request with no criteria and no real query is rejected.
  */
 export interface CommitteeSearchParams {
   /** Exactly one account per specialized agent job. */
@@ -1083,9 +1082,12 @@ export interface CommitteeSearchParams {
   criteriaClassification?: CriteriaClassification
   /** Defaults to GPT-6 Luna for the specialized agent. */
   filterModel?: 'gpt-6-luna'
-  /** Provider return cap: 1 to 100, default 50. */
+  /** People fetched and checked per search: 1 to 100, default 100. */
   maxCandidatesPerAccount?: number
-  /** Selected people: 1 to 25, default 25. */
+  /**
+   * Select only the best this many people (1 or more, no maximum). Left out,
+   * everyone who passes is selected.
+   */
   limitPerAccount?: number
   /**
    * How hard to look for people. `standard` (the default) searches stored
@@ -1102,24 +1104,11 @@ export interface CommitteeSearchParams {
    * goes inside this text.
    */
   focus?: string
-  /** Also estimate the account's reporting lines. Omit for no chart. */
-  orgChart?: CommitteeOrgChartRequest
   /**
-   * Only when no criteria are sent. False (the default): each person is
-   * checked against the query as written. True: Lumnis first writes
-   * separate criteria from the query.
+   * True also estimates who reports to whom among the people the search
+   * kept, with the leaders above them. Default false: no chart.
    */
-  writeCriteria?: boolean
-}
-
-/**
- * Ask committee search for an estimated org chart. `company` charts everyone
- * found at the account. `focus` charts only the people the search accepted,
- * plus the leaders above them; it needs
- * `CommitteeSearchParams.focus`.
- */
-export interface CommitteeOrgChartRequest {
-  scope: 'company' | 'focus'
+  orgChart?: boolean
 }
 
 /** One job post from a team that does the focus's work (snake_case, unconverted). */
@@ -1184,7 +1173,7 @@ export interface CommitteeOrgChartNode {
   manager_id: string | null
   /** 0 to 1 for the top manager guess. Below 0.7 is an estimate. */
   confidence: number
-  /** Runner-up managers; with `confidence` they sum to 1. */
+  /** Runner-up managers; with `confidence` they sum to 1 or less. */
   other_managers: CommitteeOrgChartOtherManager[]
   /** `stated` when a public source says the line; `inferred` from titles. */
   basis: 'stated' | 'inferred'
@@ -1196,15 +1185,13 @@ export interface CommitteeOrgChartNode {
  * Estimated org chart at `structuredResponse.committee.accounts[0].org_chart`.
  * The SDK passes the `committee` subtree through without camelCasing, so these
  * keys are snake_case. Every `manager_id` and `other_managers[].id` is a node
- * in `nodes`; there are no loops. `partial` means the senior roster was
- * unavailable, so the chart holds committee people only. `error` means no
- * chart; the committee result is unaffected. A `focus` chart holds the
- * accepted people, plus the leaders above them up to the top of the company.
+ * in `nodes`; there are no loops. The chart holds the people the search
+ * kept, plus the leaders above them. `error` means no chart; the committee
+ * result is unaffected.
  */
 export interface CommitteeOrgChart {
-  status: 'ok' | 'partial' | 'error'
-  error: 'roster_unavailable' | 'roster_too_large' | 'model_failed' | null
-  scope: 'company' | 'focus'
+  status: 'ok' | 'error'
+  error: 'model_failed' | null
   /** The focus text from the request, or null. */
   focus?: string | null
   model: string
