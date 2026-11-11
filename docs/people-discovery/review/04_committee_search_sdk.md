@@ -65,7 +65,8 @@ Types only, to match the backend clean-up.
 - `writeCriteria` is removed. With no criteria sent, the backend always
   writes them from the message. The backend rejects the field.
 - `limitPerAccount` has no maximum. Left out, everyone who passes is selected.
-- `maxCandidatesPerAccount` defaults to 100.
+- `maxCandidatesPerAccount` defaults to 1000 and has no maximum. The search
+  reads saved profiles in pages of 100 and stops when the matches run out.
 
 `CommitteeOrgChart`:
 

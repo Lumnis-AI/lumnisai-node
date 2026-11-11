@@ -69,8 +69,9 @@ Optional fields:
 - `orgChart`: `true` also estimates who reports to whom among the people the
   search kept, with the leaders above them. Default `false`. It works with or
   without `focus`.
-- `maxCandidatesPerAccount`: people fetched and checked per search (1 to 100,
-  default 100).
+- `maxCandidatesPerAccount`: most people fetched and checked per search (1 or
+  more, default 1000, no maximum). The search reads saved profiles in pages of
+  100 and stops when the matches run out.
 - `limitPerAccount`: select only the best this many people (1 or more, no
   maximum). Leave it out and everyone who passes is selected.
 

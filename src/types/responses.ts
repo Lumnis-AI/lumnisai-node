@@ -1082,7 +1082,11 @@ export interface CommitteeSearchParams {
   criteriaClassification?: CriteriaClassification
   /** Defaults to GPT-6 Luna for the specialized agent. */
   filterModel?: 'gpt-6-luna'
-  /** People fetched and checked per search: 1 to 100, default 100. */
+  /**
+   * Most people fetched and checked per search: 1 or more, default 1000, no
+   * maximum. The search reads saved profiles in pages of 100 and stops when
+   * the matches run out.
+   */
   maxCandidatesPerAccount?: number
   /**
    * Select only the best this many people (1 or more, no maximum). Left out,
