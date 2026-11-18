@@ -189,6 +189,8 @@ export interface CampaignUpdate {
 
 export interface CampaignResponse {
   id: string
+  /** Returned on start. Individual dates become available as prospect plans are saved. */
+  planSummary?: CampaignPlanSummary | null
   tenantId: string
   organizationId?: string | null
   userId: string
@@ -318,6 +320,62 @@ export interface PauseProspectsResponse {
   affected: number
 }
 
+export interface CampaignPlanStep {
+  /** Stable when this step is rescheduled. */
+  id: string
+  label: string
+  action: string
+  channel: 'email' | 'linkedin' | 'phone' | 'none'
+  /** Campaign-local date (YYYY-MM-DD), or null until the condition has a known date. */
+  day: string | null
+  condition: string
+  status: 'planned' | 'ready' | 'scheduled' | 'done' | 'cancelled'
+  /** Earliest draft preparation time when the playbook specifies a boundary. */
+  prepareAfter?: string | null
+  /** Draft deadline if specified by the playbook. */
+  readyBy?: string | null
+  dueAt?: string | null
+  changeReason?: string | null
+}
+
+export interface CampaignProspectPlan {
+  timezone: string
+  steps: CampaignPlanStep[]
+  /** Explicit contact hold, such as a requested return date or out-of-office reply. */
+  holdUntil?: string | null
+  changeReason?: string | null
+  /** Why the plan looks this way, written by the router. Null on older plans. */
+  reasoning?: string | null
+}
+
+export interface CampaignPlanSummary {
+  timezone: string
+  prospectCount: number
+  plannedProspectCount: number
+  upcoming: {
+    /** Null when the step waits on an event, named in `condition`. */
+    day: string | null
+    label: string
+    condition: string
+    prospectCount: number
+    /** Present when the entire group shares that time. */
+    readyBy?: string | null
+    dueAt?: string | null
+  }[]
+}
+
+/** An outreach touch executed on the current day in the campaign's time zone. */
+export interface CampaignCompletedTouch {
+  id: string
+  prospectId: string
+  actionType: CampaignActionType
+  /** Delivery channel for meeting and introduction confirmations. */
+  channel?: 'email' | 'linkedin' | null
+  executedAt: string
+  planStepId?: string | null
+  timezone: string
+}
+
 export interface CampaignProspectResponse {
   id: string
   campaignId: string
@@ -333,6 +391,9 @@ export interface CampaignProspectResponse {
   senderAccountId?: string | null
   senderMailboxId?: string | null
   pendingActionId?: string | null
+  completedToday?: CampaignCompletedTouch[]
+  /** Absent for older APIs or until the router saves its first plan. */
+  plan?: CampaignProspectPlan | null
   previousState?: string | null
   snoozedUntil?: string | null
   nextEvaluateAt?: string | null
@@ -464,10 +525,11 @@ export interface ApprovalActionRequest {
   ccEmails?: string[]
   /**
    * Email cards only: send this email at this future time, as an ISO 8601
-   * string with a timezone. It overrides the campaign's active hours. Omit to
-   * send now.
+   * string with a timezone. Omit to use the draft's planned sending time.
    */
   sendAt?: string
+  /** Send an approved email early. Mutually exclusive with sendAt. */
+  sendNow?: boolean
 }
 
 export interface RejectActionRequest {
@@ -547,6 +609,7 @@ export interface StoppedBreakdown {
 }
 
 export interface CampaignMetricsResponse {
+  planSummary?: CampaignPlanSummary | null
   totalProspects: number
   activeProspects: number
   /** Successful outreach completion; omitted by older API deployments. */

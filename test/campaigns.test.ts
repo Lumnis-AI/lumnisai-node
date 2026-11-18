@@ -22,6 +22,96 @@ function createMockHttp(): Http {
   } as unknown as Http
 }
 
+describe('campaign plan wire format', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads the same dated step on list, detail, start and metrics responses', async () => {
+    const step = {
+      id: 'email-2',
+      label: 'Email 2',
+      action: 'send_follow_up_email',
+      channel: 'email',
+      day: '2026-11-19',
+      condition: 'If no reply',
+      status: 'ready',
+      prepare_after: '2026-11-19T11:00:00Z',
+      ready_by: '2026-11-19T12:00:00Z',
+      due_at: '2026-11-19T15:00:00Z',
+    }
+    const conditional = {
+      id: 'accepted-dm',
+      label: 'Send LinkedIn message',
+      action: 'send_initial_message_linkedin',
+      channel: 'linkedin',
+      day: null,
+      condition: 'After they accept the invitation',
+      status: 'planned',
+      prepare_after: null,
+      ready_by: null,
+      due_at: null,
+    }
+    const plan = { timezone: 'America/New_York', steps: [step, conditional], hold_until: '2026-11-18T14:00:00Z', change_reason: null, reasoning: 'Two emails went unanswered, so the next touch is a LinkedIn message.' }
+    const receipt = { id: 'receipt', prospect_id: 'people-1', action_type: 'smart_like_linkedin', executed_at: '2026-11-19T14:15:00Z', plan_step_id: 'like-1', timezone: plan.timezone }
+    const confirmation = { id: 'confirmation', prospect_id: 'people-1', action_type: 'meeting_booked', channel: 'email', executed_at: '2026-11-19T15:02:00Z', timezone: plan.timezone }
+    const prospect = { plan, completed_today: [receipt, confirmation] }
+    const summary = { timezone: plan.timezone, prospect_count: 2, planned_prospect_count: 1, upcoming: [{ day: step.day, label: step.label, condition: step.condition, prospect_count: 1, ready_by: step.ready_by, due_at: step.due_at }, { day: null, label: conditional.label, condition: conditional.condition, prospect_count: 1 }] }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/prospects'))
+        return Response.json([prospect, { id: 'older-prospect' }])
+      if (url.endsWith('/people-1'))
+        return Response.json({ prospect, actions: [] })
+      return Response.json({ plan_summary: summary })
+    }))
+    const campaigns = new CampaignsResource(new Http({ baseUrl: 'https://api.invalid', maxRetries: 0 }))
+    const [current, legacy] = await campaigns.listProspects('campaign')
+    expect(current?.plan?.steps[0]?.dueAt).toBe(step.due_at)
+    expect(current?.plan?.steps[0]?.prepareAfter).toBe(step.prepare_after)
+    expect(current?.plan?.steps[0]?.readyBy).toBe(step.ready_by)
+    expect(current?.plan?.steps[1]).toMatchObject({
+      id: conditional.id,
+      day: null,
+      condition: conditional.condition,
+      prepareAfter: null,
+      readyBy: null,
+      dueAt: null,
+    })
+    expect(legacy?.plan).toBeUndefined()
+    expect(legacy?.completedToday).toBeUndefined()
+    expect(current?.completedToday?.[0]).toMatchObject({ executedAt: receipt.executed_at, planStepId: 'like-1' })
+    expect(current?.completedToday?.[1]).toMatchObject({ actionType: 'meeting_booked', channel: 'email' })
+    const detail = await campaigns.getProspectDetail('campaign', 'people-1')
+    expect(detail.prospect.plan).toEqual(current?.plan)
+    expect(detail.prospect.completedToday).toEqual(current?.completedToday)
+    const metrics = await campaigns.getMetrics('campaign')
+    expect(metrics.planSummary?.plannedProspectCount).toBe(1)
+    expect(metrics.planSummary?.upcoming[0]?.dueAt).toBe(step.due_at)
+    expect(metrics.planSummary?.upcoming[1]).toEqual({
+      day: null,
+      label: conditional.label,
+      condition: conditional.condition,
+      prospectCount: 1,
+    })
+    expect((await campaigns.listProspects('campaign'))[0]?.plan?.holdUntil).toBe(plan.hold_until)
+    expect(current?.plan?.reasoning).toBe(plan.reasoning)
+    expect((await campaigns.startCampaign('campaign')).planSummary).toEqual(metrics.planSummary)
+  })
+
+  it('sends an explicit early approval only when requested', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({}))
+    vi.stubGlobal('fetch', fetch)
+    const campaigns = new CampaignsResource(new Http({ baseUrl: 'https://api.invalid', maxRetries: 0 }))
+    await campaigns.approveAction('draft', { userId: 'owner', sendNow: true })
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ user_id: 'owner', send_now: true })
+  })
+
+  it('starts asynchronously at the encoded campaign URL', async () => {
+    const http = createMockHttp()
+    const campaigns = new CampaignsResource(http)
+    await campaigns.startCampaign('c/42')
+    expect(http.post).toHaveBeenCalledWith('/campaigns/c%2F42/start')
+  })
+})
+
 describe('historical funnel contract', () => {
   afterEach(() => vi.unstubAllGlobals())
 

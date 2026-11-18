@@ -198,7 +198,7 @@ export class CampaignsResource {
 
   /**
    * Start a campaign (draft → active).
-   * Prospects begin evaluation on the next sweep cycle.
+   * Returns after activation. Read campaign metrics for the latest plan coverage.
    */
   async startCampaign(campaignId: string): Promise<CampaignResponse> {
     return this.http.post<CampaignResponse>(
