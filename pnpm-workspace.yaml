@@ -18,7 +18,7 @@ catalogs:
   inlined:
     '@antfu/utils': ^9.1.0
   testing:
-    vitest: ^3.0.8
+    vitest: ^4.1.11
     vitest-package-exports: ^0.1.1
     yaml: ^2.7.0
   types:
