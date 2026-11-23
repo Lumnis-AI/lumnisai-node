@@ -196,6 +196,27 @@ export interface TeardownOrgResponse {
   message: string
 }
 
+export interface AddDomainsRequest {
+  /** Number of new sending domains to buy (>= 1). */
+  count: number
+}
+
+export interface AddDomainsResponse {
+  message: string
+}
+
+export interface MoveMailboxRequest {
+  /** Sender persona that should own the mailbox. */
+  personaId: string
+}
+
+export interface MoveMailboxResponse {
+  mailboxId: string
+  personaId: string
+  /** New address, built from the persona's name. */
+  emailAddress: string
+}
+
 export interface ConnectInboxResponse {
   /** Hosted-auth redirect URL; the user authes there to complete the connect. */
   redirectUrl?: string | null

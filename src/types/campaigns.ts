@@ -164,6 +164,8 @@ export interface CampaignCreate {
   emailPersonaId?: string
   /** Exact sending inbox. Omit or use null for automatic selection; immutable after creation. */
   emailMailboxId?: string | null
+  /** Mailboxes the campaign may never send from. Cannot include `emailMailboxId`. */
+  excludedEmailMailboxIds?: string[]
   /**
    * User (UUID or email) whose CRM connection the campaign reads. Omit to
    * read as the campaign's own `userId`.
@@ -183,6 +185,11 @@ export interface CampaignUpdate {
   approvalSettings?: ApprovalSettings
   maxProspects?: number
   emailPersonaId?: string
+  /**
+   * Mailboxes the campaign may never send from. Replaces the saved list; send
+   * `[]` to clear it. Allowed while draft, active or paused.
+   */
+  excludedEmailMailboxIds?: string[]
   /** CRM company field names to read. Send `[]` to clear the list. */
   crmCompanyFields?: string[]
 }
@@ -207,6 +214,8 @@ export interface CampaignResponse {
   emailPersonaId?: string | null
   /** Saved exact sending inbox; null means automatic selection. */
   emailMailboxId?: string | null
+  /** Mailboxes the campaign may never send from (empty when none). */
+  excludedEmailMailboxIds: string[]
   /** User whose CRM connection the campaign reads; null means its own `userId`. */
   crmUserId?: string | null
   /** CRM company field names the campaign reads (empty when none picked). */

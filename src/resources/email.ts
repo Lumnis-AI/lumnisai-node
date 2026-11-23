@@ -1,5 +1,7 @@
 import type { Http } from '../core/http'
 import type {
+  AddDomainsRequest,
+  AddDomainsResponse,
   AddOrgMemberRequest,
   AddOrgMemberResponse,
   AddPersonaRequest,
@@ -17,6 +19,8 @@ import type {
   ListInboxesParams,
   MailboxUpdateRequest,
   MailboxUpdateResponse,
+  MoveMailboxRequest,
+  MoveMailboxResponse,
   RemoveOrgMemberResponse,
   TeardownOrgResponse,
   UpdatePersonaRequest,
@@ -199,7 +203,86 @@ export class EmailResource {
     )
   }
 
+  /**
+   * Move a mailbox to another sender persona.
+   *
+   * The mailbox is renamed at InboxKit to the persona's name and next free
+   * address on its domain. Refused (422) once the mailbox has written to
+   * prospects. Requires admin role on the org.
+   */
+  async moveMailbox(
+    orgId: string,
+    mailboxId: string,
+    userId: string,
+    request: MoveMailboxRequest,
+  ): Promise<MoveMailboxResponse> {
+    return this.http.post<MoveMailboxResponse>(
+      `/email/organizations/${encodeURIComponent(orgId)}/mailboxes/${encodeURIComponent(mailboxId)}/move`,
+      request,
+      { params: { user_id: userId } },
+    )
+  }
+
+  // ==================== Domains ====================
+
+  /**
+   * Buy more sending domains for an organization, in the background.
+   *
+   * No mailboxes are created: raise a persona's daily cap to fill the new
+   * domains once they show as warming. Give every persona a cap first, or
+   * the scheduler fills uncapped personas. Requires admin role on the org.
+   */
+  async addDomains(
+    orgId: string,
+    userId: string,
+    request: AddDomainsRequest,
+  ): Promise<AddDomainsResponse> {
+    return this.http.post<AddDomainsResponse>(
+      `/email/organizations/${encodeURIComponent(orgId)}/domains`,
+      request,
+      { params: { user_id: userId } },
+    )
+  }
+
   // ==================== Teardown ====================
+
+  /**
+   * Remove one sending domain from an organization.
+   *
+   * Cancels its ordinary mailboxes, pauses its admin mailbox (kept alive at
+   * InboxKit), and pauses the domain until it is retired. Prospects first
+   * emailed from this domain get no further email from it. Sent history is
+   * kept. Requires admin role on the org.
+   */
+  async teardownDomain(
+    orgId: string,
+    domainName: string,
+    userId: string,
+  ): Promise<TeardownOrgResponse> {
+    return this.http.post<TeardownOrgResponse>(
+      `/email/organizations/${encodeURIComponent(orgId)}/domains/${encodeURIComponent(domainName)}/teardown`,
+      {},
+      { params: { user_id: userId } },
+    )
+  }
+
+  /**
+   * Cancel one ordinary InboxKit mailbox and mark it retired.
+   *
+   * A domain's admin mailbox is refused (422): remove the domain instead.
+   * Sent history is kept. Requires admin role on the org.
+   */
+  async teardownMailbox(
+    orgId: string,
+    mailboxId: string,
+    userId: string,
+  ): Promise<TeardownOrgResponse> {
+    return this.http.post<TeardownOrgResponse>(
+      `/email/organizations/${encodeURIComponent(orgId)}/mailboxes/${encodeURIComponent(mailboxId)}/teardown`,
+      {},
+      { params: { user_id: userId } },
+    )
+  }
 
   /**
    * Teardown an email organization's infrastructure.
